@@ -9,4 +9,4 @@ D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpDomain\obj\Debug\net10.0\ThinkTec
 D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpDomain\obj\Debug\net10.0\refint\ThinkTechErpDomain.dll
 D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpDomain\obj\Debug\net10.0\ThinkTechErpDomain.pdb
 D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpDomain\obj\Debug\net10.0\ref\ThinkTechErpDomain.dll
-D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpDomain\obj\Debug\net10.0\ThinkTec.AF7CA4FC.Up2Date
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpDomain\obj\Debug\net10.0\ThinkTechErpDomain.sourcelink.json

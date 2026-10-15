@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ThinkTechErpDomain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ab6dead534761368a6e19f60e066ce0d3768eb1a")]
 [assembly: System.Reflection.AssemblyProductAttribute("ThinkTechErpDomain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ThinkTechErpDomain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

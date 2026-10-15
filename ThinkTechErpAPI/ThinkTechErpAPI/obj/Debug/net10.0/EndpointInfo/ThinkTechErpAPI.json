@@ -13,6 +13,44 @@
     }
   ],
   "paths": {
+    "/api/website/testimonials": {
+      "get": {
+        "tags": [
+          "Testimonials"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Testimonial"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Testimonial"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Testimonial"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/WeatherForecast": {
       "get": {
         "tags": [
@@ -55,6 +93,14 @@
   },
   "components": {
     "schemas": {
+      "Testimonial": {
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "object"
+          }
+        }
+      },
       "WeatherForecast": {
         "type": "object",
         "properties": {
@@ -89,6 +135,9 @@
     }
   },
   "tags": [
+    {
+      "name": "Testimonials"
+    },
     {
       "name": "WeatherForecast"
     }

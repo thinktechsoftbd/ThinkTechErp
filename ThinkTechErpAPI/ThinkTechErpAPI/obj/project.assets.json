@@ -2,6 +2,19 @@
   "version": 4,
   "targets": {
     "net10.0": {
+      "Dapper/2.1.89": {
+        "type": "package",
+        "compile": {
+          "lib/net10.0/Dapper.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Dapper.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "Microsoft.AspNetCore.OpenApi/10.0.13": {
         "type": "package",
         "dependencies": {
@@ -36,10 +49,86 @@
             "related": ".pdb;.xml"
           }
         }
+      },
+      "Npgsql/10.0.3": {
+        "type": "package",
+        "compile": {
+          "lib/net10.0/Npgsql.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Npgsql.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "ThinkTechErpDomain/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v10.0",
+        "compile": {
+          "bin/placeholder/ThinkTechErpDomain.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/ThinkTechErpDomain.dll": {}
+        }
+      },
+      "ThinkTechErpRepository/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v10.0",
+        "dependencies": {
+          "Dapper": "2.1.89",
+          "Npgsql": "10.0.3",
+          "ThinkTechErpDomain": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/ThinkTechErpRepository.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/ThinkTechErpRepository.dll": {}
+        }
+      },
+      "ThinkTechErpService/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v10.0",
+        "dependencies": {
+          "ThinkTechErpDomain": "1.0.0",
+          "ThinkTechErpRepository": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/ThinkTechErpService.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/ThinkTechErpService.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.AspNetCore.App"
+        ]
       }
     }
   },
   "libraries": {
+    "Dapper/2.1.89": {
+      "sha512": "1VjFE664wnxvuhlgP8kS4PeFFF4jqD3VkbIHW6Zlc52zuibgcz5ICnIHcQXlTp6pURpPNGLV0ZpNe5x9KePJnA==",
+      "type": "package",
+      "path": "dapper/2.1.89",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Dapper.png",
+        "dapper.2.1.89.nupkg.sha512",
+        "dapper.nuspec",
+        "lib/net10.0/Dapper.dll",
+        "lib/net10.0/Dapper.xml",
+        "lib/net461/Dapper.dll",
+        "lib/net461/Dapper.xml",
+        "lib/net8.0/Dapper.dll",
+        "lib/net8.0/Dapper.xml",
+        "lib/netstandard2.0/Dapper.dll",
+        "lib/netstandard2.0/Dapper.xml",
+        "readme.md"
+      ]
+    },
     "Microsoft.AspNetCore.OpenApi/10.0.13": {
       "sha512": "XVuqUBGjVUVyb4DXR5BrSkrW0Br7sYKq39f723ILhQLlFHCyhAgWe1PkJBc42R/5mKBIgHiKVSY+PN5/4XtcQw==",
       "type": "package",
@@ -75,11 +164,46 @@
         "microsoft.openapi.2.12.2.nupkg.sha512",
         "microsoft.openapi.nuspec"
       ]
+    },
+    "Npgsql/10.0.3": {
+      "sha512": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+      "type": "package",
+      "path": "npgsql/10.0.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net10.0/Npgsql.dll",
+        "lib/net10.0/Npgsql.xml",
+        "lib/net8.0/Npgsql.dll",
+        "lib/net8.0/Npgsql.xml",
+        "lib/net9.0/Npgsql.dll",
+        "lib/net9.0/Npgsql.xml",
+        "npgsql.10.0.3.nupkg.sha512",
+        "npgsql.nuspec",
+        "postgresql.png"
+      ]
+    },
+    "ThinkTechErpDomain/1.0.0": {
+      "type": "project",
+      "path": "../../ThinkTechErpDomain/ThinkTechErpDomain.csproj",
+      "msbuildProject": "../../ThinkTechErpDomain/ThinkTechErpDomain.csproj"
+    },
+    "ThinkTechErpRepository/1.0.0": {
+      "type": "project",
+      "path": "../../ThinkTechErpRepository/ThinkTechErpRepository.csproj",
+      "msbuildProject": "../../ThinkTechErpRepository/ThinkTechErpRepository.csproj"
+    },
+    "ThinkTechErpService/1.0.0": {
+      "type": "project",
+      "path": "../../ThinkTechErpService/ThinkTechErpService.csproj",
+      "msbuildProject": "../../ThinkTechErpService/ThinkTechErpService.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net10.0": [
-      "Microsoft.AspNetCore.OpenApi >= 10.0.13"
+      "Microsoft.AspNetCore.OpenApi >= 10.0.13",
+      "ThinkTechErpService >= 1.0.0"
     ]
   },
   "packageFolders": {
@@ -115,7 +239,11 @@
         "net10.0": {
           "framework": "net10.0",
           "targetAlias": "net10.0",
-          "projectReferences": {}
+          "projectReferences": {
+            "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpService\\ThinkTechErpService.csproj": {
+              "projectPath": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpService\\ThinkTechErpService.csproj"
+            }
+          }
         }
       },
       "warningProperties": {

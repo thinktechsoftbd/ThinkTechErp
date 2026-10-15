@@ -1,5 +1,25 @@
 [
   {
+    "ContainingType": "ThinkTechErpAPI.Areas.Website.controller.TestimonialsController",
+    "Method": "GetAll",
+    "RelativePath": "api/website/testimonials",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IReadOnlyList\u00601[[ThinkTechErpDomain.Models.Testimonial, ThinkTechErpDomain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "ThinkTechErpAPI.Areas.Website.controller.WeatherForecastController",
     "Method": "Get",
     "RelativePath": "WeatherForecast",

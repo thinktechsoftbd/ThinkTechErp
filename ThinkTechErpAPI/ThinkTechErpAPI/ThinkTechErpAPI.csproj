@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\ThinkTechErpService\ThinkTechErpService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Areas\Inventory\" />
     <Folder Include="Areas\Purchase\" />
     <Folder Include="Areas\SMS\" />

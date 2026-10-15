@@ -1,11 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "CQnsVQxrJGM=",
+  "dgSpecHash": "BzamCeDh5QM=",
   "success": true,
   "projectFilePath": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\ThinkTechErpAPI.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\Dev\\.nuget\\packages\\dapper\\2.1.89\\dapper.2.1.89.nupkg.sha512",
     "C:\\Users\\Dev\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.13\\microsoft.aspnetcore.openapi.10.0.13.nupkg.sha512",
-    "C:\\Users\\Dev\\.nuget\\packages\\microsoft.openapi\\2.12.2\\microsoft.openapi.2.12.2.nupkg.sha512"
+    "C:\\Users\\Dev\\.nuget\\packages\\microsoft.openapi\\2.12.2\\microsoft.openapi.2.12.2.nupkg.sha512",
+    "C:\\Users\\Dev\\.nuget\\packages\\npgsql\\10.0.3\\npgsql.10.0.3.nupkg.sha512"
   ],
   "logs": []
 }

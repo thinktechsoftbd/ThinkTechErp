@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ThinkTechErpAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ab6dead534761368a6e19f60e066ce0d3768eb1a")]
 [assembly: System.Reflection.AssemblyProductAttribute("ThinkTechErpAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ThinkTechErpAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

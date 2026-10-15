@@ -1,7 +1,26 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A25C603F-6064-543F-76C3-93CBB94A55E7}|ThinkTechErpAPI\\ThinkTechErpAPI.csproj|d:\\thinktech\\projects\\thinktecherp\\thinktecherpapi\\thinktecherpapi\\areas\\website\\controller\\websitetablescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A25C603F-6064-543F-76C3-93CBB94A55E7}|ThinkTechErpAPI\\ThinkTechErpAPI.csproj|solutionrelative:thinktecherpapi\\areas\\website\\controller\\websitetablescontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A25C603F-6064-543F-76C3-93CBB94A55E7}|ThinkTechErpAPI\\ThinkTechErpAPI.csproj|d:\\thinktech\\projects\\thinktecherp\\thinktecherpapi\\thinktecherpapi\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A25C603F-6064-543F-76C3-93CBB94A55E7}|ThinkTechErpAPI\\ThinkTechErpAPI.csproj|solutionrelative:thinktecherpapi\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{15AC3E1A-51B6-E6F6-27F6-8F41D652BED5}|..\\ThinkTechErpRepository\\ThinkTechErpRepository.csproj|d:\\thinktech\\projects\\thinktecherp\\thinktecherprepository\\database\\npgsqlconnectionfactory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{15AC3E1A-51B6-E6F6-27F6-8F41D652BED5}|..\\ThinkTechErpRepository\\ThinkTechErpRepository.csproj|d:\\thinktech\\projects\\thinktecherp\\thinktecherprepository\\database\\idbconnectionfactory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A25C603F-6064-543F-76C3-93CBB94A55E7}|ThinkTechErpAPI\\ThinkTechErpAPI.csproj|d:\\thinktech\\projects\\thinktecherp\\thinktecherpapi\\thinktecherpapi\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A25C603F-6064-543F-76C3-93CBB94A55E7}|ThinkTechErpAPI\\ThinkTechErpAPI.csproj|solutionrelative:thinktecherpapi\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,7 +28,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Bookmark",
@@ -30,6 +49,71 @@
             {
               "$type": "Bookmark",
               "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "WebsiteTablesController.cs",
+              "DocumentMoniker": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\Areas\\Website\\controller\\WebsiteTablesController.cs",
+              "RelativeDocumentMoniker": "ThinkTechErpAPI\\Areas\\Website\\controller\\WebsiteTablesController.cs",
+              "ToolTip": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\Areas\\Website\\controller\\WebsiteTablesController.cs",
+              "RelativeToolTip": "ThinkTechErpAPI\\Areas\\Website\\controller\\WebsiteTablesController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-10-15T17:29:59.336Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "NpgsqlConnectionFactory.cs",
+              "DocumentMoniker": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpRepository\\Database\\NpgsqlConnectionFactory.cs",
+              "RelativeDocumentMoniker": "..\\ThinkTechErpRepository\\Database\\NpgsqlConnectionFactory.cs",
+              "ToolTip": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpRepository\\Database\\NpgsqlConnectionFactory.cs",
+              "RelativeToolTip": "..\\ThinkTechErpRepository\\Database\\NpgsqlConnectionFactory.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-10-15T16:59:17.359Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "IDbConnectionFactory.cs",
+              "DocumentMoniker": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpRepository\\Database\\IDbConnectionFactory.cs",
+              "RelativeDocumentMoniker": "..\\ThinkTechErpRepository\\Database\\IDbConnectionFactory.cs",
+              "ToolTip": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpRepository\\Database\\IDbConnectionFactory.cs",
+              "RelativeToolTip": "..\\ThinkTechErpRepository\\Database\\IDbConnectionFactory.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-10-15T16:59:13.586Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\appsettings.json",
+              "RelativeDocumentMoniker": "ThinkTechErpAPI\\appsettings.json",
+              "ToolTip": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\appsettings.json",
+              "RelativeToolTip": "ThinkTechErpAPI\\appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-10-15T16:41:16.969Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\Program.cs",
+              "RelativeDocumentMoniker": "ThinkTechErpAPI\\Program.cs",
+              "ToolTip": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\Program.cs",
+              "RelativeToolTip": "ThinkTechErpAPI\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-10-15T16:59:29.779Z",
+              "EditorCaption": ""
             }
           ]
         }

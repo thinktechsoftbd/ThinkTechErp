@@ -10,3 +10,9 @@ D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\obj\Debug\net10.0\refint\
 D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\obj\Debug\net10.0\ThinkTechErpService.pdb
 D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\obj\Debug\net10.0\ref\ThinkTechErpService.dll
 D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\obj\Debug\net10.0\ThinkTec.0FA87C45.Up2Date
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\bin\Debug\net10.0\ThinkTechErpDomain.dll
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\bin\Debug\net10.0\ThinkTechErpRepository.dll
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\bin\Debug\net10.0\ThinkTechErpDomain.pdb
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\bin\Debug\net10.0\ThinkTechErpRepository.pdb
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\obj\Debug\net10.0\ThinkTechErpService.csproj.AssemblyReference.cache
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpService\obj\Debug\net10.0\ThinkTechErpService.sourcelink.json

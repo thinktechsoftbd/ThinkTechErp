@@ -1,8 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "XUi8BWFFiMs=",
+  "dgSpecHash": "Y8k5ivwjNkQ=",
   "success": true,
   "projectFilePath": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpService\\ThinkTechErpService.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\Dev\\.nuget\\packages\\dapper\\2.1.89\\dapper.2.1.89.nupkg.sha512",
+    "C:\\Users\\Dev\\.nuget\\packages\\npgsql\\10.0.3\\npgsql.10.0.3.nupkg.sha512"
+  ],
   "logs": []
 }
