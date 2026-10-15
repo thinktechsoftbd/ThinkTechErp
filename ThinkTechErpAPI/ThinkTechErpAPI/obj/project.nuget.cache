@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "CQnsVQxrJGM=",
+  "success": true,
+  "projectFilePath": "D:\\ThinkTech\\Projects\\ThinkTechErp\\ThinkTechErpAPI\\ThinkTechErpAPI\\ThinkTechErpAPI.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Dev\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.13\\microsoft.aspnetcore.openapi.10.0.13.nupkg.sha512",
+    "C:\\Users\\Dev\\.nuget\\packages\\microsoft.openapi\\2.12.2\\microsoft.openapi.2.12.2.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Libraries/">
+    <Project Path="../ThinkTechErpCore/ThinkTechErpCore.csproj" />
+    <Project Path="../ThinkTechErpData/ThinkTechErpData.csproj" />
+    <Project Path="../ThinkTechErpDomain/ThinkTechErpDomain.csproj" />
+    <Project Path="../ThinkTechErpInfrastructure/ThinkTechErpInfrastructure.csproj" />
+    <Project Path="../ThinkTechErpRepository/ThinkTechErpRepository.csproj" />
+    <Project Path="../ThinkTechErpService/ThinkTechErpService.csproj" />
+  </Folder>
+  <Folder Name="/Presentation/">
+    <Project Path="ThinkTechErpAPI/ThinkTechErpAPI.csproj" />
+  </Folder>
+</Solution>

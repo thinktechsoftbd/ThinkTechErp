@@ -1,0 +1,12 @@
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\bin\Debug\net10.0\ThinkTechErpCore.deps.json
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\bin\Debug\net10.0\ThinkTechErpCore.dll
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\bin\Debug\net10.0\ThinkTechErpCore.pdb
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTechErpCore.GeneratedMSBuildEditorConfig.editorconfig
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTechErpCore.AssemblyInfoInputs.cache
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTechErpCore.AssemblyInfo.cs
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTechErpCore.csproj.CoreCompileInputs.cache
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTechErpCore.dll
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\refint\ThinkTechErpCore.dll
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTechErpCore.pdb
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ref\ThinkTechErpCore.dll
+D:\ThinkTech\Projects\ThinkTechErp\ThinkTechErpCore\obj\Debug\net10.0\ThinkTec.B89C0E7F.Up2Date
