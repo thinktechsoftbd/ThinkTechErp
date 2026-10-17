@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ThinkTechErpRepository.Database;
 using ThinkTechErpRepository.Website;
+using ThinkTechErpRepository.Sms;
+using ThinkTechErpService.Sms;
 using ThinkTechErpService.Website;
 
 namespace ThinkTechErpService;
@@ -13,7 +15,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         var connectionStrings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var schema in new[] { "Website", "Sms", "Security" })
+        foreach (var schema in new[] { "Website", "Sms", "Security", "SmsApi" })
         {
             var connectionString = configuration.GetConnectionString(schema);
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -28,6 +30,8 @@ public static class DependencyInjection
         services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionStrings));
         services.AddScoped<IWebsiteRepository, WebsiteRepository>();
         services.AddScoped<IWebsiteService, WebsiteService>();
+        services.AddScoped<ISmsRepository, SmsRepository>();
+        services.AddScoped<ISmsService, SmsService>();
         return services;
     }
 }
