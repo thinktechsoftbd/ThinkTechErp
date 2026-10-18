@@ -7,17 +7,44 @@ using Microsoft.IdentityModel.Tokens;
 using ThinkTechErpAPI.Security;
 using ThinkTechErpService;
 
-var builder = WebApplication.CreateBuilder(args);
+var currentDirectory = Directory.GetCurrentDirectory();
+var webOptions = new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = File.Exists(Path.Combine(currentDirectory, "appsettings.json"))
+        ? currentDirectory
+        : AppContext.BaseDirectory
+};
+var builder = WebApplication.CreateBuilder(webOptions);
 
 var issuer = builder.Configuration["Authentication:Jwt:Issuer"];
 var audience = builder.Configuration["Authentication:Jwt:Audience"];
 var signingKey = builder.Configuration["Authentication:Jwt:SigningKey"];
-if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) ||
-    string.IsNullOrWhiteSpace(signingKey) || Encoding.UTF8.GetByteCount(signingKey) < 32)
+if (string.IsNullOrWhiteSpace(signingKey))
+{
+    // User Secrets are normally loaded automatically in Development. Read only
+    // the local signing key as a fallback for launches that omit that profile.
+    var localSecrets = new ConfigurationBuilder()
+        .AddUserSecrets("c2ee5bdf-f77c-49c2-ab25-1f4448250115")
+        .Build();
+    signingKey = localSecrets["Authentication:Jwt:SigningKey"];
+}
+
+var missingJwtSettings = new List<string>();
+if (string.IsNullOrWhiteSpace(issuer))
+    missingJwtSettings.Add("Authentication__Jwt__Issuer");
+if (string.IsNullOrWhiteSpace(audience))
+    missingJwtSettings.Add("Authentication__Jwt__Audience");
+if (string.IsNullOrWhiteSpace(signingKey))
+    missingJwtSettings.Add("Authentication__Jwt__SigningKey (minimum 32 bytes)");
+else if (Encoding.UTF8.GetByteCount(signingKey) < 32)
+    missingJwtSettings.Add("Authentication__Jwt__SigningKey (minimum 32 bytes)");
+
+if (missingJwtSettings.Count > 0)
 {
     throw new InvalidOperationException(
-        "Configure Authentication__Jwt__Issuer, Authentication__Jwt__Audience, and a 32-byte-minimum " +
-        "Authentication__Jwt__SigningKey outside source control before starting the API.");
+        $"Missing or invalid JWT settings: {string.Join(", ", missingJwtSettings)}. " +
+        "Use .NET User Secrets for the signing key and set issuer/audience in appsettings or the environment.");
 }
 
 // Add services to the container.
@@ -49,7 +76,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidAudience = audience,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey!)),
             ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             RequireSignedTokens = true,
             RequireExpirationTime = true,
