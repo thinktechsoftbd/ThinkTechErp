@@ -1,0 +1,40 @@
+# Install as /etc/systemd/system/thinktecherp-api.service (see README.md).
+[Unit]
+Description=ThinkTechErp API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=thinktecherp
+Group=thinktecherp
+WorkingDirectory=/opt/thinktecherp/api
+ExecStart=/usr/bin/dotnet /opt/thinktecherp/api/ThinkTechErpAPI.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=thinktecherp-api
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+# Kestrel listens on loopback only; nginx terminates TLS in front of it.
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+Environment=DOTNET_NOLOGO=1
+
+# Option 1: secrets and connection strings as environment variables.
+# systemd reads this file as root, so keep it root-owned with mode 600.
+EnvironmentFile=/etc/thinktecherp/api.env
+
+# Option 2 (more secure): load secrets as systemd credentials instead. Each file is
+# named after its configuration key and the app reads it from $CREDENTIALS_DIRECTORY.
+# Remove the same keys from api.env when you switch.
+#LoadCredential=Authentication__Jwt__SigningKey:/etc/thinktecherp/credentials/Authentication__Jwt__SigningKey
+#LoadCredential=ConnectionStrings__Website:/etc/thinktecherp/credentials/ConnectionStrings__Website
+#LoadCredential=ConnectionStrings__Sms:/etc/thinktecherp/credentials/ConnectionStrings__Sms
+#LoadCredential=ConnectionStrings__Security:/etc/thinktecherp/credentials/ConnectionStrings__Security
+#LoadCredential=ConnectionStrings__SmsApi:/etc/thinktecherp/credentials/ConnectionStrings__SmsApi
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using ThinkTechErpAPI.Security;
@@ -17,18 +18,31 @@ var webOptions = new WebApplicationOptions
 };
 var builder = WebApplication.CreateBuilder(webOptions);
 
+// On Linux, systemd LoadCredential= exposes each secret as a file named after its
+// configuration key (e.g. Authentication__Jwt__SigningKey) in $CREDENTIALS_DIRECTORY.
+var credentialsDirectory = Environment.GetEnvironmentVariable("CREDENTIALS_DIRECTORY");
+if (!string.IsNullOrWhiteSpace(credentialsDirectory))
+    builder.Configuration.AddKeyPerFile(credentialsDirectory, optional: true);
+
+if (builder.Environment.IsDevelopment())
+{
+    // Local development runs without any secret setup. Values from User Secrets or
+    // environment variables are used when present; production must supply them
+    // (see deploy/linux/README.md).
+    var developmentDefaults = new Dictionary<string, string?>();
+    if (string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Jwt:SigningKey"]))
+        developmentDefaults["Authentication:Jwt:SigningKey"] = DevelopmentSigningKey.GetOrCreate();
+
+    // Reuse the Sms connection until a least-privilege SmsApi login is configured.
+    if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("SmsApi")))
+        developmentDefaults["ConnectionStrings:SmsApi"] = builder.Configuration.GetConnectionString("Sms");
+
+    builder.Configuration.AddInMemoryCollection(developmentDefaults);
+}
+
 var issuer = builder.Configuration["Authentication:Jwt:Issuer"];
 var audience = builder.Configuration["Authentication:Jwt:Audience"];
 var signingKey = builder.Configuration["Authentication:Jwt:SigningKey"];
-if (string.IsNullOrWhiteSpace(signingKey))
-{
-    // User Secrets are normally loaded automatically in Development. Read only
-    // the local signing key as a fallback for launches that omit that profile.
-    var localSecrets = new ConfigurationBuilder()
-        .AddUserSecrets("c2ee5bdf-f77c-49c2-ab25-1f4448250115")
-        .Build();
-    signingKey = localSecrets["Authentication:Jwt:SigningKey"];
-}
 
 var missingJwtSettings = new List<string>();
 if (string.IsNullOrWhiteSpace(issuer))
@@ -44,7 +58,8 @@ if (missingJwtSettings.Count > 0)
 {
     throw new InvalidOperationException(
         $"Missing or invalid JWT settings: {string.Join(", ", missingJwtSettings)}. " +
-        "Use .NET User Secrets for the signing key and set issuer/audience in appsettings or the environment.");
+        "Supply the signing key through environment variables or systemd credentials " +
+        "(see deploy/linux/README.md); issuer/audience can also come from appsettings.");
 }
 
 // Add services to the container.
@@ -120,10 +135,17 @@ builder.Services.AddRateLimiter(options =>
         });
     });
 });
+// nginx on the same host terminates TLS. Trust its X-Forwarded-* headers so the
+// client IP (used by the rate limiter) and scheme are the real ones. Loopback
+// proxies are trusted by default.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
