@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using ThinkTechErpAPI.Security;
+using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpService;
+using ThinkTechErpService.Security;
 
 var currentDirectory = Directory.GetCurrentDirectory();
 var webOptions = new WebApplicationOptions
@@ -62,10 +64,27 @@ if (missingJwtSettings.Count > 0)
         "(see deploy/linux/README.md); issuer/audience can also come from appsettings.");
 }
 
+// Short-lived access tokens keep role and permission changes current; clients renew them
+// with a rotating refresh token (api/security/auth/refresh).
+var accessTokenMinutes = builder.Configuration.GetValue("Authentication:Jwt:AccessTokenMinutes", 15);
+var refreshTokenDays = builder.Configuration.GetValue("Authentication:Jwt:RefreshTokenDays", 7);
+if (accessTokenMinutes <= 0 || refreshTokenDays <= 0)
+    throw new InvalidOperationException("Authentication:Jwt:AccessTokenMinutes and RefreshTokenDays must be positive.");
+
 // Add services to the container.
 
 builder.Services.AddControllers();
 builder.Services.AddThinkTechErpServices(builder.Configuration);
+builder.Services.AddSingleton(new JwtSettings(issuer!, audience!, signingKey!, TimeSpan.FromMinutes(accessTokenMinutes)));
+builder.Services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
+builder.Services.AddSingleton(new SecurityTokenSettings(
+    RefreshTokenLifetime: TimeSpan.FromDays(refreshTokenDays),
+    PasswordResetTokenLifetime: TimeSpan.FromMinutes(30)));
+
+// Browser clients on another origin (e.g. a SPA dev server) must be listed in Cors:AllowedOrigins.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddProblemDetails();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -115,6 +134,15 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser();
         policy.AddRequirements(new SmsClientAccessRequirement());
     });
+
+    options.AddPolicy(SecurityPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            SecurityRules.ViewSecurityPermission, SecurityRules.ManageSecurityPermission));
+
+    options.AddPolicy(SecurityPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, SecurityRules.ManageSecurityPermission));
 });
 builder.Services.AddSingleton<IAuthorizationHandler, SmsClientAccessHandler>();
 builder.Services.AddRateLimiter(options =>
@@ -134,6 +162,18 @@ builder.Services.AddRateLimiter(options =>
             AutoReplenishment = true
         });
     });
+
+    // Slows password guessing on the anonymous sign-in endpoints.
+    options.AddPolicy(SecurityPolicies.AuthRateLimit, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown-client",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 // nginx on the same host terminates TLS. Trust its X-Forwarded-* headers so the
 // client IP (used by the rate limiter) and scheme are the real ones. Loopback
@@ -150,7 +190,7 @@ app.UseForwardedHeaders();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 }
 else
 {
@@ -160,6 +200,7 @@ else
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
 app.UseRouting();
+app.UseCors();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();

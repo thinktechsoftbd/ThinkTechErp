@@ -1,8 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ThinkTechErpRepository.Database;
+using ThinkTechErpRepository.Security;
 using ThinkTechErpRepository.Website;
 using ThinkTechErpRepository.Sms;
+using ThinkTechErpService.Security;
 using ThinkTechErpService.Sms;
 using ThinkTechErpService.Website;
 
@@ -32,6 +35,22 @@ public static class DependencyInjection
         services.AddScoped<IWebsiteService, WebsiteService>();
         services.AddScoped<ISmsRepository, SmsRepository>();
         services.AddScoped<ISmsService, SmsService>();
+
+        // Security. The host must also register IAccessTokenIssuer and SecurityTokenSettings.
+        services.AddScoped<ISecurityUserRepository, SecurityUserRepository>();
+        services.AddScoped<ISecurityRoleRepository, SecurityRoleRepository>();
+        services.AddScoped<ISecurityPermissionRepository, SecurityPermissionRepository>();
+        services.AddScoped<ISecurityMenuRepository, SecurityMenuRepository>();
+        services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<IAuthTokenRepository, AuthTokenRepository>();
+        services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
+        services.TryAddSingleton<IPasswordResetNotifier, LoggingPasswordResetNotifier>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ISecurityUserService, SecurityUserService>();
+        services.AddScoped<ISecurityRoleService, SecurityRoleService>();
+        services.AddScoped<ISecurityPermissionService, SecurityPermissionService>();
+        services.AddScoped<ISecurityMenuService, SecurityMenuService>();
+        services.AddScoped<IOrganizationService, OrganizationService>();
         return services;
     }
 }

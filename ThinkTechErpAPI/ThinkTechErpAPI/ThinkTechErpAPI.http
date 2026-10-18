@@ -1,6 +1,226 @@
-@ThinkTechErpAPI_HostAddress = http://localhost:5291
+@baseUrl = http://localhost:5291
 
-GET {{ThinkTechErpAPI_HostAddress}}/weatherforecast/
-Accept: application/json
+# Put a real account here while testing locally. Don't commit real passwords.
+@email = admin@example.com
+@password = change-me
+
+### ============================ Authentication ============================
+
+### Log in. Returns accessToken (15 min) + refreshToken (7 days) + the user's roles and permissions.
+# @name login
+POST {{baseUrl}}/api/security/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+###
+@accessToken = {{login.response.body.$.accessToken}}
+@refreshToken = {{login.response.body.$.refreshToken}}
+
+### Current user (id, name, email, photoUrl, roles, permissions)
+GET {{baseUrl}}/api/security/auth/me
+Authorization: Bearer {{accessToken}}
+
+### Menu tree for the sidebar
+GET {{baseUrl}}/api/security/auth/menus
+Authorization: Bearer {{accessToken}}
+
+### Get a new token pair before the access token expires. The old refresh token stops working.
+POST {{baseUrl}}/api/security/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### Change own password. Returns a new token pair; other sessions are signed out.
+POST {{baseUrl}}/api/security/auth/change-password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "{{password}}",
+  "newPassword": "a-new-password"
+}
+
+### Request a reset token (always 202). In Development the token is written to the API log.
+POST {{baseUrl}}/api/security/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+### Reset the password with the token from the log/email
+POST {{baseUrl}}/api/security/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "paste-the-reset-token",
+  "newPassword": "a-new-password"
+}
+
+### Log out this session
+POST {{baseUrl}}/api/security/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### Log out every session of the signed-in user
+POST {{baseUrl}}/api/security/auth/logout-all
+Authorization: Bearer {{accessToken}}
+
+### ======================= Users (SECURITY.V / SECURITY.M) =======================
+
+GET {{baseUrl}}/api/security/users?search=&status=ACTIVE&limit=50&offset=0
+Authorization: Bearer {{accessToken}}
+
+###
+GET {{baseUrl}}/api/security/users/1
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{baseUrl}}/api/security/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Front Desk",
+  "email": "frontdesk@example.com",
+  "password": "initial-password",
+  "status": "ACTIVE",
+  "roleIds": [3]
+}
+
+### roleIds: omit to keep the current roles, [] to remove all
+PUT {{baseUrl}}/api/security/users/1
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Dr. Example",
+  "email": "doctor@example.com",
+  "photoUrl": null,
+  "status": "ACTIVE",
+  "roleIds": [1]
+}
+
+### Admin sets a user's password (signs the user out everywhere)
+PUT {{baseUrl}}/api/security/users/1/password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "newPassword": "temporary-password"
+}
+
+###
+GET {{baseUrl}}/api/security/users/1/permissions
+Authorization: Bearer {{accessToken}}
+
+### Direct grants on top of the user's roles (replaces the list)
+PUT {{baseUrl}}/api/security/users/1/permissions
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "permissionIds": [10, 11]
+}
+
+###
+GET {{baseUrl}}/api/security/users/1/menus
+Authorization: Bearer {{accessToken}}
+
+### Per-user menu overrides (replaces the list)
+PUT {{baseUrl}}/api/security/users/1/menus
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "menus": [
+    { "menuId": 7, "canView": false, "canCreate": false, "canEdit": false, "canDelete": false }
+  ]
+}
+
+### ======================= Roles =======================
+
+GET {{baseUrl}}/api/security/roles
+Authorization: Bearer {{accessToken}}
+
+###
+GET {{baseUrl}}/api/security/roles/2
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{baseUrl}}/api/security/roles
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Accountant",
+  "description": "Payments and accounting",
+  "permissionIds": [1, 10, 11]
+}
+
+### permissionIds: omit to keep the current permissions
+PUT {{baseUrl}}/api/security/roles/3
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Receptionist",
+  "description": "Front desk access",
+  "permissionIds": [1, 2, 3, 10, 11]
+}
+
+###
+DELETE {{baseUrl}}/api/security/roles/3
+Authorization: Bearer {{accessToken}}
+
+### ======================= Permissions =======================
+
+GET {{baseUrl}}/api/security/permissions
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{baseUrl}}/api/security/permissions
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "code": "REPORT.V",
+  "name": "View Reports",
+  "description": null
+}
+
+### ======================= Menus =======================
+
+GET {{baseUrl}}/api/security/menus
+Authorization: Bearer {{accessToken}}
+
+### roleId limits a menu to one role; null shows it to every signed-in user
+PUT {{baseUrl}}/api/security/menus/7
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Security",
+  "path": "#",
+  "icon": null,
+  "sortOrder": 7,
+  "parentId": null,
+  "roleId": 2,
+  "isActive": true
+}
+
+### ======================= Organizations =======================
+
+GET {{baseUrl}}/api/security/organizations
+Authorization: Bearer {{accessToken}}
 
 ###
