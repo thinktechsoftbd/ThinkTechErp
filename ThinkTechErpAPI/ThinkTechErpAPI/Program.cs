@@ -195,9 +195,11 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseHsts();
+    // Only outside Development: the admin client calls the API server-to-server over
+    // http://localhost:5291 and never follows redirects, even when the https profile runs.
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseExceptionHandler();
 app.UseRouting();
 app.UseCors();

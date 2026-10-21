@@ -14,8 +14,13 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         "job_applications", "job_openings", "newsletter_subscribers", "posts", "services", "stats"
     };
 
+    // udt_schema/udt_name name the column's base type without its modifiers (e.g. pg_catalog.varchar,
+    // pg_catalog._text for text[]), so a cast to it keeps length and precision checks on assignment.
     private const string WritableColumnsSql = """
-        SELECT column_name
+        SELECT column_name AS ColumnName,
+               data_type AS DataType,
+               udt_schema AS UdtSchema,
+               udt_name AS UdtName
         FROM information_schema.columns
         WHERE table_schema = @Schema
           AND table_name = @Table
@@ -78,11 +83,11 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         for (var index = 0; index < columns.Count; index++)
         {
             var parameterName = $"p{index}";
-            parameterNames.Add($"@{parameterName}");
-            parameters.Add(parameterName, ToDatabaseValue(record[columns[index]]));
+            parameterNames.Add(columns[index].CastParameter(parameterName));
+            parameters.Add(parameterName, ToDatabaseValue(record[columns[index].ColumnName], columns[index]));
         }
 
-        var sql = $"INSERT INTO {tableSql} AS t ({string.Join(", ", columns.Select(Quote))}) " +
+        var sql = $"INSERT INTO {tableSql} AS t ({string.Join(", ", columns.Select(column => Quote(column.ColumnName)))}) " +
                   $"VALUES ({string.Join(", ", parameterNames)}) RETURNING to_jsonb(t)::text";
         var json = await connection.QuerySingleAsync<string>(
             new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
@@ -100,7 +105,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         await using var connection = connectionFactory.CreateConnection("Website");
         var key = await GetPrimaryKeyAsync(connection, table, cancellationToken);
         var columns = await GetValidatedColumnsAsync(connection, table, record, cancellationToken);
-        if (columns.Contains(key, StringComparer.Ordinal))
+        if (columns.Any(column => string.Equals(column.ColumnName, key, StringComparison.Ordinal)))
         {
             throw new ArgumentException($"The primary key field '{key}' cannot be changed.", nameof(record));
         }
@@ -111,8 +116,8 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         for (var index = 0; index < columns.Count; index++)
         {
             var parameterName = $"p{index}";
-            assignments.Add($"{Quote(columns[index])} = @{parameterName}");
-            parameters.Add(parameterName, ToDatabaseValue(record[columns[index]]));
+            assignments.Add($"{Quote(columns[index].ColumnName)} = {columns[index].CastParameter(parameterName)}");
+            parameters.Add(parameterName, ToDatabaseValue(record[columns[index].ColumnName], columns[index]));
         }
 
         var sql = $"UPDATE {tableSql} AS t SET {string.Join(", ", assignments)} " +
@@ -150,7 +155,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         return $"{Quote(Schema)}.{Quote(table)}";
     }
 
-    private static async Task<IReadOnlyList<string>> GetValidatedColumnsAsync(
+    private static async Task<IReadOnlyList<WritableColumn>> GetValidatedColumnsAsync(
         Npgsql.NpgsqlConnection connection,
         string table,
         WebsiteRecord record,
@@ -161,13 +166,13 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
             throw new ArgumentException("Provide at least one record field.", nameof(record));
         }
 
-        var writableColumns = (await connection.QueryAsync<string>(
+        var writableColumns = (await connection.QueryAsync<WritableColumn>(
             new CommandDefinition(
                 WritableColumnsSql,
                 new { Schema, Table = table },
-                cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+                cancellationToken: cancellationToken))).ToDictionary(column => column.ColumnName, StringComparer.Ordinal);
 
-        var unknownColumns = record.Keys.Where(column => !writableColumns.Contains(column)).ToArray();
+        var unknownColumns = record.Keys.Where(column => !writableColumns.ContainsKey(column)).ToArray();
         if (unknownColumns.Length > 0)
         {
             throw new ArgumentException(
@@ -175,7 +180,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
                 nameof(record));
         }
 
-        return record.Keys.ToArray();
+        return record.Keys.Select(column => writableColumns[column]).ToArray();
     }
 
     private static async Task<string> GetPrimaryKeyAsync(
@@ -198,17 +203,43 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         };
     }
 
-    private static object? ToDatabaseValue(JsonElement value) => value.ValueKind switch
+    // Every value is cast to its column's type in SQL (see WritableColumn.CastParameter), so strings
+    // reach date/timestamptz/uuid columns and null stays typed. json/jsonb columns get the raw JSON
+    // text (a JSON string stays a JSON string); JSON arrays for array columns are sent as text[].
+    private static object? ToDatabaseValue(JsonElement value, WritableColumn column) => value.ValueKind switch
     {
-        JsonValueKind.Null or JsonValueKind.Undefined => DBNull.Value,
+        JsonValueKind.Null or JsonValueKind.Undefined => null,
+        _ when column.IsJson => value.GetRawText(),
+        JsonValueKind.Array when column.IsArray => value.EnumerateArray().Select(ToArrayElement).ToArray(),
         JsonValueKind.String => value.GetString(),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.Number when value.TryGetInt64(out var integer) => integer,
         JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
         JsonValueKind.Number => value.GetDouble(),
-        _ => value.Clone()
+        _ => value.GetRawText()
+    };
+
+    private static string? ToArrayElement(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Null or JsonValueKind.Undefined => null,
+        JsonValueKind.String => element.GetString(),
+        _ => element.GetRawText()
     };
 
     private static string Quote(string identifier) => $"\"{identifier.Replace("\"", "\"\"")}\"";
+
+    private sealed class WritableColumn
+    {
+        public string ColumnName { get; set; } = string.Empty;
+        public string DataType { get; set; } = string.Empty;
+        public string UdtSchema { get; set; } = string.Empty;
+        public string UdtName { get; set; } = string.Empty;
+
+        public bool IsArray => DataType == "ARRAY";
+        public bool IsJson => UdtSchema == "pg_catalog" && UdtName is "json" or "jsonb";
+
+        public string CastParameter(string parameterName) =>
+            $"CAST(@{parameterName} AS {Quote(UdtSchema)}.{Quote(UdtName)})";
+    }
 }
