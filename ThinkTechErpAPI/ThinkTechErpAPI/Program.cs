@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
+using ThinkTechErpAPI.OpenApi;
 using ThinkTechErpAPI.Security;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpService;
@@ -181,22 +182,43 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info.Title = "ThinkTechErp API";
+        return Task.CompletedTask;
+    });
+    options.AddDocumentTransformer<BearerSecurityTransformer>();
+    options.AddOperationTransformer<BearerSecurityTransformer>();
+});
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// API docs: the OpenAPI document at /openapi/v1.json and Swagger UI at /swagger. On in
+// Development; elsewhere only when Swagger:Enabled is true (e.g. a staging server). Swagger UI
+// is served before authorization so the fallback "signed-in user" policy doesn't block the page.
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.MapOpenApi().AllowAnonymous();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "ThinkTechErp API v1");
+        options.DocumentTitle = "ThinkTechErp API";
+        options.EnablePersistAuthorization();
+    });
 }
-else
+
+// Configure the HTTP request pipeline.
+if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
-    // Only outside Development: the admin client calls the API server-to-server over
-    // http://localhost:5291 and never follows redirects, even when the https profile runs.
+    // Only outside Development, which runs plain HTTP (http://localhost:5291): the admin client
+    // calls the API server-to-server there and never follows redirects. In production nginx
+    // terminates TLS and redirects HTTP itself; the requests it forwards are marked as HTTPS
+    // through X-Forwarded-Proto, so they pass straight through.
     app.UseHttpsRedirection();
 }
 

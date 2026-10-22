@@ -45,8 +45,9 @@ public sealed class SecurityUserService(
             return null;
 
         // A deactivated user can't refresh any more; their access token lapses within minutes.
+        // The user is already saved as inactive, so finish the revocation even if the caller hangs up.
         if (request.Status == UserStatuses.Inactive)
-            await tokens.RevokeAllRefreshTokensAsync(userId, cancellationToken);
+            await tokens.RevokeAllRefreshTokensAsync(userId, CancellationToken.None);
 
         return await users.GetUserAsync(userId, cancellationToken);
     }
@@ -57,7 +58,8 @@ public sealed class SecurityUserService(
         if (!await users.UpdatePasswordHashAsync(userId, passwordHasher.Hash(newPassword), cancellationToken))
             return false;
 
-        await tokens.RevokeAllRefreshTokensAsync(userId, cancellationToken);
+        // The new password is saved; old sessions must end even if the caller hangs up.
+        await tokens.RevokeAllRefreshTokensAsync(userId, CancellationToken.None);
         return true;
     }
 

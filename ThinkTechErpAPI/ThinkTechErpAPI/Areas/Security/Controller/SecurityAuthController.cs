@@ -50,22 +50,21 @@ public sealed class SecurityAuthController(IAuthService authService) : Controlle
     [HttpPost("logout")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Logout(
-        [FromBody] RefreshTokenRequest request,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request)
     {
-        await authService.LogoutAsync(request.RefreshToken, cancellationToken);
+        // Deliberately not tied to the request's cancellation: see IAuthService.LogoutAsync.
+        await authService.LogoutAsync(request.RefreshToken);
         return NoContent();
     }
 
     [HttpPost("logout-all")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> LogoutEverywhere(CancellationToken cancellationToken)
+    public async Task<IActionResult> LogoutEverywhere()
     {
         if (!User.TryGetUserId(out var userId))
             return Unauthorized();
 
-        await authService.LogoutEverywhereAsync(userId, cancellationToken);
+        await authService.LogoutEverywhereAsync(userId);
         return NoContent();
     }
 

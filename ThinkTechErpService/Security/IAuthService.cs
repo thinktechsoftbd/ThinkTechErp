@@ -17,8 +17,16 @@ public interface IAuthService
 
     /// <returns>A new token pair, or null when the refresh token is unknown, expired, revoked or its user inactive.</returns>
     Task<AuthResponse?> RefreshAsync(string refreshToken, string? clientIp, CancellationToken cancellationToken = default);
-    Task LogoutAsync(string refreshToken, CancellationToken cancellationToken = default);
-    Task LogoutEverywhereAsync(int userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Revokes the refresh token. Not cancellable: clients sign out on a short timeout and drop
+    /// their cookies regardless, so the revocation must finish even if the caller stops waiting.
+    /// </summary>
+    Task LogoutAsync(string refreshToken);
+
+    /// <summary>Revokes every refresh token of the user. Not cancellable, like <see cref="LogoutAsync"/>.</summary>
+    Task LogoutEverywhereAsync(int userId);
+
     Task<CurrentUser?> GetCurrentUserAsync(int userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MenuNode>> GetMenuTreeAsync(int userId, CancellationToken cancellationToken = default);
 
