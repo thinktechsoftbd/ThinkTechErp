@@ -11,8 +11,11 @@ public interface ISmsRepository
     Task<SmsClient?> UpdateClientAsync(string clientId, SmsClientUpdateRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SmsAdnPurchase>> GetPurchasesAsync(int limit, int offset, CancellationToken cancellationToken = default);
     Task<long> RecordPurchaseAsync(SmsPurchaseRequest request, CancellationToken cancellationToken = default);
+    Task<bool> UpdatePurchaseAsync(long purchaseId, SmsPurchaseUpdateRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SmsClientAllocation>> GetAllocationsAsync(string? clientId, int limit, int offset, CancellationToken cancellationToken = default);
     Task<long> AllocateAsync(string clientId, string clientName, SmsAllocationRequest request, CancellationToken cancellationToken = default);
+    Task<bool> UpdateAllocationAsync(long allocationId, SmsAllocationUpdateRequest request, CancellationToken cancellationToken = default);
+    Task<bool> FinalizeAllocationAsync(long allocationId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SmsUsageRecord>> GetUsageAsync(string? clientId, int limit, int offset, CancellationToken cancellationToken = default);
     Task<long> RecordUsageAsync(string clientId, SmsUsageRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SmsBalanceTransaction>> GetTransactionsAsync(string? clientId, int limit, int offset, CancellationToken cancellationToken = default);

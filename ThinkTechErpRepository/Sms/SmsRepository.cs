@@ -87,6 +87,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                    sms_quantity AS SmsQuantity,
                    amount_paid AS AmountPaid,
                    currency AS Currency,
+                   exchange_rate AS ExchangeRate,
                    purchased_at AS PurchasedAt,
                    note AS Note
             FROM sms.adn_purchases
@@ -106,25 +107,50 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                 p_provider_reference => @ProviderReference,
                 p_amount_paid => @AmountPaid,
                 p_currency => CAST(@Currency AS char(3)),
+                p_exchange_rate => @ExchangeRate,
                 p_note => @Note)
             """, request, cancellationToken: cancellationToken));
     }
 
+    public async Task<bool> UpdatePurchaseAsync(
+        long purchaseId, SmsPurchaseUpdateRequest request, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection("SmsApi");
+        return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
+            SELECT sms.update_adn_purchase(
+                p_purchase_id => @PurchaseId,
+                p_provider_reference => @ProviderReference,
+                p_amount_paid => @AmountPaid,
+                p_currency => CAST(@Currency AS char(3)),
+                p_exchange_rate => @ExchangeRate,
+                p_note => @Note)
+            """, new
+            {
+                PurchaseId = purchaseId,
+                request.ProviderReference,
+                request.AmountPaid,
+                request.Currency,
+                request.ExchangeRate,
+                request.Note
+            }, cancellationToken: cancellationToken));
+    }
     public async Task<IReadOnlyList<SmsClientAllocation>> GetAllocationsAsync(
         string? clientId, int limit, int offset, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection("SmsApi");
         var rows = await connection.QueryAsync<SmsClientAllocation>(new CommandDefinition("""
-            SELECT allocation_id AS AllocationId,
-                   transaction_id AS TransactionId,
-                   client_id AS ClientId,
-                   sms_quantity AS SmsQuantity,
-                   note AS Note,
-                   allocated_at AS AllocatedAt
-            FROM sms.client_allocations
-            WHERE CAST(@ClientId AS text) IS NULL OR client_id = CAST(@ClientId AS text)
-            ORDER BY allocated_at DESC, allocation_id DESC
-            LIMIT @Limit OFFSET @Offset
+            SELECT a.allocation_id AS AllocationId,
+                   a.transaction_id AS TransactionId,
+                   a.client_id AS ClientId,
+                   c.display_name AS ClientName,
+                   a.sms_quantity AS SmsQuantity,
+                   a.note AS Note,
+                   a.is_finalize AS IsFinalized,
+                   a.allocated_at AS AllocatedAt
+            FROM sms.client_allocations AS a
+            INNER JOIN sms.clients AS c ON c.client_id = a.client_id
+            WHERE CAST(@ClientId AS text) IS NULL OR a.client_id = CAST(@ClientId AS text)
+            ORDER BY a.allocated_at DESC, a.allocation_id DESC
             """, new { ClientId = clientId, Limit = limit, Offset = offset }, cancellationToken: cancellationToken));
         return rows.AsList();
     }
@@ -135,11 +161,32 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection("SmsApi");
         return await connection.QuerySingleAsync<long>(new CommandDefinition("""
-            SELECT sms.allocate_sms(@ClientId, @ClientName, @SmsQuantity, @Note)
-            """, new { ClientId = clientId, ClientName = clientName, request.SmsQuantity, request.Note },
+            SELECT sms.allocate_sms(
+                p_client_id => @ClientId,
+                p_client_name => @ClientName,
+                p_sms_quantity => @SmsQuantity,
+                p_note => @Note,
+                p_is_finalized => @IsFinalized)
+            """, new { ClientId = clientId, ClientName = clientName, request.SmsQuantity, request.Note, request.IsFinalized },
             cancellationToken: cancellationToken));
     }
 
+    public async Task<bool> UpdateAllocationAsync(
+        long allocationId, SmsAllocationUpdateRequest request, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection("SmsApi");
+        return await connection.QuerySingleAsync<bool>(new CommandDefinition(
+            "SELECT sms.update_allocation_note(@AllocationId, @Note)",
+            new { AllocationId = allocationId, request.Note }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<bool> FinalizeAllocationAsync(long allocationId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection("SmsApi");
+        return await connection.QuerySingleAsync<bool>(new CommandDefinition(
+            "SELECT sms.finalize_allocation(@AllocationId)",
+            new { AllocationId = allocationId }, cancellationToken: cancellationToken));
+    }
     public async Task<IReadOnlyList<SmsUsageRecord>> GetUsageAsync(
         string? clientId, int limit, int offset, CancellationToken cancellationToken = default)
     {

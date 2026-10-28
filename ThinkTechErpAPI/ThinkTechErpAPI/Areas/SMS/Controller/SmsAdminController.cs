@@ -74,6 +74,18 @@ public sealed class SmsAdminController(ISmsService smsService) : ControllerBase
         }
     }
 
+    // Client rows can own wallet and billing history, so deletion deactivates the client instead of removing financial records.
+    [HttpDelete("clients/{clientId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteClient(string clientId, CancellationToken cancellationToken)
+    {
+        var client = await smsService.UpdateClientAsync(
+            clientId,
+            new SmsClientUpdateRequest { IsActive = false },
+            cancellationToken);
+        return client is null ? NotFound() : NoContent();
+    }
     [HttpGet("purchases")]
     [ProducesResponseType(typeof(IReadOnlyList<SmsAdnPurchase>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SmsAdnPurchase>>> GetPurchases(
@@ -100,6 +112,31 @@ public sealed class SmsAdminController(ISmsService smsService) : ControllerBase
         }
     }
 
+    [HttpPatch("purchases/{purchaseId:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdatePurchase(
+        long purchaseId,
+        [FromBody] SmsPurchaseUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Currency == "USD" && request.ExchangeRate is null)
+            return BadRequest(new { error = "An exchange rate is required for USD purchases." });
+        if (request.Currency == "BDT" && request.ExchangeRate is not null)
+            return BadRequest(new { error = "Exchange rate is only used for USD purchases." });
+
+        try
+        {
+            var updated = await smsService.UpdatePurchaseAsync(purchaseId, request, cancellationToken);
+            return updated ? NoContent() : NotFound(new { error = $"Purchase {purchaseId} was not found." });
+        }
+        catch (SmsConflictException exception)
+        {
+            return Conflict(new { error = exception.Message });
+        }
+    }
     [HttpGet("allocations")]
     [ProducesResponseType(typeof(IReadOnlyList<SmsClientAllocation>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SmsClientAllocation>>> GetAllocations(
@@ -109,6 +146,26 @@ public sealed class SmsAdminController(ISmsService smsService) : ControllerBase
         CancellationToken cancellationToken = default)
         => Ok(await smsService.GetAllocationsAsync(clientId, limit, offset, cancellationToken));
 
+    [HttpPatch("allocations/{allocationId:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAllocation(
+        long allocationId,
+        [FromBody] SmsAllocationUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var updated = await smsService.UpdateAllocationAsync(allocationId, request, cancellationToken);
+        return updated ? NoContent() : NotFound(new { error = $"Allocation {allocationId} was not found." });
+    }
+
+    [HttpPost("allocations/{allocationId:long}/finalize")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> FinalizeAllocation(long allocationId, CancellationToken cancellationToken)
+    {
+        var finalized = await smsService.FinalizeAllocationAsync(allocationId, cancellationToken);
+        return finalized ? NoContent() : NotFound(new { error = $"Allocation {allocationId} was not found." });
+    }
     [HttpPost("clients/{clientId}/allocations")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]

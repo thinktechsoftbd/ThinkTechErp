@@ -30,6 +30,9 @@ public sealed class SmsService(ISmsRepository repository) : ISmsService
     public Task<long> RecordPurchaseAsync(SmsPurchaseRequest request, CancellationToken cancellationToken = default)
         => ExecuteAsync(() => repository.RecordPurchaseAsync(request, cancellationToken));
 
+    public Task<bool> UpdatePurchaseAsync(long purchaseId, SmsPurchaseUpdateRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(() => repository.UpdatePurchaseAsync(purchaseId, request, cancellationToken));
+
     public Task<IReadOnlyList<SmsClientAllocation>> GetAllocationsAsync(
         string? clientId,
         int limit,
@@ -37,6 +40,14 @@ public sealed class SmsService(ISmsRepository repository) : ISmsService
         CancellationToken cancellationToken = default)
         => ExecuteAsync(() => repository.GetAllocationsAsync(clientId, limit, offset, cancellationToken));
 
+    public Task<bool> UpdateAllocationAsync(
+        long allocationId,
+        SmsAllocationUpdateRequest request,
+        CancellationToken cancellationToken = default)
+        => ExecuteAsync(() => repository.UpdateAllocationAsync(allocationId, request, cancellationToken));
+
+    public Task<bool> FinalizeAllocationAsync(long allocationId, CancellationToken cancellationToken = default)
+        => ExecuteAsync(() => repository.FinalizeAllocationAsync(allocationId, cancellationToken));
     public Task<long> AllocateAsync(
         string clientId,
         string clientName,

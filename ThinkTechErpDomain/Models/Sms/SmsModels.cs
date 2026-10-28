@@ -33,6 +33,7 @@ public sealed class SmsAdnPurchase
     public long SmsQuantity { get; set; }
     public decimal? AmountPaid { get; set; }
     public string? Currency { get; set; }
+    public decimal? ExchangeRate { get; set; }
     public DateTimeOffset PurchasedAt { get; set; }
     public string? Note { get; set; }
 }
@@ -42,8 +43,10 @@ public sealed class SmsClientAllocation
     public long AllocationId { get; set; }
     public long TransactionId { get; set; }
     public string ClientId { get; set; } = string.Empty;
+    public string ClientName { get; set; } = string.Empty;
     public long SmsQuantity { get; set; }
     public string? Note { get; set; }
+    public bool IsFinalized { get; set; }
     public DateTimeOffset AllocatedAt { get; set; }
 }
 
@@ -89,10 +92,30 @@ public sealed class SmsPurchaseRequest
     [RegularExpression("^[A-Z]{3}$")]
     public string? Currency { get; set; }
 
+    [Range(typeof(decimal), "0.000001", "999999999999.999999")]
+    public decimal? ExchangeRate { get; set; }
+
     [StringLength(500)]
     public string? Note { get; set; }
 }
 
+public sealed class SmsPurchaseUpdateRequest
+{
+    [Required, StringLength(128, MinimumLength = 1)]
+    public string ProviderReference { get; set; } = string.Empty;
+
+    [Range(typeof(decimal), "0", "999999999999.99")]
+    public decimal AmountPaid { get; set; }
+
+    [Required, RegularExpression("^(BDT|USD)$")]
+    public string Currency { get; set; } = string.Empty;
+
+    [Range(typeof(decimal), "0.000001", "999999999999.999999")]
+    public decimal? ExchangeRate { get; set; }
+
+    [StringLength(500)]
+    public string? Note { get; set; }
+}
 public sealed class SmsClientCreateRequest
 {
     [Required, StringLength(128, MinimumLength = 1)]
@@ -115,6 +138,14 @@ public sealed class SmsAllocationRequest
     [Range(1, long.MaxValue)]
     public long SmsQuantity { get; set; }
 
+    [StringLength(500)]
+    public string? Note { get; set; }
+
+    public bool IsFinalized { get; set; }
+}
+
+public sealed class SmsAllocationUpdateRequest
+{
     [StringLength(500)]
     public string? Note { get; set; }
 }
