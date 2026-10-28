@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using ThinkTechErpAPI.OpenApi;
 using ThinkTechErpAPI.Security;
 using ThinkTechErpDomain.Models.Security;
+using ThinkTechErpDomain.Models.Settings;
 using ThinkTechErpService;
 using ThinkTechErpService.Security;
 
@@ -144,6 +145,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(SecurityPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SecurityRules.ManageSecurityPermission));
+
+    options.AddPolicy(SettingsPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            SettingsRules.ViewSettingsPermission, SettingsRules.ManageSettingsPermission));
+
+    options.AddPolicy(SettingsPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, SettingsRules.ManageSettingsPermission));
 });
 builder.Services.AddSingleton<IAuthorizationHandler, SmsClientAccessHandler>();
 builder.Services.AddRateLimiter(options =>

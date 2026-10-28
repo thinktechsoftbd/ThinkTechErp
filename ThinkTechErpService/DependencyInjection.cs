@@ -3,9 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ThinkTechErpRepository.Database;
 using ThinkTechErpRepository.Security;
+using ThinkTechErpRepository.Settings;
 using ThinkTechErpRepository.Website;
 using ThinkTechErpRepository.Sms;
 using ThinkTechErpService.Security;
+using ThinkTechErpService.Settings;
 using ThinkTechErpService.Sms;
 using ThinkTechErpService.Website;
 
@@ -51,6 +53,14 @@ public static class DependencyInjection
         services.AddScoped<ISecurityPermissionService, SecurityPermissionService>();
         services.AddScoped<ISecurityMenuService, SecurityMenuService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<ISubscriptionModuleRepository, SubscriptionModuleRepository>();
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<ISubscriptionModuleService, SubscriptionModuleService>();
+        services.AddScoped<ISubscriptionService, SubscriptionService>();
+
+        // Settings
+        services.AddScoped<ILookupRepository, LookupRepository>();
+        services.AddScoped<ILookupService, LookupService>();
         return services;
     }
 }

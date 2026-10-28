@@ -223,4 +223,151 @@ Content-Type: application/json
 GET {{baseUrl}}/api/security/organizations
 Authorization: Bearer {{accessToken}}
 
+### ======================= Subscription modules (SECURITY.V / SECURITY.M) =======================
+
+GET {{baseUrl}}/api/security/subscription-modules?search=&isActive=true&limit=50&offset=0
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{baseUrl}}/api/security/subscription-modules
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "moduleName": "Inventory",
+  "isActive": true,
+  "remarks": "Purchase, sales, returns and damage"
+}
+
+###
+PUT {{baseUrl}}/api/security/subscription-modules/1
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "moduleName": "Inventory",
+  "isActive": true,
+  "remarks": null
+}
+
+### Fails with 409 while organizations subscribe to it; deactivate it instead
+DELETE {{baseUrl}}/api/security/subscription-modules/1
+Authorization: Bearer {{accessToken}}
+
+### ======================= Subscriptions =======================
+
+### One organization's subscriptions; also filter by subscriptionModuleId, status, subscriptionType, search
+GET {{baseUrl}}/api/security/subscriptions?organizationId=1&limit=50&offset=0
+Authorization: Bearer {{accessToken}}
+
+### endDate may be omitted (start + period × count − 1 day); discountAmount is calculated when
+### discountPercentage > 0; totalAmount is always subtotal − discount + VAT.
+POST {{baseUrl}}/api/security/subscriptions
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "organizationId": 1,
+  "subscriptionModuleId": 1,
+  "subscriptionType": "Premium",
+  "billingPeriodType": "Monthly",
+  "billingPeriodCount": 12,
+  "startDate": "2026-11-01",
+  "currencyLookupDataId": 1,
+  "localExchangeRate": 1,
+  "subtotalAmount": 12000,
+  "discountPercentage": 10,
+  "vatAmount": 1620,
+  "status": "Active"
+}
+
+###
+PUT {{baseUrl}}/api/security/subscriptions/1
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "organizationId": 1,
+  "subscriptionModuleId": 1,
+  "subscriptionType": "Premium",
+  "billingPeriodType": "Yearly",
+  "billingPeriodCount": 1,
+  "startDate": "2026-11-01",
+  "endDate": "2027-10-31",
+  "currencyLookupDataId": 1,
+  "localExchangeRate": 1,
+  "subtotalAmount": 12000,
+  "discountPercentage": 0,
+  "discountAmount": 500,
+  "vatAmount": 1725,
+  "status": "Active"
+}
+
+###
+DELETE {{baseUrl}}/api/security/subscriptions/1
+Authorization: Bearer {{accessToken}}
+
+### ======================= Settings: lookups (SETTING.V / SETTING.M) =======================
+
+GET {{baseUrl}}/api/settings/lookup-tables?search=&isActive=&limit=50&offset=0
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{baseUrl}}/api/settings/lookup-tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Payment Method",
+  "isActive": true
+}
+
+###
+PUT {{baseUrl}}/api/settings/lookup-tables/1
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Currency",
+  "isActive": true
+}
+
+### Fails with 409 while the table still has values
+DELETE {{baseUrl}}/api/settings/lookup-tables/2
+Authorization: Bearer {{accessToken}}
+
+### Values of one table
+GET {{baseUrl}}/api/settings/lookup-data?lookupTableId=1&search=&isActive=&limit=50&offset=0
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{baseUrl}}/api/settings/lookup-data
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "lookupTableId": 1,
+  "name": "EUR",
+  "isActive": true
+}
+
+###
+PUT {{baseUrl}}/api/settings/lookup-data/3
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "lookupTableId": 1,
+  "name": "EUR",
+  "isActive": false
+}
+
+### Fails with 409 while it is in use (e.g. as a subscription's currency)
+DELETE {{baseUrl}}/api/settings/lookup-data/3
+Authorization: Bearer {{accessToken}}
+
+### Drop-down values for any signed-in user: active values of an active table
+GET {{baseUrl}}/api/settings/lookup-options/Currency
+Authorization: Bearer {{accessToken}}
+
 ###

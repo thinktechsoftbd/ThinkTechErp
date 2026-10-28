@@ -8,6 +8,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
 {
     private const string OrganizationSelect = """
         SELECT organization_id AS Id,
+               object_id AS ObjectId,
                organization_name_en AS NameEn,
                organization_name_bn AS NameBn,
                slogan AS Slogan,
