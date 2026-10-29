@@ -223,6 +223,13 @@ Content-Type: application/json
 GET {{baseUrl}}/api/security/organizations
 Authorization: Bearer {{accessToken}}
 
+### Is the organization's subscription valid today? Anonymous: pass its Organization Id (object_id).
+### Valid = organization active + a subscription with status Active, start <= today <= end (UTC).
+GET {{baseUrl}}/api/security/organizations/7a7f5e5c-77e4-468e-b22f-db3f49228d6d/subscription-validity
+
+### Same, for one module
+GET {{baseUrl}}/api/security/organizations/7a7f5e5c-77e4-468e-b22f-db3f49228d6d/subscription-validity?moduleName=MediDesk
+
 ### ======================= Subscription modules (SECURITY.V / SECURITY.M) =======================
 
 GET {{baseUrl}}/api/security/subscription-modules?search=&isActive=true&limit=50&offset=0

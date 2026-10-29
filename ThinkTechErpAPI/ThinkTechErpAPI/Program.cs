@@ -146,6 +146,16 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SecurityRules.ManageSecurityPermission));
 
+    options.AddPolicy(OrganizationPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            SecurityRules.ViewOrganizationPermission, SecurityRules.ManageOrganizationPermission,
+            SecurityRules.ViewSecurityPermission, SecurityRules.ManageSecurityPermission));
+
+    options.AddPolicy(OrganizationPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, SecurityRules.ManageOrganizationPermission));
+
     options.AddPolicy(SettingsPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,
@@ -181,6 +191,18 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    // Anonymous subscription check: generous for real clients, but slows probing for Organization Ids.
+    options.AddPolicy(SecurityPolicies.SubscriptionValidityRateLimit, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown-client",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true

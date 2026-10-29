@@ -48,6 +48,49 @@ public sealed class SubscriptionService(
     public Task<bool> DeleteSubscriptionAsync(long subscriptionId, CancellationToken cancellationToken = default)
         => subscriptions.DeleteSubscriptionAsync(subscriptionId, cancellationToken);
 
+    public async Task<SubscriptionValidity?> CheckValidityAsync(
+        Guid organizationObjectId, string? moduleName, CancellationToken cancellationToken = default)
+    {
+        var organization = await subscriptions.FindOrganizationAsync(organizationObjectId, cancellationToken);
+        if (organization is null)
+            return null;
+
+        // Subscription dates have no time zone; compare them with today's date in UTC.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var validity = new SubscriptionValidity
+        {
+            OrganizationObjectId = organization.ObjectId,
+            OrganizationName = organization.Name,
+            CheckedOn = today
+        };
+        if (!organization.IsActive)
+        {
+            validity.Reason = "The organization is inactive.";
+            return validity;
+        }
+
+        moduleName = string.IsNullOrWhiteSpace(moduleName) ? null : moduleName.Trim();
+        var current = await subscriptions.GetCurrentSubscriptionsAsync(organization.Id, moduleName, today, cancellationToken);
+        foreach (var subscription in current)
+            subscription.DaysRemaining = subscription.EndDate.DayNumber - today.DayNumber;
+
+        validity.Subscriptions = current.ToArray();
+        validity.IsValid = current.Count > 0;
+        if (validity.IsValid)
+        {
+            validity.ValidUntil = current.Max(subscription => subscription.EndDate);
+            validity.DaysRemaining = validity.ValidUntil.Value.DayNumber - today.DayNumber;
+        }
+        else
+        {
+            validity.Reason = moduleName is null
+                ? "No active subscription covers today."
+                : $"No active subscription to {moduleName} covers today.";
+        }
+
+        return validity;
+    }
+
     // Fills in the end date and discount amount, then checks the module, currency and dates.
     // The organization is checked by its foreign key.
     private async Task PrepareAsync(

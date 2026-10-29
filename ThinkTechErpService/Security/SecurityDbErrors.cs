@@ -10,6 +10,7 @@ internal static class SecurityDbErrors
         ["Role_name_key"] = "A role with this name already exists.",
         ["Permission_code_key"] = "A permission with this code already exists.",
         ["organization_organization_code_key"] = "An organization with this code already exists.",
+        ["ux_organization_object_id"] = "Another organization already uses this Organization Id.",
         ["ux_subscription_module_name"] = "A subscription module with this name already exists.",
         ["ux_lookup_table_name"] = "A lookup table with this name already exists.",
         ["ux_lookup_data_name"] = "This lookup table already has a value with this name."

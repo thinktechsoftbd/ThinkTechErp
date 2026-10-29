@@ -23,6 +23,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                postal_code AS PostalCode,
                country AS Country,
                logo_url AS LogoUrl,
+               is_external AS IsExternal,
                is_active AS IsActive,
                created_at AT TIME ZONE 'utc' AS CreatedAt,
                created_by AS CreatedBy,
@@ -56,12 +57,12 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO security.organization (
-                organization_name_en, organization_name_bn, slogan, organization_code, email, phone, website,
-                address_line1, address_line2, city, state, postal_code, country, logo_url, is_active,
+                object_id, organization_name_en, organization_name_bn, slogan, organization_code, email, phone, website,
+                address_line1, address_line2, city, state, postal_code, country, logo_url, is_external, is_active,
                 created_at, created_by)
             VALUES (
-                @NameEn, @NameBn, @Slogan, @Code, @Email, @Phone, @Website,
-                @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @Country, @LogoUrl, @IsActive,
+                COALESCE(@ObjectId, gen_random_uuid()), @NameEn, @NameBn, @Slogan, @Code, @Email, @Phone, @Website,
+                @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @Country, @LogoUrl, @IsExternal, @IsActive,
                 {SecurityDb.NowUtc}, @UserId)
             RETURNING organization_id
             """, parameters, cancellationToken: cancellationToken));
@@ -77,7 +78,8 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security.organization
-            SET organization_name_en = @NameEn,
+            SET object_id = COALESCE(@ObjectId, object_id),
+                organization_name_en = @NameEn,
                 organization_name_bn = @NameBn,
                 slogan = @Slogan,
                 organization_code = @Code,
@@ -91,6 +93,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                 postal_code = @PostalCode,
                 country = @Country,
                 logo_url = @LogoUrl,
+                is_external = @IsExternal,
                 is_active = @IsActive,
                 updated_at = {SecurityDb.NowUtc},
                 updated_by = @UserId

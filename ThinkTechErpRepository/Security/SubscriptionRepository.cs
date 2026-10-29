@@ -167,4 +167,41 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
             "DELETE FROM security.subscription WHERE subscription_id = @SubscriptionId",
             new { SubscriptionId = subscriptionId }, cancellationToken: cancellationToken)) > 0;
     }
+
+    public async Task<SubscriptionOrganization?> FindOrganizationAsync(
+        Guid organizationObjectId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        return await connection.QuerySingleOrDefaultAsync<SubscriptionOrganization>(new CommandDefinition("""
+            SELECT organization_id AS Id,
+                   object_id AS ObjectId,
+                   organization_name_en AS Name,
+                   is_active AS IsActive
+            FROM security.organization
+            WHERE object_id = @ObjectId
+            """, new { ObjectId = organizationObjectId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<CurrentSubscription>> GetCurrentSubscriptionsAsync(
+        int organizationId, string? moduleName, DateOnly today, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var rows = await connection.QueryAsync<CurrentSubscription>(new CommandDefinition("""
+            SELECT m.module_name AS ModuleName,
+                   s.subscription_type AS SubscriptionType,
+                   s.billing_period_type AS BillingPeriodType,
+                   s.subscription_start_date AS StartDate,
+                   s.subscription_end_date AS EndDate
+            FROM security.subscription s
+            JOIN security.subscription_module m ON m.subscription_module_id = s.subscription_module_id
+            WHERE s.organization_id = @OrganizationId
+              AND s.status = 'Active'
+              AND s.subscription_start_date <= @Today
+              AND s.subscription_end_date >= @Today
+              AND (CAST(@ModuleName AS text) IS NULL OR lower(m.module_name) = lower(@ModuleName))
+            ORDER BY m.module_name, s.subscription_end_date DESC
+            """, new { OrganizationId = organizationId, ModuleName = moduleName, Today = today },
+            cancellationToken: cancellationToken));
+        return rows.AsList();
+    }
 }

@@ -9,4 +9,11 @@ public interface ISubscriptionService
     Task<Subscription> CreateSubscriptionAsync(SubscriptionUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<Subscription?> UpdateSubscriptionAsync(long subscriptionId, SubscriptionUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<bool> DeleteSubscriptionAsync(long subscriptionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether the organization is active and has a subscription with status Active covering today
+    /// (UTC), optionally for one module by name.
+    /// </summary>
+    /// <returns>Null when no organization has this object ID.</returns>
+    Task<SubscriptionValidity?> CheckValidityAsync(Guid organizationObjectId, string? moduleName, CancellationToken cancellationToken = default);
 }

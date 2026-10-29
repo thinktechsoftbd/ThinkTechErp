@@ -36,6 +36,9 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
     // Blank optional fields are stored as NULL (organization_code is unique, so "" would clash).
     private static void Normalize(OrganizationUpsertRequest request)
     {
+        if (request.ObjectId == Guid.Empty)
+            throw new SecurityValidationException("The Organization Id can't be all zeros. Leave it empty to keep or generate one.");
+
         request.NameEn = request.NameEn.Trim();
         request.NameBn = Clean(request.NameBn);
         request.Slogan = Clean(request.Slogan);

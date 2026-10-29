@@ -17,6 +17,53 @@ public static class SubscriptionStatuses
     public const string Cancelled = "Cancelled";
 }
 
+/// <summary>
+/// Whether an organization's subscription is valid today. Kept free of amounts and internal IDs:
+/// it is returned to callers that have not signed in.
+/// </summary>
+public sealed class SubscriptionValidity
+{
+    public Guid OrganizationObjectId { get; set; }
+    public string OrganizationName { get; set; } = string.Empty;
+
+    /// <summary>True when at least one subscription counts (see <see cref="Subscriptions"/>).</summary>
+    public bool IsValid { get; set; }
+
+    /// <summary>Why the subscription isn't valid; null when it is.</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>The date checked against: today in UTC.</summary>
+    public DateOnly CheckedOn { get; set; }
+
+    /// <summary>The latest end date of the subscriptions that count.</summary>
+    public DateOnly? ValidUntil { get; set; }
+
+    /// <summary>Days from <see cref="CheckedOn"/> to <see cref="ValidUntil"/>; 0 on the last valid day.</summary>
+    public int? DaysRemaining { get; set; }
+
+    /// <summary>Subscriptions with status Active whose start date is on or before today and end date on or after it.</summary>
+    public CurrentSubscription[] Subscriptions { get; set; } = [];
+}
+
+public sealed class CurrentSubscription
+{
+    public string ModuleName { get; set; } = string.Empty;
+    public string SubscriptionType { get; set; } = string.Empty;
+    public string BillingPeriodType { get; set; } = string.Empty;
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public int DaysRemaining { get; set; }
+}
+
+/// <summary>The organization fields a subscription check needs.</summary>
+public sealed class SubscriptionOrganization
+{
+    public int Id { get; set; }
+    public Guid ObjectId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+}
+
 public sealed class SubscriptionModule
 {
     public int Id { get; set; }
