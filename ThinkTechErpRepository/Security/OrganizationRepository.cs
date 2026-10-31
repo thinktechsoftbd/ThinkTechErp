@@ -48,6 +48,14 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
             cancellationToken: cancellationToken));
     }
 
+    public async Task<Organization?> GetOrganizationByObjectIdAsync(Guid objectId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        return await connection.QuerySingleOrDefaultAsync<Organization>(new CommandDefinition(
+            $"{OrganizationSelect} WHERE object_id = @ObjectId", new { ObjectId = objectId },
+            cancellationToken: cancellationToken));
+    }
+
     public async Task<int> CreateOrganizationAsync(
         OrganizationUpsertRequest request, int createdBy, CancellationToken cancellationToken = default)
     {

@@ -370,7 +370,11 @@ public sealed class Organization
     public int? UpdatedBy { get; set; }
 }
 
-public sealed class OrganizationUpsertRequest
+/// <summary>
+/// An organization's descriptive fields. Integration clients send only these;
+/// OrganizationUpsertRequest adds the fields the ERP controls.
+/// </summary>
+public class OrganizationDetails
 {
     [Required, StringLength(200, MinimumLength = 1)]
     public string NameEn { get; set; } = string.Empty;
@@ -413,7 +417,10 @@ public sealed class OrganizationUpsertRequest
 
     [StringLength(500)]
     public string? LogoUrl { get; set; }
+}
 
+public sealed class OrganizationUpsertRequest : OrganizationDetails
+{
     /// <summary>
     /// The Organization Id. Null keeps the current one; on create, null lets the database
     /// generate one.
@@ -424,3 +431,34 @@ public sealed class OrganizationUpsertRequest
 
     public bool IsActive { get; set; } = true;
 }
+
+// ---- Integration clients (server-to-server)
+
+public sealed class IntegrationTokenRequest
+{
+    [Required, StringLength(64)]
+    public string ClientId { get; set; } = string.Empty;
+
+    [Required, StringLength(256)]
+    public string ClientSecret { get; set; } = string.Empty;
+}
+
+public sealed class IntegrationTokenResponse
+{
+    public string AccessToken { get; set; } = string.Empty;
+    public string TokenType { get; set; } = "Bearer";
+
+    /// <summary>Seconds until the access token expires. Then ask again with the client credentials.</summary>
+    public int ExpiresIn { get; set; }
+}
+
+public enum ClientOrganizationSyncStatus
+{
+    Created,
+    Updated,
+
+    /// <summary>The Organization Id belongs to an organization another client or a user created.</summary>
+    NotOwned
+}
+
+public sealed record ClientOrganizationSync(ClientOrganizationSyncStatus Status, Organization? Organization = null);

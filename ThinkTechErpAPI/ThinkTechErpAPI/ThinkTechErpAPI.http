@@ -230,6 +230,38 @@ GET {{baseUrl}}/api/security/organizations/7a7f5e5c-77e4-468e-b22f-db3f49228d6d/
 ### Same, for one module
 GET {{baseUrl}}/api/security/organizations/7a7f5e5c-77e4-468e-b22f-db3f49228d6d/subscription-validity?moduleName=MediDesk
 
+### ======================= Integration clients (server-to-server) =======================
+### Configure a client under Authentication:Integration:Clients first (deploy/linux/README.md).
+### Don't commit a real client secret.
+
+# @name integrationToken
+POST {{baseUrl}}/api/security/integration/token
+Content-Type: application/json
+
+{
+  "clientId": "medidesk_example",
+  "clientSecret": "change-me"
+}
+
+###
+@integrationAccessToken = {{integrationToken.response.body.$.accessToken}}
+
+### Create (201) or update (200) the client's organization by Organization Id (object_id).
+### Active and External are left to the ERP; 403 when another client or a user created it.
+PUT {{baseUrl}}/api/security/integration/organizations/7a7f5e5c-77e4-468e-b22f-db3f49228d6d
+Authorization: Bearer {{integrationAccessToken}}
+Content-Type: application/json
+
+{
+  "nameEn": "Mohonto Dental Care",
+  "nameBn": null,
+  "code": "MDC-001",
+  "email": "info@example.com",
+  "phone": "01700000000",
+  "city": "Dhaka",
+  "country": "Bangladesh"
+}
+
 ### ======================= Subscription modules (SECURITY.V / SECURITY.M) =======================
 
 GET {{baseUrl}}/api/security/subscription-modules?search=&isActive=true&limit=50&offset=0

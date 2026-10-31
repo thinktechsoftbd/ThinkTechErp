@@ -73,6 +73,17 @@ var refreshTokenDays = builder.Configuration.GetValue("Authentication:Jwt:Refres
 if (accessTokenMinutes <= 0 || refreshTokenDays <= 0)
     throw new InvalidOperationException("Authentication:Jwt:AccessTokenMinutes and RefreshTokenDays must be positive.");
 
+// Server-to-server clients (e.g. MediDesk installations) sign in with a client ID and secret and get
+// tokens for their own audience, so a client token never passes as a user token or the reverse.
+var integrationAudience = builder.Configuration["Authentication:Integration:Audience"] ?? "ThinkTechErp.Integration";
+if (string.IsNullOrWhiteSpace(integrationAudience) || string.Equals(integrationAudience, audience, StringComparison.Ordinal))
+    throw new InvalidOperationException("Authentication:Integration:Audience must be set and differ from Authentication:Jwt:Audience.");
+var integrationTokenMinutes = builder.Configuration.GetValue("Authentication:Integration:AccessTokenMinutes", 10);
+if (integrationTokenMinutes <= 0)
+    throw new InvalidOperationException("Authentication:Integration:AccessTokenMinutes must be positive.");
+var integrationClients = IntegrationClientStore.FromConfiguration(
+    builder.Configuration.GetSection("Authentication:Integration:Clients"));
+
 // Add services to the container.
 
 builder.Services.AddControllers();
@@ -82,12 +93,34 @@ builder.Services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
 builder.Services.AddSingleton(new SecurityTokenSettings(
     RefreshTokenLifetime: TimeSpan.FromDays(refreshTokenDays),
     PasswordResetTokenLifetime: TimeSpan.FromMinutes(30)));
+builder.Services.AddSingleton(integrationClients);
+builder.Services.AddSingleton(new IntegrationTokenSettings(integrationAudience, TimeSpan.FromMinutes(integrationTokenMinutes)));
+builder.Services.AddSingleton<IntegrationTokenIssuer>();
 
 // Browser clients on another origin (e.g. a SPA dev server) must be listed in Cors:AllowedOrigins.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddProblemDetails();
+
+// User tokens and integration tokens differ only in audience and their required claims.
+TokenValidationParameters TokenValidationFor(string validAudience) => new()
+{
+    ValidateIssuer = true,
+    ValidIssuer = issuer,
+    ValidateAudience = true,
+    ValidAudience = validAudience,
+    ValidateIssuerSigningKey = true,
+    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey!)),
+    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+    RequireSignedTokens = true,
+    RequireExpirationTime = true,
+    ValidateLifetime = true,
+    ClockSkew = TimeSpan.FromSeconds(30),
+    NameClaimType = "sub",
+    RoleClaimType = "role"
+};
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -105,22 +138,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return Task.CompletedTask;
             }
         };
-        options.TokenValidationParameters = new TokenValidationParameters
+        options.TokenValidationParameters = TokenValidationFor(audience!);
+    })
+    .AddJwtBearer(IntegrationPolicies.Scheme, options =>
+    {
+        options.MapInboundClaims = false;
+        options.IncludeErrorDetails = false;
+        options.Events = new JwtBearerEvents
         {
-            ValidateIssuer = true,
-            ValidIssuer = issuer,
-            ValidateAudience = true,
-            ValidAudience = audience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey!)),
-            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
-            RequireSignedTokens = true,
-            RequireExpirationTime = true,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30),
-            NameClaimType = "sub",
-            RoleClaimType = "role"
+            OnTokenValidated = context =>
+            {
+                var clientId = context.Principal?.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value;
+                var tokenId = context.Principal?.FindFirst("jti")?.Value;
+                if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(tokenId))
+                    context.Fail("The access token is missing required client claims.");
+
+                return Task.CompletedTask;
+            }
         };
+        options.TokenValidationParameters = TokenValidationFor(integrationAudience);
     });
 builder.Services.AddAuthorization(options =>
 {
@@ -155,6 +191,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(OrganizationPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SecurityRules.ManageOrganizationPermission));
+
+    options.AddPolicy(IntegrationPolicies.OrganizationSync, policy => policy
+        .AddAuthenticationSchemes(IntegrationPolicies.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.OrganizationSync));
 
     options.AddPolicy(SettingsPolicies.View, policy => policy
         .RequireAuthenticatedUser()
@@ -198,6 +239,18 @@ builder.Services.AddRateLimiter(options =>
 
     // Anonymous subscription check: generous for real clients, but slows probing for Organization Ids.
     options.AddPolicy(SecurityPolicies.SubscriptionValidityRateLimit, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown-client",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    // Integration endpoints: per IP, because the limiter runs before the integration token is read.
+    options.AddPolicy(IntegrationPolicies.RateLimit, context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown-client",
             _ => new FixedWindowRateLimiterOptions

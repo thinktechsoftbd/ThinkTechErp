@@ -107,3 +107,33 @@ Then enable HTTPS with `sudo certbot --nginx -d api.example.com`.
 
 Replace the key and restart: `sudo systemctl restart thinktecherp-api`. Every issued
 token becomes invalid, so clients must sign in again.
+
+### Integration clients
+
+Server-side applications (e.g. a MediDesk installation syncing its organization) call
+`api/security/integration/*` with a client ID and secret instead of a user's password.
+They trade them at `POST api/security/integration/token` for a 10-minute token that only
+the integration endpoints accept. Give each installation its own client:
+
+1. Create a dedicated user for the client (e.g. "MediDesk – Mohonto Dental Care"),
+   inactive and without roles. Its ID is recorded as `created_by`/`updated_by`, and the
+   client may only change organizations created under it, so never use a person's account.
+2. Generate the secret and its SHA-256 (the API keeps only the hash):
+
+   ```bash
+   SECRET=$(openssl rand -base64 48 | tr -d '\r\n')
+   printf '%s' "$SECRET" | sha256sum | cut -d' ' -f1
+   ```
+
+3. Add the client to `api.env` (or one credential file per key) and restart:
+
+   ```
+   Authentication__Integration__Clients__medidesk_mohonto__SecretSha256=<hash>
+   Authentication__Integration__Clients__medidesk_mohonto__ActingUserId=<user ID>
+   Authentication__Integration__Clients__medidesk_mohonto__Scopes__0=organization.sync
+   ```
+
+4. Give the client ID and `$SECRET` to the installation only, over a secure channel.
+
+To revoke a client, remove its keys and restart; its unexpired tokens stop working too.
+To rotate, replace the hash, restart, and update the installation.

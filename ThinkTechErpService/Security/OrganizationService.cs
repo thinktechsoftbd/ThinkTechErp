@@ -33,6 +33,44 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
         return await organizations.GetOrganizationAsync(organizationId, cancellationToken);
     }
 
+    public async Task<ClientOrganizationSync> SyncClientOrganizationAsync(
+        Guid objectId, OrganizationDetails details, int clientUserId, CancellationToken cancellationToken = default)
+    {
+        var existing = await organizations.GetOrganizationByObjectIdAsync(objectId, cancellationToken);
+        if (existing is not null && existing.CreatedBy != clientUserId)
+            return new ClientOrganizationSync(ClientOrganizationSyncStatus.NotOwned);
+
+        // Active and External decide subscription validity, so they stay with the ERP.
+        var request = new OrganizationUpsertRequest
+        {
+            ObjectId = objectId,
+            NameEn = details.NameEn,
+            NameBn = details.NameBn,
+            Slogan = details.Slogan,
+            Code = details.Code,
+            Email = details.Email,
+            Phone = details.Phone,
+            Website = details.Website,
+            AddressLine1 = details.AddressLine1,
+            AddressLine2 = details.AddressLine2,
+            City = details.City,
+            State = details.State,
+            PostalCode = details.PostalCode,
+            Country = details.Country,
+            LogoUrl = details.LogoUrl,
+            IsExternal = existing?.IsExternal ?? true,
+            IsActive = existing?.IsActive ?? true
+        };
+
+        if (existing is null)
+            return new ClientOrganizationSync(ClientOrganizationSyncStatus.Created,
+                await CreateOrganizationAsync(request, clientUserId, cancellationToken));
+
+        var updated = await UpdateOrganizationAsync(existing.Id, request, clientUserId, cancellationToken)
+            ?? throw new InvalidOperationException("Synced organization could not be read back.");
+        return new ClientOrganizationSync(ClientOrganizationSyncStatus.Updated, updated);
+    }
+
     // Blank optional fields are stored as NULL (organization_code is unique, so "" would clash).
     private static void Normalize(OrganizationUpsertRequest request)
     {
