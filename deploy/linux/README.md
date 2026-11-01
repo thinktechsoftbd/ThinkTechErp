@@ -8,17 +8,16 @@ Nothing to set up. When `ASPNETCORE_ENVIRONMENT=Development` (the Visual Studio 
 - **JWT signing key**: generated on first start and kept per OS user outside the repo,
   in `%LOCALAPPDATA%\ThinkTechErp\jwt-development-signing-key` (Windows) or
   `~/.local/share/ThinkTechErp/jwt-development-signing-key` (Linux).
-- **Connection strings**: read from `appsettings.Development.json`. `SmsApi` falls back
-  to the `Sms` connection until a least-privilege login exists.
+- **Connection strings**: read from `appsettings.Development.json`.
 
 To use your own values instead, set them in Visual Studio with **Manage User Secrets**
 on the API project, or as environment variables (`Authentication__Jwt__SigningKey`,
-`ConnectionStrings__SmsApi`, ...). Those take precedence over the defaults above.
+`ConnectionStrings__Security`, ...). Those take precedence over the defaults above.
 
 ## Production (Ubuntu VPS)
 
 In Production nothing is generated or defaulted: the API refuses to start unless the
-signing key and all four connection strings (`Website`, `Sms`, `Security`, `SmsApi`)
+signing key and both connection strings (`Website`, `Security`)
 are supplied. They come from either an environment file or systemd credentials.
 
 ### 1. Install the runtime

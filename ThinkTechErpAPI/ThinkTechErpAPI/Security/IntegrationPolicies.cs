@@ -12,6 +12,9 @@ public static class IntegrationPolicies
     /// <summary>A client with the organization.sync scope: create and update its own organizations.</summary>
     public const string OrganizationSync = "IntegrationOrganizationSync";
 
+    /// <summary>A client with the sms.usage scope: read and use the SMS balance of its own organizations.</summary>
+    public const string SmsUsage = "IntegrationSmsUsage";
+
     /// <summary>Per-IP limit for the integration endpoints that need a token.</summary>
     public const string RateLimit = "IntegrationRateLimit";
 
@@ -22,6 +25,7 @@ public static class IntegrationPolicies
 public static class IntegrationScopes
 {
     public const string OrganizationSync = "organization.sync";
+    public const string SmsUsage = "sms.usage";
 
-    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal) { OrganizationSync };
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal) { OrganizationSync, SmsUsage };
 }

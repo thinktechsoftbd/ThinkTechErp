@@ -79,13 +79,20 @@ public static class OrganizationScopeExtensions
 }
 
 /// <summary>Shared plumbing for organization-scoped controllers.</summary>
-[ApiController]
 [OrganizationScoped]
-[SecurityExceptionFilter]
-public abstract class OrganizationControllerBase : ControllerBase
+public abstract class OrganizationControllerBase : ErpControllerBase
 {
     protected int OrganizationId => HttpContext.OrganizationId();
+}
 
+/// <summary>
+/// Shared plumbing for the business areas' controllers: business errors become 400/409, and the
+/// calling user and the usual results are at hand.
+/// </summary>
+[ApiController]
+[SecurityExceptionFilter]
+public abstract class ErpControllerBase : ControllerBase
+{
     protected int UserId => User.TryGetUserId(out var userId)
         ? userId
         : throw new BusinessRuleException("The access token has no user.");

@@ -29,7 +29,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         var connectionStrings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var schema in new[] { "Website", "Sms", "Security", "SmsApi" })
+        foreach (var schema in new[] { "Website", "Security" })
         {
             var connectionString = configuration.GetConnectionString(schema);
             if (string.IsNullOrWhiteSpace(connectionString))

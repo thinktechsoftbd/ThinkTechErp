@@ -28,9 +28,7 @@ EnvironmentFile=/etc/thinktecherp/api.env
 # Remove the same keys from api.env when you switch.
 #LoadCredential=Authentication__Jwt__SigningKey:/etc/thinktecherp/credentials/Authentication__Jwt__SigningKey
 #LoadCredential=ConnectionStrings__Website:/etc/thinktecherp/credentials/ConnectionStrings__Website
-#LoadCredential=ConnectionStrings__Sms:/etc/thinktecherp/credentials/ConnectionStrings__Sms
 #LoadCredential=ConnectionStrings__Security:/etc/thinktecherp/credentials/ConnectionStrings__Security
-#LoadCredential=ConnectionStrings__SmsApi:/etc/thinktecherp/credentials/ConnectionStrings__SmsApi
 
 NoNewPrivileges=true
 PrivateTmp=true

@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Folder Include="Areas\Inventory\" />
+    <Folder Include="Areas\Accounting\" />
     <Folder Include="Areas\Purchase\" />
     <Folder Include="Areas\SMS\" />
     <Folder Include="Areas\Security\" />

@@ -11,6 +11,7 @@ using ThinkTechErpDomain.Models.Accounting;
 using ThinkTechErpDomain.Models.Inventory;
 using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Sales;
+using ThinkTechErpDomain.Models.Sms;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpDomain.Models.Settings;
 using ThinkTechErpService;
@@ -40,10 +41,6 @@ if (builder.Environment.IsDevelopment())
     var developmentDefaults = new Dictionary<string, string?>();
     if (string.IsNullOrWhiteSpace(builder.Configuration["Authentication:Jwt:SigningKey"]))
         developmentDefaults["Authentication:Jwt:SigningKey"] = DevelopmentSigningKey.GetOrCreate();
-
-    // Reuse the Sms connection until a least-privilege SmsApi login is configured.
-    if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("SmsApi")))
-        developmentDefaults["ConnectionStrings:SmsApi"] = builder.Configuration.GetConnectionString("Sms");
 
     builder.Configuration.AddInMemoryCollection(developmentDefaults);
 }
@@ -168,15 +165,6 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .Build();
 
-    options.AddPolicy(SmsSecurityPolicies.Admin, policy =>
-        policy.RequireAuthenticatedUser().RequireRole("sms_admin"));
-
-    options.AddPolicy(SmsSecurityPolicies.ClientOrAdmin, policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.AddRequirements(new SmsClientAccessRequirement());
-    });
-
     options.AddPolicy(SecurityPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,
@@ -200,6 +188,11 @@ builder.Services.AddAuthorization(options =>
         .AddAuthenticationSchemes(IntegrationPolicies.Scheme)
         .RequireAuthenticatedUser()
         .RequireClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.OrganizationSync));
+
+    options.AddPolicy(IntegrationPolicies.SmsUsage, policy => policy
+        .AddAuthenticationSchemes(IntegrationPolicies.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.SmsUsage));
 
     options.AddPolicy(SettingsPolicies.View, policy => policy
         .RequireAuthenticatedUser()
@@ -252,25 +245,18 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AccountingPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, AccountingRules.ManageAccountingPermission));
+
+    options.AddPolicy(SmsPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, SmsRules.ViewSmsPermission, SmsRules.ManageSmsPermission));
+
+    options.AddPolicy(SmsPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, SmsRules.ManageSmsPermission));
 });
-builder.Services.AddSingleton<IAuthorizationHandler, SmsClientAccessHandler>();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy(SmsSecurityPolicies.RateLimit, context =>
-    {
-        var partitionKey = context.User.FindFirst("client_id")?.Value
-            ?? context.Connection.RemoteIpAddress?.ToString()
-            ?? "unknown-client";
-
-        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = 60,
-            Window = TimeSpan.FromMinutes(1),
-            QueueLimit = 0,
-            AutoReplenishment = true
-        });
-    });
 
     // Slows password guessing on the anonymous sign-in endpoints.
     options.AddPolicy(SecurityPolicies.AuthRateLimit, context =>
