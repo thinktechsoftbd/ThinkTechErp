@@ -94,7 +94,7 @@ public sealed class AccountingBillPaymentsController(IVoucherService vouchers) :
     public async Task<ActionResult<PagedResult<Voucher>>> GetBillPayments([FromQuery] VoucherListQuery query, CancellationToken cancellationToken)
         => Ok(await vouchers.GetVouchersAsync(OrganizationId, query.ToQuery(VoucherType.BillPayment), cancellationToken));
 
-    /// <param name="request">PartyId is the supplier; PartyAccountId their payable head; CashAccountId the Cash or Bank head paid from.</param>
+    /// <param name="request">PartyId is the supplier; PartyAccountId the sub class their balance is on; CashAccountId the cash or bank sub class paid from.</param>
     [HttpPost]
     [Authorize(Policy = AccountingPolicies.Manage)]
     public async Task<ActionResult<Voucher>> CreateBillPayment([FromBody] BillVoucherRequest request, CancellationToken cancellationToken)
@@ -113,7 +113,7 @@ public sealed class AccountingBillCollectionsController(IVoucherService vouchers
     public async Task<ActionResult<PagedResult<Voucher>>> GetBillCollections([FromQuery] VoucherListQuery query, CancellationToken cancellationToken)
         => Ok(await vouchers.GetVouchersAsync(OrganizationId, query.ToQuery(VoucherType.BillCollection), cancellationToken));
 
-    /// <param name="request">PartyId is the customer; PartyAccountId their receivable head; CashAccountId the Cash or Bank head deposited to.</param>
+    /// <param name="request">PartyId is the customer; PartyAccountId the sub class their balance is on; CashAccountId the cash or bank sub class deposited to.</param>
     [HttpPost]
     [Authorize(Policy = AccountingPolicies.Manage)]
     public async Task<ActionResult<Voucher>> CreateBillCollection([FromBody] BillVoucherRequest request, CancellationToken cancellationToken)
@@ -128,12 +128,12 @@ public sealed class AccountingBillCollectionsController(IVoucherService vouchers
 [Authorize(Policy = AccountingPolicies.View)]
 public sealed class AccountingReportsController(IAccountingReportService reports) : OrganizationControllerBase
 {
-    /// <summary>A ledger head's entries in a period with a running balance; supplierId or customerId narrow it to one party.</summary>
+    /// <summary>A ledger head's entries in a period with a running balance; partyId (a supplier or customer) narrows it to one party.</summary>
     [HttpGet("subsidiary-ledger")]
     public async Task<ActionResult<SubsidiaryLedger>> GetSubsidiaryLedger(
-        [FromQuery, Range(1, int.MaxValue)] int accountId, [FromQuery] int? supplierId, [FromQuery] int? customerId,
+        [FromQuery, Range(1, int.MaxValue)] int accountId, [FromQuery] int? partyId,
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken cancellationToken)
-        => OkOrNotFound(await reports.GetSubsidiaryLedgerAsync(OrganizationId, accountId, supplierId, customerId, from, to, cancellationToken));
+        => OkOrNotFound(await reports.GetSubsidiaryLedgerAsync(OrganizationId, accountId, partyId, from, to, cancellationToken));
 
     /// <summary>Every ledger head's opening balance, movement in the period and closing balance.</summary>
     [HttpGet("trial-balance")]
@@ -150,7 +150,7 @@ public sealed class AccountingReportsController(IAccountingReportService reports
     /// <summary>A supplier's or customer's balance on a ledger head, for the bill payment and collection screens.</summary>
     [HttpGet("party-balance")]
     public async Task<ActionResult<PartyBalance>> GetPartyBalance(
-        [FromQuery, Range(1, int.MaxValue)] int accountId, [FromQuery] int? supplierId, [FromQuery] int? customerId,
+        [FromQuery, Range(1, int.MaxValue)] int accountId, [FromQuery, Range(1, int.MaxValue)] int partyId,
         [FromQuery] DateOnly? asOf, CancellationToken cancellationToken)
-        => Ok(await reports.GetPartyBalanceAsync(OrganizationId, accountId, supplierId, customerId, asOf, cancellationToken));
+        => Ok(await reports.GetPartyBalanceAsync(OrganizationId, accountId, partyId, asOf, cancellationToken));
 }

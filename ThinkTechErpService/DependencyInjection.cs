@@ -103,12 +103,14 @@ public static class DependencyInjection
         services.AddScoped<ISalesReportService, SalesReportService>();
 
         // Accounting
-        services.AddScoped<IChartOfAccountsRepository, ChartOfAccountsRepository>();
+        services.AddScoped<ILedgerLookupRepository, LedgerLookupRepository>();
         services.AddScoped<IVoucherRepository, VoucherRepository>();
         services.AddScoped<IAccountingReportRepository, AccountingReportRepository>();
-        services.AddScoped<IChartOfAccountsService, ChartOfAccountsService>();
+        services.AddScoped<ILedgerLookupService, LedgerLookupService>();
         services.AddScoped<IVoucherService, VoucherService>();
         services.AddScoped<IAccountingReportService, AccountingReportService>();
+        services.AddScoped<IAccountClassRepository, AccountClassRepository>();
+        services.AddScoped<IAccountClassService, AccountClassService>();
         return services;
     }
 }

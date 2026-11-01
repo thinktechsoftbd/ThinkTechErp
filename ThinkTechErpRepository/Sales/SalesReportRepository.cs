@@ -37,12 +37,12 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         var ledger = await connection.QuerySingleOrDefaultAsync<CustomerLedger>(new CommandDefinition("""
-            SELECT c.customer_id AS CustomerId, c.customer_code AS CustomerCode, c.customer_name AS CustomerName,
+            SELECT c.supplier_id AS CustomerId, c.supplier_code AS CustomerCode, c.supplier_name AS CustomerName,
                    c.mobile AS Mobile,
                    coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM sales.customer_ledger l
-                             WHERE l.customer_id = c.customer_id AND (l.entry_date IS NULL OR l.entry_date < @From)), 0) AS OpeningBalance
-            FROM sales.customer c
-            WHERE c.organization_id = @Org AND c.customer_id = @CustomerId
+                             WHERE l.customer_id = c.supplier_id AND (l.entry_date IS NULL OR l.entry_date < @From)), 0) AS OpeningBalance
+            FROM purchase.supplier c
+            WHERE c.organization_id = @Org AND c.supplier_id = @CustomerId AND c.is_customer
             """, new { Org = organizationId, CustomerId = customerId, From = from }, cancellationToken: cancellationToken));
         if (ledger is null)
             return null;
@@ -93,20 +93,20 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.payment_status <> 'Paid' AND i.customer_id IS NOT NULL
             ),
             report AS (
-                SELECT c.customer_id AS CustomerId, c.customer_code AS CustomerCode, c.customer_name AS CustomerName,
-                       c.mobile AS Mobile, c.credit_limit AS CreditLimit,
+                SELECT c.supplier_id AS CustomerId, c.supplier_code AS CustomerCode, c.supplier_name AS CustomerName,
+                       c.mobile AS Mobile, c.customer_credit_limit AS CreditLimit,
                        coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM sales.customer_ledger l
-                                 WHERE l.customer_id = c.customer_id), 0) AS Balance,
-                       (SELECT count(*) FROM open_invoice o WHERE o.customer_id = c.customer_id)::int AS OpenInvoiceCount,
-                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.customer_id AND o.overdue_days <= 0), 0) AS NotDue,
-                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.customer_id AND o.overdue_days BETWEEN 1 AND 30), 0) AS Days1To30,
-                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.customer_id AND o.overdue_days BETWEEN 31 AND 60), 0) AS Days31To60,
-                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.customer_id AND o.overdue_days BETWEEN 61 AND 90), 0) AS Days61To90,
-                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.customer_id AND o.overdue_days > 90), 0) AS Over90,
-                       (SELECT min(o.due_date) FROM open_invoice o WHERE o.customer_id = c.customer_id) AS OldestDueDate
-                FROM sales.customer c
-                WHERE c.organization_id = @Org
-                  AND (CAST(@Pattern AS text) IS NULL OR c.customer_code ILIKE @Pattern OR c.customer_name ILIKE @Pattern
+                                 WHERE l.customer_id = c.supplier_id), 0) AS Balance,
+                       (SELECT count(*) FROM open_invoice o WHERE o.customer_id = c.supplier_id)::int AS OpenInvoiceCount,
+                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days <= 0), 0) AS NotDue,
+                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days BETWEEN 1 AND 30), 0) AS Days1To30,
+                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days BETWEEN 31 AND 60), 0) AS Days31To60,
+                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days BETWEEN 61 AND 90), 0) AS Days61To90,
+                       coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days > 90), 0) AS Over90,
+                       (SELECT min(o.due_date) FROM open_invoice o WHERE o.customer_id = c.supplier_id) AS OldestDueDate
+                FROM purchase.supplier c
+                WHERE c.organization_id = @Org AND c.is_customer
+                  AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
                        OR c.mobile ILIKE @Pattern)
             ),
             filtered AS (SELECT * FROM report WHERE NOT @OnlyWithBalance OR Balance <> 0 OR OpenInvoiceCount > 0)
@@ -133,7 +133,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
         const string rows = """
             WITH report AS (
                 SELECT i.sales_invoice_id AS InvoiceId, i.invoice_no AS InvoiceNo, i.invoice_date AS InvoiceDate,
-                       i.sale_type AS SaleType, coalesce(c.customer_name, i.customer_name) AS CustomerName,
+                       i.sale_type AS SaleType, coalesce(c.supplier_name, i.customer_name) AS CustomerName,
                        coalesce(i.customer_mobile, c.mobile) AS CustomerMobile, w.warehouse_name AS WarehouseName,
                        cur.lookup_data_name AS Currency,
                        round(i.subtotal_amount * i.exchange_rate, 4) AS SubtotalAmount,
@@ -147,14 +147,14 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                                  WHERE l.sales_invoice_id = i.sales_invoice_id), 0) AS CostAmount,
                        i.payment_status AS PaymentStatus
                 FROM sales.sales_invoice i
-                LEFT JOIN sales.customer c ON c.customer_id = i.customer_id
+                LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id
                 JOIN inventory.warehouse w ON w.warehouse_id = i.warehouse_id
                 JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.invoice_date BETWEEN @From AND @To
                   AND (CAST(@CustomerId AS int) IS NULL OR i.customer_id = @CustomerId)
                   AND (CAST(@WarehouseId AS int) IS NULL OR i.warehouse_id = @WarehouseId)
                   AND (CAST(@SaleType AS text) IS NULL OR i.sale_type = @SaleType)
-                  AND (CAST(@Pattern AS text) IS NULL OR i.invoice_no ILIKE @Pattern OR c.customer_name ILIKE @Pattern
+                  AND (CAST(@Pattern AS text) IS NULL OR i.invoice_no ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
                        OR i.customer_name ILIKE @Pattern OR i.customer_mobile ILIKE @Pattern OR c.mobile ILIKE @Pattern)
             ),
             priced AS (SELECT *, TotalAmount - TaxAmount - CostAmount AS Profit FROM report)

@@ -47,6 +47,8 @@ public sealed class Customer
     public DateOnly? OpeningBalanceDate { get; set; }
     public string? Remarks { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Also a supplier: the same party is listed on the purchase screens.</summary>
+    public bool IsSupplier { get; set; }
     /// <summary>Owed by the customer now (+), or paid in advance by them (-), in the base currency.</summary>
     public decimal Balance { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -82,6 +84,8 @@ public sealed class CustomerUpsertRequest
     public DateOnly? OpeningBalanceDate { get; set; }
     [StringLength(1000)] public string? Remarks { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Also a supplier; their purchase terms are set on the purchase Suppliers screen.</summary>
+    public bool IsSupplier { get; set; }
 }
 
 /// <summary>A customer as the sales screen picks it, with what they owe and the credit left.</summary>

@@ -57,8 +57,9 @@ public sealed class SalesSetupService(ISalesSetupRepository repository) : ISales
             request.OpeningBalanceDate = null;
 
         // An empty code keeps the current one on update, and takes the next in the series on create.
+        // Suppliers and customers share one list of codes.
         if (request.Code is not null && await repository.CustomerCodeExistsAsync(organizationId, request.Code, customerId, cancellationToken))
-            throw new BusinessConflictException("A customer with this code already exists.");
+            throw new BusinessConflictException("A customer or supplier with this code already exists.");
         if (request.CustomerGroupLookupDataId is not null &&
             !await repository.LookupValueExistsAsync(request.CustomerGroupLookupDataId.Value, SalesRules.CustomerGroupLookupTable, cancellationToken))
             throw new BusinessRuleException("Choose a customer group from the Customer Group lookup list.");

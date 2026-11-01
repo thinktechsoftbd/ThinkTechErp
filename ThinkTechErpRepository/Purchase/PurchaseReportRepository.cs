@@ -103,7 +103,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.supplier_id = s.supplier_id AND o.overdue_days > 90), 0) AS Over90,
                        (SELECT min(o.due_date) FROM open_invoice o WHERE o.supplier_id = s.supplier_id) AS OldestDueDate
                 FROM purchase.supplier s
-                WHERE s.organization_id = @Org
+                WHERE s.organization_id = @Org AND s.is_supplier
                   AND (CAST(@Pattern AS text) IS NULL OR s.supplier_code ILIKE @Pattern OR s.supplier_name ILIKE @Pattern
                        OR s.mobile ILIKE @Pattern)
             ),

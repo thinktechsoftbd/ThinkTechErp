@@ -41,19 +41,20 @@ internal static class DocumentNumbers
 /// </summary>
 internal static class OrganizationGuard
 {
-    private static readonly Dictionary<string, (string Table, string Key, string Label)> Entities = new()
+    // Suppliers and customers share purchase.supplier; Side keeps only the parties on that side.
+    private static readonly Dictionary<string, (string Table, string Key, string Label, string? Side)> Entities = new()
     {
-        ["unit"] = ("inventory.unit", "unit_id", "unit"),
-        ["category"] = ("inventory.category", "category_id", "category"),
-        ["brand"] = ("inventory.brand", "brand_id", "brand"),
-        ["warehouse"] = ("inventory.warehouse", "warehouse_id", "warehouse"),
-        ["product"] = ("inventory.product", "product_id", "product"),
-        ["batch"] = ("inventory.batch", "batch_id", "batch"),
-        ["taxGroup"] = ("public.tax_group", "tax_group_id", "tax group"),
-        ["taxRate"] = ("public.tax_rate", "tax_rate_id", "tax rate"),
-        ["supplier"] = ("purchase.supplier", "supplier_id", "supplier"),
-        ["customer"] = ("sales.customer", "customer_id", "customer"),
-        ["account"] = ("accounting.chart_account", "account_id", "ledger head")
+        ["unit"] = ("inventory.unit", "unit_id", "unit", null),
+        ["category"] = ("inventory.category", "category_id", "category", null),
+        ["brand"] = ("inventory.brand", "brand_id", "brand", null),
+        ["warehouse"] = ("inventory.warehouse", "warehouse_id", "warehouse", null),
+        ["product"] = ("inventory.product", "product_id", "product", null),
+        ["batch"] = ("inventory.batch", "batch_id", "batch", null),
+        ["taxGroup"] = ("public.tax_group", "tax_group_id", "tax group", null),
+        ["taxRate"] = ("public.tax_rate", "tax_rate_id", "tax rate", null),
+        ["supplier"] = ("purchase.supplier", "supplier_id", "supplier", "is_supplier"),
+        ["customer"] = ("purchase.supplier", "supplier_id", "customer", "is_customer"),
+        ["party"] = ("purchase.supplier", "supplier_id", "supplier or customer", null)
     };
 
     public static async Task EnsureAsync(
@@ -64,9 +65,9 @@ internal static class OrganizationGuard
         if (distinct.Length == 0)
             return;
 
-        var (table, key, label) = Entities[entity];
+        var (table, key, label, side) = Entities[entity];
         var found = await connection.QuerySingleAsync<int>(new CommandDefinition(
-            $"SELECT count(*)::int FROM {table} WHERE organization_id = @Org AND {key} = ANY(@Ids)",
+            $"SELECT count(*)::int FROM {table} WHERE organization_id = @Org AND {key} = ANY(@Ids){(side is null ? "" : " AND " + side)}",
             new { Org = organizationId, Ids = distinct }, transaction, cancellationToken: cancellationToken));
         if (found != distinct.Length)
             throw new BusinessRuleException(distinct.Length == 1

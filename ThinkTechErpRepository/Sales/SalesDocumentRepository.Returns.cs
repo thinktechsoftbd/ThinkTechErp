@@ -16,8 +16,8 @@ public sealed partial class SalesDocumentRepository
 
     private const string ReturnSelect = """
         SELECT r.sales_return_id AS Id, r.object_id AS ObjectId, r.return_no AS ReturnNo, r.return_date AS ReturnDate,
-               r.customer_id AS CustomerId, c.customer_code AS CustomerCode,
-               coalesce(c.customer_name, r.customer_name) AS CustomerName, coalesce(r.customer_mobile, c.mobile) AS CustomerMobile,
+               r.customer_id AS CustomerId, c.supplier_code AS CustomerCode,
+               coalesce(c.supplier_name, r.customer_name) AS CustomerName, coalesce(r.customer_mobile, c.mobile) AS CustomerMobile,
                r.warehouse_id AS WarehouseId, w.warehouse_name AS WarehouseName,
                r.sales_invoice_id AS SalesInvoiceId, i.invoice_no AS SalesInvoiceNo, r.reason AS Reason,
                r.settlement_type AS SettlementType, r.refund_method AS RefundMethod, r.refund_provider AS RefundProvider,
@@ -30,7 +30,7 @@ public sealed partial class SalesDocumentRepository
                r.posted_at AT TIME ZONE 'utc' AS PostedAt, r.posted_by AS PostedBy, r.remarks AS Remarks,
                r.created_at AT TIME ZONE 'utc' AS CreatedAt, r.created_by AS CreatedBy, r.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM sales.sales_return r
-        LEFT JOIN sales.customer c ON c.customer_id = r.customer_id
+        LEFT JOIN purchase.supplier c ON c.supplier_id = r.customer_id
         JOIN inventory.warehouse w ON w.warehouse_id = r.warehouse_id
         LEFT JOIN sales.sales_invoice i ON i.sales_invoice_id = r.sales_invoice_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = r.currency_lookup_data_id
@@ -39,7 +39,7 @@ public sealed partial class SalesDocumentRepository
     private const string ReturnFilter = """
         WHERE r.organization_id = @Org
           AND (CAST(@Pattern AS text) IS NULL OR r.return_no ILIKE @Pattern OR i.invoice_no ILIKE @Pattern
-               OR c.customer_name ILIKE @Pattern OR c.mobile ILIKE @Pattern OR r.customer_name ILIKE @Pattern
+               OR c.supplier_name ILIKE @Pattern OR c.mobile ILIKE @Pattern OR r.customer_name ILIKE @Pattern
                OR r.customer_mobile ILIKE @Pattern)
           AND (CAST(@Status AS text) IS NULL OR r.status = @Status)
           AND (CAST(@CustomerId AS int) IS NULL OR r.customer_id = @CustomerId)
@@ -52,7 +52,7 @@ public sealed partial class SalesDocumentRepository
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await RepositoryHelpers.PagedAsync<SalesReturn>(connection, $"""
             SELECT count(*) FROM sales.sales_return r
-            LEFT JOIN sales.customer c ON c.customer_id = r.customer_id
+            LEFT JOIN purchase.supplier c ON c.supplier_id = r.customer_id
             LEFT JOIN sales.sales_invoice i ON i.sales_invoice_id = r.sales_invoice_id
             {ReturnFilter}
             """,

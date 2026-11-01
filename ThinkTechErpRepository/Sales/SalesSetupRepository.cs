@@ -16,7 +16,9 @@ public interface ISalesSetupRepository
     /// <summary>Creates a customer; an empty Code takes the next one in the series (C-00001, ...).</summary>
     Task<int> CreateCustomerAsync(int organizationId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<bool> UpdateCustomerAsync(int organizationId, int customerId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default);
+    /// <summary>A customer that is also a supplier only stops being a customer; otherwise the row goes.</summary>
     Task<DeleteOutcome> DeleteCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
+    /// <summary>Suppliers and customers share one list of codes, so this checks both sides.</summary>
     Task<bool> CustomerCodeExistsAsync(int organizationId, string code, int? excludeId, CancellationToken cancellationToken = default);
     Task<bool> LookupValueExistsAsync(long lookupDataId, string lookupTableName, CancellationToken cancellationToken = default);
 }
@@ -25,28 +27,29 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 {
     private const string CustomerBalance = """
         coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM sales.customer_ledger l
-                  WHERE l.customer_id = c.customer_id), 0)
+                  WHERE l.customer_id = c.supplier_id), 0)
         """;
 
     private const string CustomerSelect = $"""
-        SELECT c.customer_id AS Id, c.object_id AS ObjectId, c.customer_code AS Code, c.customer_name AS Name,
-               c.customer_name_local AS NameLocal, c.customer_group_lookup_data_id AS CustomerGroupLookupDataId,
+        SELECT c.supplier_id AS Id, c.object_id AS ObjectId, c.supplier_code AS Code, c.supplier_name AS Name,
+               c.supplier_name_local AS NameLocal, c.customer_group_lookup_data_id AS CustomerGroupLookupDataId,
                g.lookup_data_name AS CustomerGroup, c.contact_person AS ContactPerson, c.mobile AS Mobile,
                c.phone AS Phone, c.email AS Email, c.address_line1 AS AddressLine1, c.address_line2 AS AddressLine2,
                c.city AS City, c.state AS State, c.postal_code AS PostalCode, c.country_code AS CountryCode,
                c.national_id_no AS NationalIdNo, c.tax_registration_no AS TaxRegistrationNo,
-               c.payment_terms_days AS PaymentTermsDays, c.credit_limit AS CreditLimit,
-               c.opening_balance AS OpeningBalance, c.opening_balance_date AS OpeningBalanceDate,
-               c.remarks AS Remarks, c.is_active AS IsActive, {CustomerBalance} AS Balance,
+               c.customer_payment_terms_days AS PaymentTermsDays, c.customer_credit_limit AS CreditLimit,
+               c.customer_opening_balance AS OpeningBalance, c.customer_opening_balance_date AS OpeningBalanceDate,
+               c.remarks AS Remarks, c.is_active AS IsActive, c.is_supplier AS IsSupplier, {CustomerBalance} AS Balance,
                c.created_at AT TIME ZONE 'utc' AS CreatedAt, c.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM sales.customer c
+        FROM purchase.supplier c
         LEFT JOIN public.lookup_data g ON g.lookup_data_id = c.customer_group_lookup_data_id
         """;
 
+    // Suppliers and customers share purchase.supplier; the sales screens see the customer side.
     private const string CustomerFilter = """
-        WHERE c.organization_id = @Org
-          AND (CAST(@Pattern AS text) IS NULL OR c.customer_code ILIKE @Pattern OR c.customer_name ILIKE @Pattern
-               OR c.customer_name_local ILIKE @Pattern OR c.mobile ILIKE @Pattern OR c.phone ILIKE @Pattern
+        WHERE c.organization_id = @Org AND c.is_customer
+          AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
+               OR c.supplier_name_local ILIKE @Pattern OR c.mobile ILIKE @Pattern OR c.phone ILIKE @Pattern
                OR c.contact_person ILIKE @Pattern)
           AND (CAST(@IsActive AS boolean) IS NULL OR c.is_active = @IsActive)
           AND (CAST(@GroupId AS bigint) IS NULL OR c.customer_group_lookup_data_id = @GroupId)
@@ -57,8 +60,8 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await RepositoryHelpers.PagedAsync<Customer>(connection,
-            $"SELECT count(*) FROM sales.customer c {CustomerFilter}",
-            $"{CustomerSelect} {CustomerFilter} ORDER BY c.customer_name, c.customer_id",
+            $"SELECT count(*) FROM purchase.supplier c {CustomerFilter}",
+            $"{CustomerSelect} {CustomerFilter} ORDER BY c.supplier_name, c.supplier_id",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, GroupId = groupId },
             limit, offset, cancellationToken);
     }
@@ -67,7 +70,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await connection.QuerySingleOrDefaultAsync<Customer>(new CommandDefinition(
-            $"{CustomerSelect} WHERE c.organization_id = @Org AND c.customer_id = @Id",
+            $"{CustomerSelect} WHERE c.organization_id = @Org AND c.supplier_id = @Id AND c.is_customer",
             new { Org = organizationId, Id = customerId }, cancellationToken: cancellationToken));
     }
 
@@ -77,17 +80,17 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         // Shops find customers by mobile number, so an exact mobile match comes first.
         return (await connection.QueryAsync<CustomerOption>(new CommandDefinition($"""
-            SELECT c.customer_id AS Id, c.customer_code AS Code, c.customer_name AS Name, c.mobile AS Mobile,
+            SELECT c.supplier_id AS Id, c.supplier_code AS Code, c.supplier_name AS Name, c.mobile AS Mobile,
                    nullif(concat_ws(', ', c.address_line1, c.city), '') AS Address,
-                   c.payment_terms_days AS PaymentTermsDays, c.credit_limit AS CreditLimit,
+                   c.customer_payment_terms_days AS PaymentTermsDays, c.customer_credit_limit AS CreditLimit,
                    {CustomerBalance} AS Balance,
-                   c.credit_limit - {CustomerBalance} AS AvailableCredit, c.is_active AS IsActive
-            FROM sales.customer c
-            WHERE c.organization_id = @Org
-              AND (CAST(@Ids AS int[]) IS NULL OR c.customer_id = ANY(@Ids))
-              AND (CAST(@Pattern AS text) IS NULL OR c.customer_code ILIKE @Pattern OR c.customer_name ILIKE @Pattern
-                   OR c.customer_name_local ILIKE @Pattern OR c.mobile ILIKE @Pattern)
-            ORDER BY c.is_active DESC, (c.mobile = @Search) DESC, c.customer_name
+                   c.customer_credit_limit - {CustomerBalance} AS AvailableCredit, c.is_active AS IsActive
+            FROM purchase.supplier c
+            WHERE c.organization_id = @Org AND c.is_customer
+              AND (CAST(@Ids AS int[]) IS NULL OR c.supplier_id = ANY(@Ids))
+              AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
+                   OR c.supplier_name_local ILIKE @Pattern OR c.mobile ILIKE @Pattern)
+            ORDER BY c.is_active DESC, (c.mobile = @Search) DESC, c.supplier_name
             LIMIT @Limit
             """, new
             {
@@ -106,31 +109,33 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(request.Code))
         {
-            // Skip numbers already taken by codes typed by hand.
+            // Skip numbers already taken by codes typed by hand (suppliers share the same codes).
             string code;
             var attempts = 0;
             do
             {
                 code = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.Customer, cancellationToken);
             } while (++attempts < 50 && await connection.QuerySingleAsync<bool>(new CommandDefinition("""
-                SELECT EXISTS (SELECT 1 FROM sales.customer WHERE organization_id = @Org AND lower(customer_code) = lower(@Code))
+                SELECT EXISTS (SELECT 1 FROM purchase.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code))
                 """, new { Org = organizationId, Code = code }, transaction, cancellationToken: cancellationToken)));
             request.Code = code;
         }
 
         var parameters = Params(organizationId, request, userId);
         var id = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO sales.customer (
-                organization_id, customer_code, customer_name, customer_name_local, customer_group_lookup_data_id,
+            INSERT INTO purchase.supplier (
+                organization_id, supplier_code, supplier_name, supplier_name_local, customer_group_lookup_data_id,
                 contact_person, mobile, phone, email, address_line1, address_line2, city, state, postal_code, country_code,
-                national_id_no, tax_registration_no, payment_terms_days, credit_limit, opening_balance,
-                opening_balance_date, remarks, is_active, created_at, created_by)
+                national_id_no, tax_registration_no, customer_payment_terms_days, customer_credit_limit,
+                customer_opening_balance, customer_opening_balance_date, remarks, is_active, is_supplier, is_customer,
+                created_at, created_by)
             VALUES (
                 @Org, @Code, @Name, @NameLocal, @CustomerGroupLookupDataId,
                 @ContactPerson, @Mobile, @Phone, @Email, @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @CountryCode,
-                @NationalIdNo, @TaxRegistrationNo, @PaymentTermsDays, @CreditLimit, @OpeningBalance,
-                @OpeningBalanceDate, @Remarks, @IsActive, {SecurityDb.NowUtc}, @UserId)
-            RETURNING customer_id
+                @NationalIdNo, @TaxRegistrationNo, @PaymentTermsDays, @CreditLimit,
+                @OpeningBalance, @OpeningBalanceDate, @Remarks, @IsActive, @IsSupplier, TRUE,
+                {SecurityDb.NowUtc}, @UserId)
+            RETURNING supplier_id
             """, parameters, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
         return id;
@@ -142,33 +147,41 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", customerId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE sales.customer
-            SET customer_code = coalesce(@Code, customer_code), customer_name = @Name, customer_name_local = @NameLocal,
+            UPDATE purchase.supplier
+            SET supplier_code = coalesce(@Code, supplier_code), supplier_name = @Name, supplier_name_local = @NameLocal,
                 customer_group_lookup_data_id = @CustomerGroupLookupDataId, contact_person = @ContactPerson,
                 mobile = @Mobile, phone = @Phone, email = @Email, address_line1 = @AddressLine1,
                 address_line2 = @AddressLine2, city = @City, state = @State, postal_code = @PostalCode,
                 country_code = @CountryCode, national_id_no = @NationalIdNo, tax_registration_no = @TaxRegistrationNo,
-                payment_terms_days = @PaymentTermsDays, credit_limit = @CreditLimit, opening_balance = @OpeningBalance,
-                opening_balance_date = @OpeningBalanceDate, remarks = @Remarks, is_active = @IsActive,
+                customer_payment_terms_days = @PaymentTermsDays, customer_credit_limit = @CreditLimit,
+                customer_opening_balance = @OpeningBalance, customer_opening_balance_date = @OpeningBalanceDate,
+                remarks = @Remarks, is_active = @IsActive, is_supplier = @IsSupplier,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
-            WHERE organization_id = @Org AND customer_id = @Id
+            WHERE organization_id = @Org AND supplier_id = @Id AND is_customer
             """, parameters, cancellationToken: cancellationToken)) > 0;
     }
 
     public async Task<DeleteOutcome> DeleteCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var parameters = new { Org = organizationId, Id = customerId };
+        // A party that is also a supplier stays for the purchase side; it only stops being a customer.
+        if (await connection.ExecuteAsync(new CommandDefinition("""
+                UPDATE purchase.supplier SET is_customer = FALSE
+                WHERE organization_id = @Org AND supplier_id = @Id AND is_customer AND is_supplier
+                """, parameters, cancellationToken: cancellationToken)) > 0)
+            return DeleteOutcome.Deleted;
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM sales.customer WHERE organization_id = @Org AND customer_id = @Id",
-            new { Org = organizationId, Id = customerId }, cancellationToken: cancellationToken));
+            "DELETE FROM purchase.supplier WHERE organization_id = @Org AND supplier_id = @Id AND is_customer",
+            parameters, cancellationToken: cancellationToken));
     }
 
     public async Task<bool> CustomerCodeExistsAsync(int organizationId, string code, int? excludeId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
-            SELECT EXISTS (SELECT 1 FROM sales.customer WHERE organization_id = @Org AND lower(customer_code) = lower(@Code)
-                           AND (CAST(@ExcludeId AS int) IS NULL OR customer_id <> @ExcludeId))
+            SELECT EXISTS (SELECT 1 FROM purchase.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code)
+                           AND (CAST(@ExcludeId AS int) IS NULL OR supplier_id <> @ExcludeId))
             """, new { Org = organizationId, Code = code, ExcludeId = excludeId }, cancellationToken: cancellationToken));
     }
 

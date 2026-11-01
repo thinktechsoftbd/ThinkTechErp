@@ -8,14 +8,13 @@ namespace ThinkTechErpService.Accounting;
 
 public interface IAccountingReportService
 {
+    /// <param name="partyId">A supplier or customer, to narrow the ledger to that party.</param>
     Task<SubsidiaryLedger?> GetSubsidiaryLedgerAsync(
-        int organizationId, int accountId, int? supplierId, int? customerId, DateOnly? from, DateOnly? to,
-        CancellationToken cancellationToken = default);
+        int organizationId, int accountId, int? partyId, DateOnly? from, DateOnly? to, CancellationToken cancellationToken = default);
     Task<TrialBalance> GetTrialBalanceAsync(int organizationId, DateOnly? from, DateOnly? to, bool includeZero, CancellationToken cancellationToken = default);
     Task<BalanceSheet> GetBalanceSheetAsync(int organizationId, DateOnly? asOf, CancellationToken cancellationToken = default);
     Task<PartyBalance> GetPartyBalanceAsync(
-        int organizationId, int accountId, int? supplierId, int? customerId, DateOnly? asOf,
-        CancellationToken cancellationToken = default);
+        int organizationId, int accountId, int partyId, DateOnly? asOf, CancellationToken cancellationToken = default);
 }
 
 public sealed class AccountingReportService(IAccountingReportRepository reports, IOwnershipRepository ownership) : IAccountingReportService
@@ -24,12 +23,11 @@ public sealed class AccountingReportService(IAccountingReportRepository reports,
     private static readonly DateOnly Beginning = new(1900, 1, 1);
 
     public async Task<SubsidiaryLedger?> GetSubsidiaryLedgerAsync(
-        int organizationId, int accountId, int? supplierId, int? customerId, DateOnly? from, DateOnly? to,
-        CancellationToken cancellationToken = default)
+        int organizationId, int accountId, int? partyId, DateOnly? from, DateOnly? to, CancellationToken cancellationToken = default)
     {
         var (start, end) = InventoryReportService.Period(from, to);
-        await CheckPartyAsync(organizationId, supplierId, customerId, cancellationToken);
-        return await reports.GetSubsidiaryLedgerAsync(organizationId, accountId, supplierId, customerId, start, end, cancellationToken);
+        await ownership.EnsureAsync(organizationId, "party", new[] { partyId }, cancellationToken);
+        return await reports.GetSubsidiaryLedgerAsync(organizationId, accountId, partyId, start, end, cancellationToken);
     }
 
     public async Task<TrialBalance> GetTrialBalanceAsync(int organizationId, DateOnly? from, DateOnly? to, bool includeZero, CancellationToken cancellationToken = default)
@@ -69,24 +67,15 @@ public sealed class AccountingReportService(IAccountingReportRepository reports,
     }
 
     public async Task<PartyBalance> GetPartyBalanceAsync(
-        int organizationId, int accountId, int? supplierId, int? customerId, DateOnly? asOf,
-        CancellationToken cancellationToken = default)
+        int organizationId, int accountId, int partyId, DateOnly? asOf, CancellationToken cancellationToken = default)
     {
-        await CheckPartyAsync(organizationId, supplierId, customerId, cancellationToken);
-        await ownership.EnsureAsync(organizationId, "account", new int?[] { accountId }, cancellationToken);
+        await ownership.EnsureAsync(organizationId, "party", new int?[] { partyId }, cancellationToken);
         return new PartyBalance
         {
             AccountId = accountId,
-            Balance = await reports.GetPartyBalanceAsync(organizationId, accountId, supplierId, customerId,
+            PartyId = partyId,
+            Balance = await reports.GetPartyBalanceAsync(organizationId, accountId, partyId,
                 asOf ?? DateOnly.FromDateTime(DateTime.UtcNow), cancellationToken)
         };
-    }
-
-    private async Task CheckPartyAsync(int organizationId, int? supplierId, int? customerId, CancellationToken cancellationToken)
-    {
-        if (supplierId is not null && customerId is not null)
-            throw new BusinessRuleException("Choose a supplier or a customer, not both.");
-        await ownership.EnsureAsync(organizationId, "supplier", new[] { supplierId }, cancellationToken);
-        await ownership.EnsureAsync(organizationId, "customer", new[] { customerId }, cancellationToken);
     }
 }

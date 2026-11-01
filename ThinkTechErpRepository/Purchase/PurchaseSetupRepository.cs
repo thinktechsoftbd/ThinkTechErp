@@ -55,15 +55,16 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                s.bank_name AS BankName, s.bank_branch AS BankBranch, s.bank_account_name AS BankAccountName,
                s.bank_account_no AS BankAccountNo, s.bank_routing_code AS BankRoutingCode,
                s.mobile_wallet_no AS MobileWalletNo, s.remarks AS Remarks, s.is_active AS IsActive,
-               {SupplierBalance} AS Balance,
+               s.is_customer AS IsCustomer, {SupplierBalance} AS Balance,
                s.created_at AT TIME ZONE 'utc' AS CreatedAt, s.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM purchase.supplier s
         LEFT JOIN public.lookup_data g ON g.lookup_data_id = s.supplier_group_lookup_data_id
         LEFT JOIN public.lookup_data cur ON cur.lookup_data_id = s.currency_lookup_data_id
         """;
 
+    // Suppliers and customers share purchase.supplier; the purchase screens see the supplier side.
     private const string SupplierFilter = """
-        WHERE s.organization_id = @Org
+        WHERE s.organization_id = @Org AND s.is_supplier
           AND (CAST(@Pattern AS text) IS NULL OR s.supplier_code ILIKE @Pattern OR s.supplier_name ILIKE @Pattern
                OR s.supplier_name_local ILIKE @Pattern OR s.mobile ILIKE @Pattern OR s.phone ILIKE @Pattern
                OR s.contact_person ILIKE @Pattern)
@@ -86,7 +87,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await connection.QuerySingleOrDefaultAsync<Supplier>(new CommandDefinition(
-            $"{SupplierSelect} WHERE s.organization_id = @Org AND s.supplier_id = @Id",
+            $"{SupplierSelect} WHERE s.organization_id = @Org AND s.supplier_id = @Id AND s.is_supplier",
             new { Org = organizationId, Id = supplierId }, cancellationToken: cancellationToken));
     }
 
@@ -99,7 +100,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                    s.payment_terms_days AS PaymentTermsDays, s.currency_lookup_data_id AS CurrencyLookupDataId,
                    {SupplierBalance} AS Balance, s.is_active AS IsActive
             FROM purchase.supplier s
-            WHERE s.organization_id = @Org
+            WHERE s.organization_id = @Org AND s.is_supplier
               AND (CAST(@Pattern AS text) IS NULL OR s.supplier_code ILIKE @Pattern OR s.supplier_name ILIKE @Pattern
                    OR s.mobile ILIKE @Pattern)
             ORDER BY s.is_active DESC, s.supplier_name
@@ -118,14 +119,14 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                 tax_registration_no, tax_id_no, trade_license_no, regulatory_license_no, currency_lookup_data_id,
                 payment_terms_days, credit_limit, opening_balance, opening_balance_date, bank_name, bank_branch,
                 bank_account_name, bank_account_no, bank_routing_code, mobile_wallet_no, remarks, is_active,
-                created_at, created_by)
+                is_supplier, is_customer, created_at, created_by)
             VALUES (
                 @Org, @Code, @Name, @NameLocal, @SupplierGroupLookupDataId,
                 @ContactPerson, @Phone, @Mobile, @Email, @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @CountryCode,
                 @TaxRegistrationNo, @TaxIdNo, @TradeLicenseNo, @RegulatoryLicenseNo, @CurrencyLookupDataId,
                 @PaymentTermsDays, @CreditLimit, @OpeningBalance, @OpeningBalanceDate, @BankName, @BankBranch,
                 @BankAccountName, @BankAccountNo, @BankRoutingCode, @MobileWalletNo, @Remarks, @IsActive,
-                {SecurityDb.NowUtc}, @UserId)
+                TRUE, @IsCustomer, {SecurityDb.NowUtc}, @UserId)
             RETURNING supplier_id
             """, Params(organizationId, request, userId), cancellationToken: cancellationToken));
     }
@@ -148,17 +149,24 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                 opening_balance_date = @OpeningBalanceDate, bank_name = @BankName, bank_branch = @BankBranch,
                 bank_account_name = @BankAccountName, bank_account_no = @BankAccountNo,
                 bank_routing_code = @BankRoutingCode, mobile_wallet_no = @MobileWalletNo, remarks = @Remarks,
-                is_active = @IsActive, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
-            WHERE organization_id = @Org AND supplier_id = @Id
+                is_active = @IsActive, is_customer = @IsCustomer, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            WHERE organization_id = @Org AND supplier_id = @Id AND is_supplier
             """, parameters, cancellationToken: cancellationToken)) > 0;
     }
 
     public async Task<DeleteOutcome> DeleteSupplierAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var parameters = new { Org = organizationId, Id = supplierId };
+        // A party that is also a customer stays for the sales side; it only stops being a supplier.
+        if (await connection.ExecuteAsync(new CommandDefinition("""
+                UPDATE purchase.supplier SET is_supplier = FALSE
+                WHERE organization_id = @Org AND supplier_id = @Id AND is_supplier AND is_customer
+                """, parameters, cancellationToken: cancellationToken)) > 0)
+            return DeleteOutcome.Deleted;
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM purchase.supplier WHERE organization_id = @Org AND supplier_id = @Id",
-            new { Org = organizationId, Id = supplierId }, cancellationToken: cancellationToken));
+            "DELETE FROM purchase.supplier WHERE organization_id = @Org AND supplier_id = @Id AND is_supplier",
+            parameters, cancellationToken: cancellationToken));
     }
 
     public async Task<bool> SupplierCodeExistsAsync(int organizationId, string code, int? excludeId, CancellationToken cancellationToken = default)

@@ -35,7 +35,8 @@ internal static class RepositoryHelpers
         {
             return await connection.ExecuteAsync(command) > 0 ? DeleteOutcome.Deleted : DeleteOutcome.NotFound;
         }
-        catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        // ON DELETE RESTRICT keys (e.g. the acc_* tables from MediDesk's Prisma schema) report 23001 instead of 23503.
+        catch (PostgresException exception) when (exception.SqlState is PostgresErrorCodes.ForeignKeyViolation or PostgresErrorCodes.RestrictViolation)
         {
             return DeleteOutcome.InUse;
         }

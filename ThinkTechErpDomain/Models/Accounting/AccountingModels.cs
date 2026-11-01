@@ -7,23 +7,11 @@ public static class AccountingRules
     public const string ViewAccountingPermission = "ACCOUNTING.V";
     public const string ManageAccountingPermission = "ACCOUNTING.M";
 
-    /// <summary>The sub class level: the ledger heads vouchers post to.</summary>
-    public const int LedgerLevel = 5;
-
-    private static readonly string[] LevelNames = ["Parent Class", "Account Class", "Main Class", "Map Class", "Sub Class"];
-
-    public static string LevelName(int level) => level is >= 1 and <= LedgerLevel ? LevelNames[level - 1] : "Account";
-
-    /// <summary>Digits a level adds to its parent's code when the code is left empty: 1, 11, 1101, 110101, 110101001.</summary>
-    public static int CodeDigits(int level) => level switch
-    {
-        1 or 2 => 1,
-        3 or 4 => 2,
-        _ => 3
-    };
+    /// <summary>The Currency lookup value a voucher line takes when it names none.</summary>
+    public const string DefaultCurrency = "BDT";
 }
 
-/// <summary>What a parent class is; every account below it shares it.</summary>
+/// <summary>What a parent class is (from its code: 1 Assets ... 5 Expenses); every account below it shares it.</summary>
 public static class AccountNature
 {
     public const string Asset = "Asset";
@@ -42,18 +30,7 @@ public static class AccountNature
     public static bool IsBalanceSheet(string nature) => nature is Asset or Liability or Equity;
 }
 
-/// <summary>What a sub class (ledger head) is used for.</summary>
-public static class LedgerType
-{
-    public const string General = "General";
-    /// <summary>Cash in hand: bills are paid from and collected into Cash and Bank heads.</summary>
-    public const string Cash = "Cash";
-    public const string Bank = "Bank";
-
-    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal) { General, Cash, Bank };
-}
-
-/// <summary>The subsidiary ledger a ledger head keeps (Accounts Payable keeps suppliers).</summary>
+/// <summary>The side of purchase.supplier a party picker lists: suppliers, customers, or both when not given.</summary>
 public static class PartyType
 {
     public const string Supplier = "Supplier";
@@ -92,81 +69,36 @@ public static class VoucherType
     };
 }
 
-// ---- Chart of accounts
+// ---- Lookups
 
-public sealed class ChartAccount
-{
-    public int Id { get; set; }
-    public int? ParentId { get; set; }
-    /// <summary>1 Parent Class, 2 Account Class, 3 Main Class, 4 Map Class, 5 Sub Class (ledger head).</summary>
-    public int Level { get; set; }
-    public string Code { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Nature { get; set; } = string.Empty;
-    public string? LedgerType { get; set; }
-    public string? PartyType { get; set; }
-    public int SortOrder { get; set; }
-    public string? Description { get; set; }
-    public bool IsActive { get; set; }
-    public int ChildCount { get; set; }
-    /// <summary>Voucher lines (draft or posted) use the head, so it can't be deleted.</summary>
-    public bool HasEntries { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-}
-
-public sealed class ChartAccountUpsertRequest
-{
-    /// <summary>Empty for a parent class; otherwise the account one level up.</summary>
-    [Range(1, int.MaxValue)] public int? ParentId { get; set; }
-
-    /// <summary>Empty takes the parent's code plus the next number (1101 → 110101).</summary>
-    [StringLength(30)] public string? Code { get; set; }
-
-    [Required, StringLength(150, MinimumLength = 1)]
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>Parent classes only: Asset, Liability, Equity, Income or Expense.</summary>
-    [StringLength(20)] public string? Nature { get; set; }
-
-    /// <summary>Sub classes only: General (the default), Cash or Bank.</summary>
-    [StringLength(20)] public string? LedgerType { get; set; }
-
-    /// <summary>Sub classes only: Supplier or Customer to keep a subsidiary ledger of them.</summary>
-    [StringLength(20)] public string? PartyType { get; set; }
-
-    [Range(0, 1_000_000)] public int SortOrder { get; set; }
-    [StringLength(500)] public string? Description { get; set; }
-    public bool IsActive { get; set; } = true;
-}
-
-/// <summary>Ticks or clears an account's checkbox in the tree: the account and everything below it.</summary>
-public sealed class ChartAccountActiveRequest
-{
-    public bool IsActive { get; set; }
-}
-
-/// <summary>A sub class for the voucher and report pickers.</summary>
+/// <summary>A sub class (accounting.acc_sub_class) for the voucher and report pickers.</summary>
 public sealed class LedgerHeadOption
 {
     public int Id { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Nature { get; set; } = string.Empty;
-    public string LedgerType { get; set; } = string.Empty;
-    public string? PartyType { get; set; }
     /// <summary>Main class › map class, to tell heads with similar names apart.</summary>
     public string? Path { get; set; }
-    public bool IsActive { get; set; }
 }
 
-/// <summary>A supplier or customer for the subsidiary-ledger pickers.</summary>
+/// <summary>A supplier or customer (both live in purchase.supplier) for the voucher and report pickers.</summary>
 public sealed class PartyOption
 {
     public int Id { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Mobile { get; set; }
+    public bool IsSupplier { get; set; }
+    public bool IsCustomer { get; set; }
+    public bool IsActive { get; set; }
+}
+
+/// <summary>A value of the Currency lookup list.</summary>
+public sealed class CurrencyOption
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; }
 }
 
@@ -206,16 +138,20 @@ public sealed class VoucherLine
 {
     public long Id { get; set; }
     public int LineNo { get; set; }
+    /// <summary>The ledger head: an accounting.acc_sub_class id (voucher_line.acc_sub_class_id).</summary>
     public int AccountId { get; set; }
     public string AccountCode { get; set; } = string.Empty;
     public string AccountName { get; set; } = string.Empty;
-    public string? PartyType { get; set; }
-    public int? SupplierId { get; set; }
-    public string? SupplierName { get; set; }
-    public int? CustomerId { get; set; }
-    public string? CustomerName { get; set; }
+    /// <summary>The supplier or customer the line is for, if any (voucher_line.supplier_id).</summary>
+    public int? PartyId { get; set; }
+    public string? PartyCode { get; set; }
+    public string? PartyName { get; set; }
+    /// <summary>In BDT, whatever the line's currency.</summary>
     public decimal DebitAmount { get; set; }
     public decimal CreditAmount { get; set; }
+    public long CurrencyLookupDataId { get; set; }
+    public string? Currency { get; set; }
+    public decimal LocalExchangeRate { get; set; }
     public string? LineNarration { get; set; }
 }
 
@@ -235,11 +171,17 @@ public sealed class VoucherUpsertRequest
 
 public sealed class VoucherLineRequest
 {
+    /// <summary>A sub class (acc_sub_class id).</summary>
     [Range(1, int.MaxValue)] public int AccountId { get; set; }
-    [Range(1, int.MaxValue)] public int? SupplierId { get; set; }
-    [Range(1, int.MaxValue)] public int? CustomerId { get; set; }
+    /// <summary>Optional: the supplier or customer the line is for.</summary>
+    [Range(1, int.MaxValue)] public int? PartyId { get; set; }
+    /// <summary>In BDT.</summary>
     [Range(typeof(decimal), "0", "99999999999999")] public decimal DebitAmount { get; set; }
     [Range(typeof(decimal), "0", "99999999999999")] public decimal CreditAmount { get; set; }
+    /// <summary>A Currency lookup value; empty = BDT.</summary>
+    [Range(1, long.MaxValue)] public long? CurrencyLookupDataId { get; set; }
+    /// <summary>Empty = 1.</summary>
+    [Range(typeof(decimal), "0.000001", "999999999999")] public decimal? LocalExchangeRate { get; set; }
     [StringLength(300)] public string? LineNarration { get; set; }
 }
 
@@ -251,10 +193,10 @@ public sealed class BillVoucherRequest
     /// <summary>The supplier paid, or the customer collected from.</summary>
     [Range(1, int.MaxValue)] public int PartyId { get; set; }
 
-    /// <summary>The supplier's payable head, or the customer's receivable head (a Supplier/Customer sub class).</summary>
+    /// <summary>The sub class the party's balance is kept on (Accounts Payable, Accounts Receivable, ...).</summary>
     [Range(1, int.MaxValue)] public int PartyAccountId { get; set; }
 
-    /// <summary>The Cash or Bank head the money is paid from or deposited to.</summary>
+    /// <summary>The cash or bank sub class the money is paid from or deposited to.</summary>
     [Range(1, int.MaxValue)] public int CashAccountId { get; set; }
 
     [Range(typeof(decimal), "0.0001", "99999999999999")] public decimal Amount { get; set; }
@@ -288,9 +230,7 @@ public sealed class SubsidiaryLedger
     public string AccountCode { get; set; } = string.Empty;
     public string AccountName { get; set; } = string.Empty;
     public string Nature { get; set; } = string.Empty;
-    public string? PartyType { get; set; }
-    public int? SupplierId { get; set; }
-    public int? CustomerId { get; set; }
+    public int? PartyId { get; set; }
     public string? PartyCode { get; set; }
     public string? PartyName { get; set; }
     public DateOnly From { get; set; }
@@ -374,6 +314,7 @@ public sealed class BalanceSheet
 public sealed class PartyBalance
 {
     public int AccountId { get; set; }
+    public int PartyId { get; set; }
     /// <summary>Debit minus credit on the head for the supplier or customer.</summary>
     public decimal Balance { get; set; }
 }

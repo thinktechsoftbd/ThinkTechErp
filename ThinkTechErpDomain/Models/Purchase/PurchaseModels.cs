@@ -52,6 +52,8 @@ public sealed class Supplier
     public string? MobileWalletNo { get; set; }
     public string? Remarks { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Also a customer: the same party is listed on the sales screens.</summary>
+    public bool IsCustomer { get; set; }
     /// <summary>Owed to the supplier now (+), or advanced to them (-), in the base currency.</summary>
     public decimal Balance { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -95,6 +97,8 @@ public sealed class SupplierUpsertRequest
     [StringLength(30)] public string? MobileWalletNo { get; set; }
     [StringLength(1000)] public string? Remarks { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Also a customer; their credit terms are set on the sales Customers screen.</summary>
+    public bool IsCustomer { get; set; }
 }
 
 /// <summary>A supplier as a document picks it.</summary>

@@ -99,8 +99,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     private const string InvoiceSelect = """
         SELECT i.sales_invoice_id AS Id, i.object_id AS ObjectId, i.invoice_no AS InvoiceNo, i.invoice_date AS InvoiceDate,
-               i.sale_type AS SaleType, i.due_date AS DueDate, i.customer_id AS CustomerId, c.customer_code AS CustomerCode,
-               coalesce(c.customer_name, i.customer_name) AS CustomerName, coalesce(i.customer_mobile, c.mobile) AS CustomerMobile,
+               i.sale_type AS SaleType, i.due_date AS DueDate, i.customer_id AS CustomerId, c.supplier_code AS CustomerCode,
+               coalesce(c.supplier_name, i.customer_name) AS CustomerName, coalesce(i.customer_mobile, c.mobile) AS CustomerMobile,
                nullif(concat_ws(', ', c.address_line1, c.city), '') AS CustomerAddress,
                i.warehouse_id AS WarehouseId, w.warehouse_name AS WarehouseName,
                i.currency_lookup_data_id AS CurrencyLookupDataId, cur.lookup_data_name AS Currency, i.exchange_rate AS ExchangeRate,
@@ -117,15 +117,15 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                i.posted_at AT TIME ZONE 'utc' AS PostedAt, i.posted_by AS PostedBy, i.remarks AS Remarks,
                i.created_at AT TIME ZONE 'utc' AS CreatedAt, i.created_by AS CreatedBy, i.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM sales.sales_invoice i
-        LEFT JOIN sales.customer c ON c.customer_id = i.customer_id
+        LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id
         JOIN inventory.warehouse w ON w.warehouse_id = i.warehouse_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
         """;
 
     private const string InvoiceFilter = """
         WHERE i.organization_id = @Org
-          AND (CAST(@Pattern AS text) IS NULL OR i.invoice_no ILIKE @Pattern OR c.customer_name ILIKE @Pattern
-               OR c.customer_code ILIKE @Pattern OR c.mobile ILIKE @Pattern OR i.customer_name ILIKE @Pattern
+          AND (CAST(@Pattern AS text) IS NULL OR i.invoice_no ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
+               OR c.supplier_code ILIKE @Pattern OR c.mobile ILIKE @Pattern OR i.customer_name ILIKE @Pattern
                OR i.customer_mobile ILIKE @Pattern)
           AND (CAST(@Status AS text) IS NULL OR i.status = @Status)
           AND (CAST(@CustomerId AS int) IS NULL OR i.customer_id = @CustomerId)
@@ -139,7 +139,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await RepositoryHelpers.PagedAsync<SalesInvoice>(connection,
-            $"SELECT count(*) FROM sales.sales_invoice i LEFT JOIN sales.customer c ON c.customer_id = i.customer_id {InvoiceFilter}",
+            $"SELECT count(*) FROM sales.sales_invoice i LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id {InvoiceFilter}",
             $"{InvoiceSelect} {InvoiceFilter} ORDER BY i.invoice_date DESC, i.sales_invoice_id DESC",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -478,9 +478,12 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         if (header.CustomerId is null)
             return;
         var unpaid = Math.Round((header.TotalAmount - header.PaidAmount) * header.ExchangeRate, 4, MidpointRounding.AwayFromZero);
-        var (name, limit) = await connection.QuerySingleAsync<(string, decimal?)>(new CommandDefinition(
-            "SELECT customer_name, credit_limit FROM sales.customer WHERE customer_id = @Id FOR UPDATE",
+        // The draft may name a party that has since stopped being a customer (it stays on as a supplier).
+        var (name, limit) = await connection.QuerySingleOrDefaultAsync<(string?, decimal?)>(new CommandDefinition(
+            "SELECT supplier_name, customer_credit_limit FROM purchase.supplier WHERE supplier_id = @Id AND is_customer FOR UPDATE",
             new { Id = header.CustomerId }, transaction, cancellationToken: cancellationToken));
+        if (name is null)
+            throw new BusinessRuleException("The customer is no longer on file. Choose another customer for this sale.");
         if (unpaid <= 0 || limit is null)
             return;
         if (limit == 0)
@@ -594,7 +597,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     private const string ReceiptSelect = """
         SELECT r.customer_receipt_id AS Id, r.object_id AS ObjectId, r.receipt_no AS ReceiptNo, r.receipt_date AS ReceiptDate,
-               r.customer_id AS CustomerId, c.customer_code AS CustomerCode, c.customer_name AS CustomerName,
+               r.customer_id AS CustomerId, c.supplier_code AS CustomerCode, c.supplier_name AS CustomerName,
                c.mobile AS CustomerMobile, r.receipt_type AS ReceiptType, r.payment_method AS PaymentMethod,
                r.payment_provider AS PaymentProvider, r.reference_no AS ReferenceNo, r.cheque_date AS ChequeDate,
                r.cheque_status AS ChequeStatus, r.currency_lookup_data_id AS CurrencyLookupDataId,
@@ -604,14 +607,14 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                r.posted_at AT TIME ZONE 'utc' AS PostedAt, r.posted_by AS PostedBy, r.remarks AS Remarks,
                r.created_at AT TIME ZONE 'utc' AS CreatedAt, r.created_by AS CreatedBy, r.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM sales.customer_receipt r
-        JOIN sales.customer c ON c.customer_id = r.customer_id
+        JOIN purchase.supplier c ON c.supplier_id = r.customer_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = r.currency_lookup_data_id
         """;
 
     private const string ReceiptFilter = """
         WHERE r.organization_id = @Org
-          AND (CAST(@Pattern AS text) IS NULL OR r.receipt_no ILIKE @Pattern OR c.customer_name ILIKE @Pattern
-               OR c.customer_code ILIKE @Pattern OR c.mobile ILIKE @Pattern OR r.reference_no ILIKE @Pattern)
+          AND (CAST(@Pattern AS text) IS NULL OR r.receipt_no ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
+               OR c.supplier_code ILIKE @Pattern OR c.mobile ILIKE @Pattern OR r.reference_no ILIKE @Pattern)
           AND (CAST(@Status AS text) IS NULL OR r.status = @Status)
           AND (CAST(@CustomerId AS int) IS NULL OR r.customer_id = @CustomerId)
           AND (CAST(@From AS date) IS NULL OR r.receipt_date >= @From)
@@ -622,7 +625,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await RepositoryHelpers.PagedAsync<CustomerReceipt>(connection,
-            $"SELECT count(*) FROM sales.customer_receipt r JOIN sales.customer c ON c.customer_id = r.customer_id {ReceiptFilter}",
+            $"SELECT count(*) FROM sales.customer_receipt r JOIN purchase.supplier c ON c.supplier_id = r.customer_id {ReceiptFilter}",
             $"{ReceiptSelect} {ReceiptFilter} ORDER BY r.receipt_date DESC, r.customer_receipt_id DESC",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }

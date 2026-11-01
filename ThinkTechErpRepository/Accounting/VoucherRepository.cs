@@ -29,8 +29,8 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
     private const string VoucherSelect = """
         SELECT v.voucher_id AS Id, v.object_id AS ObjectId, v.voucher_no AS VoucherNo, v.voucher_type AS VoucherType,
                v.voucher_date AS VoucherDate, v.supplier_id AS SupplierId, s.supplier_code AS SupplierCode,
-               s.supplier_name AS SupplierName, v.customer_id AS CustomerId, c.customer_code AS CustomerCode,
-               c.customer_name AS CustomerName, v.payment_method AS PaymentMethod, v.reference_no AS ReferenceNo,
+               s.supplier_name AS SupplierName, v.customer_id AS CustomerId, c.supplier_code AS CustomerCode,
+               c.supplier_name AS CustomerName, v.payment_method AS PaymentMethod, v.reference_no AS ReferenceNo,
                v.cheque_date AS ChequeDate, v.narration AS Narration, v.total_amount AS TotalAmount, v.status AS Status,
                v.posted_at AT TIME ZONE 'utc' AS PostedAt, v.posted_by AS PostedBy,
                v.cancelled_at AT TIME ZONE 'utc' AS CancelledAt, v.cancelled_by AS CancelledBy,
@@ -38,16 +38,17 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                v.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         """;
 
+    // Suppliers and customers are both purchase.supplier rows.
     private const string VoucherFrom = """
         FROM accounting.voucher v
         LEFT JOIN purchase.supplier s ON s.supplier_id = v.supplier_id
-        LEFT JOIN sales.customer c ON c.customer_id = v.customer_id
+        LEFT JOIN purchase.supplier c ON c.supplier_id = v.customer_id
         """;
 
     private const string VoucherFilter = """
         WHERE v.organization_id = @Org
           AND (CAST(@Pattern AS text) IS NULL OR v.voucher_no ILIKE @Pattern OR v.reference_no ILIKE @Pattern
-               OR v.narration ILIKE @Pattern OR s.supplier_name ILIKE @Pattern OR c.customer_name ILIKE @Pattern)
+               OR v.narration ILIKE @Pattern OR s.supplier_name ILIKE @Pattern OR c.supplier_name ILIKE @Pattern)
           AND (CAST(@VoucherType AS text) IS NULL OR v.voucher_type = @VoucherType)
           AND (CAST(@Status AS text) IS NULL OR v.status = @Status)
           AND (CAST(@SupplierId AS int) IS NULL OR v.supplier_id = @SupplierId)
@@ -92,14 +93,16 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
             return null;
 
         voucher.Lines = (await connection.QueryAsync<VoucherLine>(new CommandDefinition("""
-            SELECT l.voucher_line_id AS Id, l.line_no AS LineNo, l.account_id AS AccountId, a.account_code AS AccountCode,
-                   a.account_name AS AccountName, a.party_type AS PartyType, l.supplier_id AS SupplierId,
-                   s.supplier_name AS SupplierName, l.customer_id AS CustomerId, c.customer_name AS CustomerName,
-                   l.debit_amount AS DebitAmount, l.credit_amount AS CreditAmount, l.line_narration AS LineNarration
+            SELECT l.voucher_line_id AS Id, l.line_no AS LineNo, l.acc_sub_class_id AS AccountId,
+                   coalesce(trim(a.sub_code), '') AS AccountCode, coalesce(a.sub_name, '') AS AccountName,
+                   l.supplier_id AS PartyId, p.supplier_code AS PartyCode, p.supplier_name AS PartyName,
+                   l.debit_amount AS DebitAmount, l.credit_amount AS CreditAmount,
+                   l.lk_currency_id AS CurrencyLookupDataId, cur.lookup_data_name AS Currency,
+                   l.local_exchange_rate AS LocalExchangeRate, l.line_narration AS LineNarration
             FROM accounting.voucher_line l
-            JOIN accounting.chart_account a ON a.account_id = l.account_id
-            LEFT JOIN purchase.supplier s ON s.supplier_id = l.supplier_id
-            LEFT JOIN sales.customer c ON c.customer_id = l.customer_id
+            JOIN accounting.acc_sub_class a ON a.acc_sub_class_id = l.acc_sub_class_id
+            LEFT JOIN purchase.supplier p ON p.supplier_id = l.supplier_id
+            LEFT JOIN public.lookup_data cur ON cur.lookup_data_id = l.lk_currency_id
             WHERE l.voucher_id = @Id
             ORDER BY l.line_no
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
@@ -161,20 +164,23 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         }
 
         await connection.ExecuteAsync(new CommandDefinition("""
-            INSERT INTO accounting.voucher_line (voucher_id, line_no, account_id, supplier_id, customer_id,
-                                                 debit_amount, credit_amount, line_narration)
-            SELECT @Id, x.line_no, x.account_id, x.supplier_id, x.customer_id, x.debit_amount, x.credit_amount, x.line_narration
-            FROM unnest(@LineNos, @AccountIds, @SupplierIds, @CustomerIds, @Debits, @Credits, @Narrations)
-                 AS x(line_no, account_id, supplier_id, customer_id, debit_amount, credit_amount, line_narration)
+            INSERT INTO accounting.voucher_line (voucher_id, line_no, acc_sub_class_id, supplier_id, debit_amount,
+                                                 credit_amount, lk_currency_id, local_exchange_rate, line_narration)
+            SELECT @Id, x.line_no, x.acc_sub_class_id, x.supplier_id, x.debit_amount, x.credit_amount, x.lk_currency_id,
+                   x.local_exchange_rate, x.line_narration
+            FROM unnest(@LineNos, @AccountIds, @PartyIds, @Debits, @Credits, @Currencies, @Rates, @Narrations)
+                 AS x(line_no, acc_sub_class_id, supplier_id, debit_amount, credit_amount, lk_currency_id,
+                      local_exchange_rate, line_narration)
             """, new
             {
                 Id = id,
                 LineNos = voucher.Lines.Select(l => l.LineNo).ToArray(),
                 AccountIds = voucher.Lines.Select(l => l.AccountId).ToArray(),
-                SupplierIds = voucher.Lines.Select(l => l.SupplierId).ToArray(),
-                CustomerIds = voucher.Lines.Select(l => l.CustomerId).ToArray(),
+                PartyIds = voucher.Lines.Select(l => l.PartyId).ToArray(),
                 Debits = voucher.Lines.Select(l => l.DebitAmount).ToArray(),
                 Credits = voucher.Lines.Select(l => l.CreditAmount).ToArray(),
+                Currencies = voucher.Lines.Select(l => l.CurrencyLookupDataId).ToArray(),
+                Rates = voucher.Lines.Select(l => l.LocalExchangeRate).ToArray(),
                 Narrations = voucher.Lines.Select(l => l.LineNarration).ToArray()
             }, transaction, cancellationToken: cancellationToken));
 
