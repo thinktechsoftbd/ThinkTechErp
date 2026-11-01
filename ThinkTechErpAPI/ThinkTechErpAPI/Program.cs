@@ -7,6 +7,10 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using ThinkTechErpAPI.OpenApi;
 using ThinkTechErpAPI.Security;
+using ThinkTechErpDomain.Models.Accounting;
+using ThinkTechErpDomain.Models.Inventory;
+using ThinkTechErpDomain.Models.Purchase;
+using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpDomain.Models.Settings;
 using ThinkTechErpService;
@@ -205,6 +209,49 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(SettingsPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SettingsRules.ManageSettingsPermission));
+
+    options.AddPolicy(InventoryPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            InventoryRules.ViewInventoryPermission, InventoryRules.ManageInventoryPermission));
+
+    options.AddPolicy(InventoryPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, InventoryRules.ManageInventoryPermission));
+
+    options.AddPolicy(InventoryPolicies.Lookup, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            InventoryRules.ViewInventoryPermission, InventoryRules.ManageInventoryPermission,
+            PurchaseRules.ViewPurchasePermission, PurchaseRules.ManagePurchasePermission,
+            SalesRules.ViewSalesPermission, SalesRules.ManageSalesPermission));
+
+    options.AddPolicy(PurchasePolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            PurchaseRules.ViewPurchasePermission, PurchaseRules.ManagePurchasePermission));
+
+    options.AddPolicy(PurchasePolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, PurchaseRules.ManagePurchasePermission));
+
+    options.AddPolicy(SalesPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            SalesRules.ViewSalesPermission, SalesRules.ManageSalesPermission));
+
+    options.AddPolicy(SalesPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, SalesRules.ManageSalesPermission));
+
+    options.AddPolicy(AccountingPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            AccountingRules.ViewAccountingPermission, AccountingRules.ManageAccountingPermission));
+
+    options.AddPolicy(AccountingPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, AccountingRules.ManageAccountingPermission));
 });
 builder.Services.AddSingleton<IAuthorizationHandler, SmsClientAccessHandler>();
 builder.Services.AddRateLimiter(options =>

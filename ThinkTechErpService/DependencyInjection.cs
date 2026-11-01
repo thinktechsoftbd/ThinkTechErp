@@ -1,11 +1,20 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using ThinkTechErpRepository.Accounting;
+using ThinkTechErpRepository.Common;
 using ThinkTechErpRepository.Database;
+using ThinkTechErpRepository.Inventory;
+using ThinkTechErpRepository.Purchase;
+using ThinkTechErpRepository.Sales;
 using ThinkTechErpRepository.Security;
 using ThinkTechErpRepository.Settings;
 using ThinkTechErpRepository.Website;
 using ThinkTechErpRepository.Sms;
+using ThinkTechErpService.Accounting;
+using ThinkTechErpService.Inventory;
+using ThinkTechErpService.Purchase;
+using ThinkTechErpService.Sales;
 using ThinkTechErpService.Security;
 using ThinkTechErpService.Settings;
 using ThinkTechErpService.Sms;
@@ -61,6 +70,45 @@ public static class DependencyInjection
         // Settings
         services.AddScoped<ILookupRepository, LookupRepository>();
         services.AddScoped<ILookupService, LookupService>();
+
+        // Organizations a user works in (Inventory, Purchase)
+        services.AddScoped<IUserOrganizationRepository, UserOrganizationRepository>();
+        services.AddScoped<IUserOrganizationService, UserOrganizationService>();
+        services.AddScoped<IOwnershipRepository, OwnershipRepository>();
+
+        // Inventory
+        services.AddScoped<IInventorySetupRepository, InventorySetupRepository>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IStockDocumentRepository, StockDocumentRepository>();
+        services.AddScoped<IInventoryReportRepository, InventoryReportRepository>();
+        services.AddScoped<IInventorySetupService, InventorySetupService>();
+        services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IStockDocumentService, StockDocumentService>();
+        services.AddScoped<IInventoryReportService, InventoryReportService>();
+
+        // Purchase
+        services.AddScoped<IPurchaseSetupRepository, PurchaseSetupRepository>();
+        services.AddScoped<IPurchaseDocumentRepository, PurchaseDocumentRepository>();
+        services.AddScoped<IPurchaseReportRepository, PurchaseReportRepository>();
+        services.AddScoped<IPurchaseSetupService, PurchaseSetupService>();
+        services.AddScoped<IPurchaseDocumentService, PurchaseDocumentService>();
+        services.AddScoped<IPurchaseReportService, PurchaseReportService>();
+
+        // Sales
+        services.AddScoped<ISalesSetupRepository, SalesSetupRepository>();
+        services.AddScoped<ISalesDocumentRepository, SalesDocumentRepository>();
+        services.AddScoped<ISalesReportRepository, SalesReportRepository>();
+        services.AddScoped<ISalesSetupService, SalesSetupService>();
+        services.AddScoped<ISalesDocumentService, SalesDocumentService>();
+        services.AddScoped<ISalesReportService, SalesReportService>();
+
+        // Accounting
+        services.AddScoped<IChartOfAccountsRepository, ChartOfAccountsRepository>();
+        services.AddScoped<IVoucherRepository, VoucherRepository>();
+        services.AddScoped<IAccountingReportRepository, AccountingReportRepository>();
+        services.AddScoped<IChartOfAccountsService, ChartOfAccountsService>();
+        services.AddScoped<IVoucherService, VoucherService>();
+        services.AddScoped<IAccountingReportService, AccountingReportService>();
         return services;
     }
 }
