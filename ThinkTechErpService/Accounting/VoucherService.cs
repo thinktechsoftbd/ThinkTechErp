@@ -24,6 +24,8 @@ public interface IVoucherService
     Task<Voucher?> UpdateVoucherAsync(int organizationId, long id, VoucherUpsertRequest request, bool post, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task<Voucher?> PostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>Returns a posted voucher to a draft, out of the ledgers.</summary>
+    Task<Voucher?> UnpostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task<Voucher?> CancelVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     /// <summary>Supplier bill payment: Dr the supplier's payable head, Cr cash or bank. Posted at once.</summary>
     Task<Voucher> CreateBillPaymentAsync(int organizationId, BillVoucherRequest request, int userId, CancellationToken cancellationToken = default);
@@ -96,6 +98,14 @@ public sealed class VoucherService(
         if (await repository.GetVoucherAsync(organizationId, id, cancellationToken) is null)
             return null;
         await repository.PostVoucherAsync(organizationId, id, userId, cancellationToken);
+        return await repository.GetVoucherAsync(organizationId, id, cancellationToken);
+    }
+
+    public async Task<Voucher?> UnpostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        if (await repository.GetVoucherAsync(organizationId, id, cancellationToken) is null)
+            return null;
+        await repository.UnpostVoucherAsync(organizationId, id, userId, cancellationToken);
         return await repository.GetVoucherAsync(organizationId, id, cancellationToken);
     }
 

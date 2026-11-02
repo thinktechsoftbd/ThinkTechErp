@@ -360,8 +360,17 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         public Guid ObjectId { get; set; }
         public string Name { get; set; } = string.Empty;
         public bool IsActive { get; set; }
+        public bool IsFinalized { get; set; }
         public long Allocated { get; set; }
         public long Usage { get; set; }
+    }
+
+    /// <summary>A finalized organization's allocations are locked: none is added, changed, moved or deleted.</summary>
+    private static void EnsureNotFinalized(LockedOrganization organization)
+    {
+        if (organization.IsFinalized)
+            throw new BusinessRuleException(
+                $"{organization.Name} is finalized, so its SMS allocations are locked. Clear Finalized in Security → Organizations to change them.");
     }
 
     /// <summary>Locks the organizations (by Object Id, in order) and returns what each was allocated and used.</summary>
@@ -370,7 +379,8 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         var ids = objectIds.Distinct().OrderBy(id => id).ToArray();
         var rows = (await connection.QueryAsync<LockedOrganization>(new CommandDefinition("""
-            SELECT o.object_id AS ObjectId, o.organization_name_en AS Name, o.is_active AS IsActive, o.sms_usage AS Usage,
+            SELECT o.object_id AS ObjectId, o.organization_name_en AS Name, o.is_active AS IsActive,
+                   o.is_finalized AS IsFinalized, o.sms_usage AS Usage,
                    coalesce((SELECT sum(a.allocated_sms) FROM sms.sms_allocation a WHERE a.organization_id = o.object_id), 0)::bigint AS Allocated
             FROM security.organization o
             WHERE o.object_id = ANY(@Ids)
@@ -401,6 +411,10 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
         var provider = providers[request.ProviderId];
         var organization = organizations[request.OrganizationObjectId];
+        // Neither the organization it goes to nor (when changed) the one it is on may be finalized.
+        EnsureNotFinalized(organization);
+        if (old is not null)
+            EnsureNotFinalized(organizations[old.OrganizationId]);
         var sameProvider = old is not null && old.ProviderId == request.ProviderId;
         var sameOrganization = old is not null && old.OrganizationId == request.OrganizationObjectId;
         if (!provider.IsActive && !sameProvider)
@@ -465,6 +479,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
             return DeleteOutcome.NotFound;
         await LockProvidersAsync(connection, transaction, [old.ProviderId], cancellationToken);
         var organization = (await LockOrganizationsAsync(connection, transaction, [old.OrganizationId], cancellationToken))[old.OrganizationId];
+        EnsureNotFinalized(organization);
         if (organization.Allocated - old.Quantity < organization.Usage)
             return DeleteOutcome.InUse;
         await connection.ExecuteAsync(new CommandDefinition(
@@ -479,7 +494,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     private const string BalanceRows = """
         SELECT o.organization_id AS OrganizationId, o.object_id AS ObjectId, o.organization_name_en AS Name,
-               o.organization_code AS Code, o.is_active AS IsActive,
+               o.organization_code AS Code, o.is_active AS IsActive, o.is_finalized AS IsFinalized,
                coalesce(a.allocated, 0) AS AllocatedSms, o.sms_usage AS SmsUsage,
                coalesce(a.allocated, 0) - o.sms_usage AS AvailableSms,
                coalesce(a.allocation_count, 0) AS AllocationCount, a.last_allocation_date AS LastAllocationDate

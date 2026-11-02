@@ -364,6 +364,13 @@ public sealed class Organization
     public bool IsExternal { get; set; }
 
     public bool IsActive { get; set; }
+
+    /// <summary>SMS the organization has used (recorded under SMS); read-only here.</summary>
+    public long SmsUsage { get; set; }
+
+    /// <summary>Finalized: its SMS allocations are locked (none can be added, changed or deleted).</summary>
+    public bool IsFinalized { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public int? CreatedBy { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -430,6 +437,9 @@ public sealed class OrganizationUpsertRequest : OrganizationDetails
     public bool IsExternal { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Locks the organization's SMS allocations while true.</summary>
+    public bool IsFinalized { get; set; }
 }
 
 // ---- Integration clients (server-to-server)

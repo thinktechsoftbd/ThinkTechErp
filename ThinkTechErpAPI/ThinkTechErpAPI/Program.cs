@@ -240,11 +240,16 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AccountingPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,
-            AccountingRules.ViewAccountingPermission, AccountingRules.ManageAccountingPermission));
+            AccountingRules.ViewAccountingPermission, AccountingRules.ManageAccountingPermission,
+            AccountingRules.PostVoucherPermission));
 
     options.AddPolicy(AccountingPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, AccountingRules.ManageAccountingPermission));
+
+    options.AddPolicy(AccountingPolicies.Post, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, AccountingRules.PostVoucherPermission));
 
     options.AddPolicy(SmsPolicies.View, policy => policy
         .RequireAuthenticatedUser()

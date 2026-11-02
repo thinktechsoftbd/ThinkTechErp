@@ -6,6 +6,8 @@ public static class AccountingRules
 {
     public const string ViewAccountingPermission = "ACCOUNTING.V";
     public const string ManageAccountingPermission = "ACCOUNTING.M";
+    /// <summary>Post a draft voucher to the ledgers, and unpost a posted one back to a draft.</summary>
+    public const string PostVoucherPermission = "ACCOUNTING.P";
 
     /// <summary>The lookup list voucher lines take their currency from.</summary>
     public const string CurrencyTable = "Currency";

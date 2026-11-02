@@ -40,7 +40,7 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
         if (existing is not null && existing.CreatedBy != clientUserId)
             return new ClientOrganizationSync(ClientOrganizationSyncStatus.NotOwned);
 
-        // Active and External decide subscription validity, so they stay with the ERP.
+        // Active and External decide subscription validity, and Finalized locks SMS allocations, so they stay with the ERP.
         var request = new OrganizationUpsertRequest
         {
             ObjectId = objectId,
@@ -59,7 +59,8 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
             Country = details.Country,
             LogoUrl = details.LogoUrl,
             IsExternal = existing?.IsExternal ?? true,
-            IsActive = existing?.IsActive ?? true
+            IsActive = existing?.IsActive ?? true,
+            IsFinalized = existing?.IsFinalized ?? false
         };
 
         if (existing is null)

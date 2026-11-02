@@ -25,6 +25,8 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                logo_url AS LogoUrl,
                is_external AS IsExternal,
                is_active AS IsActive,
+               sms_usage AS SmsUsage,
+               is_finalized AS IsFinalized,
                created_at AT TIME ZONE 'utc' AS CreatedAt,
                created_by AS CreatedBy,
                updated_at AT TIME ZONE 'utc' AS UpdatedAt,
@@ -67,11 +69,11 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
             INSERT INTO security.organization (
                 object_id, organization_name_en, organization_name_bn, slogan, organization_code, email, phone, website,
                 address_line1, address_line2, city, state, postal_code, country, logo_url, is_external, is_active,
-                created_at, created_by)
+                is_finalized, created_at, created_by)
             VALUES (
                 COALESCE(@ObjectId, gen_random_uuid()), @NameEn, @NameBn, @Slogan, @Code, @Email, @Phone, @Website,
                 @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @Country, @LogoUrl, @IsExternal, @IsActive,
-                {SecurityDb.NowUtc}, @UserId)
+                @IsFinalized, {SecurityDb.NowUtc}, @UserId)
             RETURNING organization_id
             """, parameters, cancellationToken: cancellationToken));
     }
@@ -103,6 +105,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                 logo_url = @LogoUrl,
                 is_external = @IsExternal,
                 is_active = @IsActive,
+                is_finalized = @IsFinalized,
                 updated_at = {SecurityDb.NowUtc},
                 updated_by = @UserId
             WHERE organization_id = @OrganizationId

@@ -22,6 +22,8 @@ public interface IVoucherRepository
     /// <summary>Flags a draft deleted (is_deleted); a posted or cancelled voucher answers InUse.</summary>
     Task<DeleteOutcome> DeleteVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task PostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>Makes a posted voucher a draft again; the ledgers (accounting.ledger_entry) only read posted ones.</summary>
+    Task UnpostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task CancelVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
 }
 
@@ -307,6 +309,24 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await LockDraftAsync(connection, transaction, organizationId, id, cancellationToken);
         await PostAsync(connection, transaction, organizationId, id, userId, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UnpostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var status = await LockAsync(connection, transaction, organizationId, id, cancellationToken);
+        if (status != DocumentStatus.Posted)
+            throw new BusinessRuleException(status == DocumentStatus.Draft
+                ? "This voucher isn't posted."
+                : "A cancelled voucher can't be unposted.");
+
+        await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE accounting.voucher
+            SET status = 'Draft', posted_at = NULL, posted_by = NULL, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            WHERE organization_id = @Org AND voucher_id = @Id
+            """, new { Org = organizationId, Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
     }
 

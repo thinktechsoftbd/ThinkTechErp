@@ -62,12 +62,14 @@ public sealed class AccountingVouchersController(IVoucherService vouchers) : Org
     public async Task<ActionResult<IReadOnlyList<LookupValueOption>>> GetPaymentMethods(CancellationToken cancellationToken)
         => Ok(await vouchers.GetPaymentMethodsAsync(cancellationToken));
 
-    /// <summary>Saves a draft; with post=true it is posted in the same call.</summary>
+    /// <summary>Saves a draft; with post=true it is posted in the same call, which also needs ACCOUNTING.P.</summary>
     [HttpPost]
     [Authorize(Policy = AccountingPolicies.Manage)]
     public async Task<ActionResult<Voucher>> CreateVoucher(
         [FromBody] VoucherUpsertRequest request, [FromQuery] bool post = false, CancellationToken cancellationToken = default)
     {
+        if (post && !CanPost)
+            return Forbid();
         var voucher = await vouchers.CreateVoucherAsync(OrganizationId, request, post, UserId, cancellationToken);
         return CreatedAtAction(nameof(GetVoucher), new { id = voucher.Id }, voucher);
     }
@@ -76,18 +78,30 @@ public sealed class AccountingVouchersController(IVoucherService vouchers) : Org
     [Authorize(Policy = AccountingPolicies.Manage)]
     public async Task<ActionResult<Voucher>> UpdateVoucher(
         long id, [FromBody] VoucherUpsertRequest request, [FromQuery] bool post = false, CancellationToken cancellationToken = default)
-        => OkOrNotFound(await vouchers.UpdateVoucherAsync(OrganizationId, id, request, post, UserId, cancellationToken));
+    {
+        if (post && !CanPost)
+            return Forbid();
+        return OkOrNotFound(await vouchers.UpdateVoucherAsync(OrganizationId, id, request, post, UserId, cancellationToken));
+    }
+
+    private bool CanPost => User.HasClaim(SecurityPolicies.PermissionClaim, AccountingRules.PostVoucherPermission);
 
     [HttpDelete("{id:long}")]
     [Authorize(Policy = AccountingPolicies.Manage)]
     public async Task<IActionResult> DeleteVoucher(long id, CancellationToken cancellationToken)
         => DeleteResult(await vouchers.DeleteVoucherAsync(OrganizationId, id, UserId, cancellationToken),
-            "Only a draft voucher can be deleted; cancel a posted one instead.");
+            "Only a draft voucher can be deleted; unpost or cancel a posted one instead.");
 
     [HttpPost("{id:long}/post")]
-    [Authorize(Policy = AccountingPolicies.Manage)]
+    [Authorize(Policy = AccountingPolicies.Post)]
     public async Task<ActionResult<Voucher>> PostVoucher(long id, CancellationToken cancellationToken)
         => OkOrNotFound(await vouchers.PostVoucherAsync(OrganizationId, id, UserId, cancellationToken));
+
+    /// <summary>Takes a posted voucher out of the ledgers and makes it a draft again, to edit, post or delete.</summary>
+    [HttpPost("{id:long}/unpost")]
+    [Authorize(Policy = AccountingPolicies.Post)]
+    public async Task<ActionResult<Voucher>> UnpostVoucher(long id, CancellationToken cancellationToken)
+        => OkOrNotFound(await vouchers.UnpostVoucherAsync(OrganizationId, id, UserId, cancellationToken));
 
     /// <summary>Takes a posted voucher (bill payments and collections too) out of the ledgers.</summary>
     [HttpPost("{id:long}/cancel")]

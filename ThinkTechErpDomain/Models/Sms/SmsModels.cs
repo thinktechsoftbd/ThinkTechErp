@@ -160,6 +160,8 @@ public sealed class SmsOrganizationBalance
     public string Name { get; set; } = string.Empty;
     public string? Code { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Finalized in Security → Organizations: its allocations are locked.</summary>
+    public bool IsFinalized { get; set; }
     public long AllocatedSms { get; set; }
     public long SmsUsage { get; set; }
     public long AvailableSms { get; set; }
