@@ -12,22 +12,22 @@ namespace ThinkTechErpAPI.Areas.Accounting.Controller;
 public sealed class VoucherListQuery
 {
     [StringLength(100)] public string? Search { get; set; }
-    [StringLength(20)] public string? VoucherType { get; set; }
+    /// <summary>A "Voucher Type" lookup value.</summary>
+    [Range(1, long.MaxValue)] public long? VoucherTypeId { get; set; }
     [StringLength(20)] public string? Status { get; set; }
-    public int? SupplierId { get; set; }
-    public int? CustomerId { get; set; }
+    /// <summary>A supplier or customer named on any line.</summary>
+    [Range(1, int.MaxValue)] public int? PartyId { get; set; }
     public DateOnly? From { get; set; }
     public DateOnly? To { get; set; }
     [Range(1, 500)] public int Limit { get; set; } = 20;
     [Range(0, int.MaxValue)] public int Offset { get; set; }
 
-    public VoucherQuery ToQuery(string? voucherType = null) => new()
+    public VoucherQuery ToQuery() => new()
     {
         Search = Search,
-        VoucherType = voucherType ?? VoucherType,
+        VoucherTypeId = VoucherTypeId,
         Status = Status,
-        SupplierId = SupplierId,
-        CustomerId = CustomerId,
+        PartyId = PartyId,
         From = From,
         To = To,
         Limit = Limit,
@@ -36,8 +36,9 @@ public sealed class VoucherListQuery
 }
 
 /// <summary>
-/// Journal, Payment, Receipt and Contra vouchers. Saved as drafts, posted when debits equal credits, and
-/// cancelled (never edited) once posted. The list shows bill payments and collections too.
+/// Vouchers of every type on the "Voucher Type" lookup list, numbered 00000000001, ... per organization.
+/// Saved as drafts, posted when debits equal credits, and cancelled (never edited) once posted. A deleted
+/// draft is only flagged (is_deleted). The list shows bill payments and collections too.
 /// </summary>
 [Route("api/accounting/vouchers")]
 [Authorize(Policy = AccountingPolicies.View)]
@@ -50,6 +51,16 @@ public sealed class AccountingVouchersController(IVoucherService vouchers) : Org
     [HttpGet("{id:long}")]
     public async Task<ActionResult<Voucher>> GetVoucher(long id, CancellationToken cancellationToken)
         => OkOrNotFound(await vouchers.GetVoucherAsync(OrganizationId, id, cancellationToken));
+
+    /// <summary>The "Voucher Type" lookup list (Settings → Lookup Data), inactive values included.</summary>
+    [HttpGet("types")]
+    public async Task<ActionResult<IReadOnlyList<LookupValueOption>>> GetVoucherTypes(CancellationToken cancellationToken)
+        => Ok(await vouchers.GetVoucherTypesAsync(cancellationToken));
+
+    /// <summary>The "Payment Method" lookup list, inactive values included.</summary>
+    [HttpGet("payment-methods")]
+    public async Task<ActionResult<IReadOnlyList<LookupValueOption>>> GetPaymentMethods(CancellationToken cancellationToken)
+        => Ok(await vouchers.GetPaymentMethodsAsync(cancellationToken));
 
     /// <summary>Saves a draft; with post=true it is posted in the same call.</summary>
     [HttpPost]
@@ -70,7 +81,7 @@ public sealed class AccountingVouchersController(IVoucherService vouchers) : Org
     [HttpDelete("{id:long}")]
     [Authorize(Policy = AccountingPolicies.Manage)]
     public async Task<IActionResult> DeleteVoucher(long id, CancellationToken cancellationToken)
-        => DeleteResult(await vouchers.DeleteVoucherAsync(OrganizationId, id, cancellationToken),
+        => DeleteResult(await vouchers.DeleteVoucherAsync(OrganizationId, id, UserId, cancellationToken),
             "Only a draft voucher can be deleted; cancel a posted one instead.");
 
     [HttpPost("{id:long}/post")]
@@ -85,14 +96,17 @@ public sealed class AccountingVouchersController(IVoucherService vouchers) : Org
         => OkOrNotFound(await vouchers.CancelVoucherAsync(OrganizationId, id, UserId, cancellationToken));
 }
 
-/// <summary>Supplier bill payments: Dr the supplier's payable head, Cr cash or bank, posted in one step.</summary>
+/// <summary>
+/// Supplier bill payments: Cash or Bank Payment Vouchers that debit the supplier's payable head and credit
+/// cash or bank, posted in one step.
+/// </summary>
 [Route("api/accounting/bill-payments")]
 [Authorize(Policy = AccountingPolicies.View)]
 public sealed class AccountingBillPaymentsController(IVoucherService vouchers) : OrganizationControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<Voucher>>> GetBillPayments([FromQuery] VoucherListQuery query, CancellationToken cancellationToken)
-        => Ok(await vouchers.GetVouchersAsync(OrganizationId, query.ToQuery(VoucherType.BillPayment), cancellationToken));
+        => Ok(await vouchers.GetBillPaymentsAsync(OrganizationId, query.ToQuery(), cancellationToken));
 
     /// <param name="request">PartyId is the supplier; PartyAccountId the sub class their balance is on; CashAccountId the cash or bank sub class paid from.</param>
     [HttpPost]
@@ -104,14 +118,17 @@ public sealed class AccountingBillPaymentsController(IVoucherService vouchers) :
     }
 }
 
-/// <summary>Customer bill collections: Dr cash or bank, Cr the customer's receivable head, posted in one step.</summary>
+/// <summary>
+/// Customer bill collections: Cash or Bank Receive Vouchers that debit cash or bank and credit the customer's
+/// receivable head, posted in one step.
+/// </summary>
 [Route("api/accounting/bill-collections")]
 [Authorize(Policy = AccountingPolicies.View)]
 public sealed class AccountingBillCollectionsController(IVoucherService vouchers) : OrganizationControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<Voucher>>> GetBillCollections([FromQuery] VoucherListQuery query, CancellationToken cancellationToken)
-        => Ok(await vouchers.GetVouchersAsync(OrganizationId, query.ToQuery(VoucherType.BillCollection), cancellationToken));
+        => Ok(await vouchers.GetBillCollectionsAsync(OrganizationId, query.ToQuery(), cancellationToken));
 
     /// <param name="request">PartyId is the customer; PartyAccountId the sub class their balance is on; CashAccountId the cash or bank sub class deposited to.</param>
     [HttpPost]

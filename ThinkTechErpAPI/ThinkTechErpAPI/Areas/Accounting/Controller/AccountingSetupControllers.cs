@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ThinkTechErpAPI.Security;
 using ThinkTechErpDomain.Models.Accounting;
+using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpService.Accounting;
 
 namespace ThinkTechErpAPI.Areas.Accounting.Controller;
@@ -21,6 +22,15 @@ public sealed class AccountingLedgerHeadsController(ILedgerLookupService lookups
         [FromQuery, StringLength(100)] string? search, [FromQuery, StringLength(500)] string? ids,
         [FromQuery, Range(1, 500)] int limit = 30, CancellationToken cancellationToken = default)
         => Ok(await lookups.GetLedgerHeadsAsync(search, Ids.Parse(ids), limit, cancellationToken));
+
+    /// <summary>
+    /// A page of sub classes for the search-as-you-type pickers: by code, name, or the map or main class name.
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<PagedResult<LedgerHeadOption>>> SearchLedgerHeads(
+        [FromQuery, StringLength(100)] string? search, [FromQuery, Range(1, 100)] int limit = 20,
+        [FromQuery, Range(0, int.MaxValue)] int offset = 0, CancellationToken cancellationToken = default)
+        => Ok(await lookups.SearchLedgerHeadsAsync(search, limit, offset, cancellationToken));
 }
 
 /// <summary>Suppliers and customers for the voucher and report pickers, so accountants need no Purchase or Sales access.</summary>

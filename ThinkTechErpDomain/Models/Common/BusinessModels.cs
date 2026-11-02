@@ -30,12 +30,8 @@ public static class DocumentType
     public const string SalesInvoice = "SalesInvoice";
     public const string SalesReturn = "SalesReturn";
     public const string CustomerReceipt = "CustomerReceipt";
-    public const string JournalVoucher = "JournalVoucher";
-    public const string PaymentVoucher = "PaymentVoucher";
-    public const string ReceiptVoucher = "ReceiptVoucher";
-    public const string ContraVoucher = "ContraVoucher";
-    public const string BillPayment = "BillPayment";
-    public const string BillCollection = "BillCollection";
+    /// <summary>Every accounting voucher, whatever its type: one series per organization.</summary>
+    public const string Voucher = "Voucher";
     /// <summary>Not a document: the series new customer codes are taken from.</summary>
     public const string Customer = "Customer";
 
@@ -54,15 +50,14 @@ public static class DocumentType
         SalesReturn => "SRET-",
         // Money receipt, as shops call it.
         CustomerReceipt => "MR-",
-        JournalVoucher => "JV-",
-        PaymentVoucher => "PV-",
-        ReceiptVoucher => "RV-",
-        ContraVoucher => "CV-",
-        BillPayment => "BP-",
-        BillCollection => "BC-",
+        // Voucher Ref. Numbers are digits only: 00000000001.
+        Voucher => "",
         Customer => "C-",
         _ => "DOC-"
     };
+
+    /// <summary>How many digits a new organization's series is padded to.</summary>
+    public static short DefaultPadding(string documentType) => documentType == Voucher ? (short)11 : (short)5;
 }
 
 /// <summary>How money moved at the counter or in a payment.</summary>

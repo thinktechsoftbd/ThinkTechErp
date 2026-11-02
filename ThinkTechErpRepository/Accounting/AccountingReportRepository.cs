@@ -22,7 +22,7 @@ public interface IAccountingReportRepository
 /// <summary>Ledger heads are the acc_* sub classes, placed in the chart by the accounting.ledger_head view.</summary>
 public sealed class AccountingReportRepository(IDbConnectionFactory connectionFactory) : IAccountingReportRepository
 {
-    private const string PartyFilter = "AND (CAST(@PartyId AS int) IS NULL OR e.supplier_id = @PartyId)";
+    private const string PartyFilter = "AND (CAST(@PartyId AS int) IS NULL OR e.party_id = @PartyId)";
 
     public async Task<SubsidiaryLedger?> GetSubsidiaryLedgerAsync(
         int organizationId, int accountId, int? partyId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
@@ -44,8 +44,8 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
             return null;
 
         var entries = (await connection.QueryAsync<LedgerEntryRow>(new CommandDefinition($"""
-            SELECT e.voucher_id AS VoucherId, e.voucher_no AS VoucherNo, e.voucher_type AS VoucherType,
-                   e.voucher_date AS VoucherDate, e.reference_no AS ReferenceNo,
+            SELECT e.voucher_id AS VoucherId, e.voucher_ref_no AS VoucherRefNo, e.voucher_type AS VoucherType,
+                   e.voucher_date AS VoucherDate, e.cheque_no AS ChequeNo,
                    coalesce(e.line_narration, e.narration) AS Narration, p.supplier_name AS PartyName,
                    (SELECT string_agg(DISTINCT o.sub_name, ', ')
                     FROM accounting.voucher_line ol
@@ -54,7 +54,7 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
                       AND ((e.debit_amount > 0 AND ol.credit_amount > 0) OR (e.credit_amount > 0 AND ol.debit_amount > 0))) AS Particulars,
                    e.debit_amount AS DebitAmount, e.credit_amount AS CreditAmount
             FROM accounting.ledger_entry e
-            LEFT JOIN purchase.supplier p ON p.supplier_id = e.supplier_id
+            LEFT JOIN purchase.supplier p ON p.supplier_id = e.party_id
             WHERE e.organization_id = @Org AND e.acc_sub_class_id = @AccountId AND e.voucher_date BETWEEN @From AND @To
             {PartyFilter}
             ORDER BY e.voucher_date, e.voucher_id, e.line_no

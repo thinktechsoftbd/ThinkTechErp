@@ -1,23 +1,30 @@
 using Dapper;
 using ThinkTechErpDomain.Models.Accounting;
+using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Common;
 using ThinkTechErpRepository.Database;
 using ThinkTechErpRepository.Security;
 
 namespace ThinkTechErpRepository.Accounting;
 
-/// <summary>What vouchers and reports pick from: ledger heads (the acc_* sub classes), parties and currencies.</summary>
+/// <summary>What vouchers and reports pick from: ledger heads (the acc_* sub classes), parties and lookup values.</summary>
 public interface ILedgerLookupRepository
 {
     /// <summary>Sub classes by code or name; with ids it returns exactly those heads.</summary>
     Task<IReadOnlyList<LedgerHeadOption>> GetLedgerHeadsAsync(
         string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// A page of sub classes for the ledger head pickers, matching the code, the name or the map or main class
+    /// name; codes starting with the search come first, then by code.
+    /// </summary>
+    Task<PagedResult<LedgerHeadOption>> SearchLedgerHeadsAsync(
+        string? search, int limit, int offset, CancellationToken cancellationToken = default);
     /// <summary>The organization's suppliers (partyType Supplier), customers (Customer) or both (null).</summary>
     Task<IReadOnlyList<PartyOption>> GetPartiesAsync(
         int organizationId, string? partyType, string? search, IReadOnlyCollection<int>? ids, int limit,
         CancellationToken cancellationToken = default);
-    /// <summary>The Currency lookup list.</summary>
-    Task<IReadOnlyList<CurrencyOption>> GetCurrenciesAsync(CancellationToken cancellationToken = default);
+    /// <summary>A lookup list's values by the list's name (Currency, Voucher Type, Payment Method), in entry order.</summary>
+    Task<IReadOnlyList<LookupValueOption>> GetLookupValuesAsync(string lookupTable, CancellationToken cancellationToken = default);
 }
 
 public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactory) : ILedgerLookupRepository
@@ -42,6 +49,30 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
                 Prefix = search is null ? null : search.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%",
                 Limit = limit
             }, cancellationToken: cancellationToken))).AsList();
+    }
+
+    public async Task<PagedResult<LedgerHeadOption>> SearchLedgerHeadsAsync(
+        string? search, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        const string filter = """
+            FROM accounting.ledger_head h
+            WHERE CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern
+               OR h.map_name ILIKE @Pattern OR h.main_name ILIKE @Pattern
+            """;
+        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        return await RepositoryHelpers.PagedAsync<LedgerHeadOption>(connection,
+            $"SELECT count(*) {filter}",
+            $"""
+            SELECT h.acc_sub_class_id AS Id, coalesce(h.sub_code, '') AS Code, coalesce(h.sub_name, '') AS Name,
+                   coalesce(h.nature, '') AS Nature, concat_ws(' › ', h.main_name, h.map_name) AS Path
+            {filter}
+            ORDER BY (h.sub_code ILIKE @Prefix) DESC, h.sub_code, h.acc_sub_class_id
+            """,
+            new
+            {
+                Pattern = RepositoryHelpers.Pattern(search),
+                Prefix = search is null ? null : search.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%"
+            }, limit, offset, cancellationToken);
     }
 
     public async Task<IReadOnlyList<PartyOption>> GetPartiesAsync(
@@ -69,15 +100,15 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
             cancellationToken: cancellationToken))).AsList();
     }
 
-    public async Task<IReadOnlyList<CurrencyOption>> GetCurrenciesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<LookupValueOption>> GetLookupValuesAsync(string lookupTable, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
-        return (await connection.QueryAsync<CurrencyOption>(new CommandDefinition("""
+        return (await connection.QueryAsync<LookupValueOption>(new CommandDefinition("""
             SELECT d.lookup_data_id AS Id, d.lookup_data_name AS Name, d.is_active AS IsActive
             FROM public.lookup_data d
             JOIN public.lookup_table t ON t.lookup_table_id = d.lookup_table_id
-            WHERE lower(t.lookup_table_name) = 'currency'
-            ORDER BY d.lookup_data_name
-            """, cancellationToken: cancellationToken))).AsList();
+            WHERE lower(t.lookup_table_name) = lower(@Table)
+            ORDER BY d.lookup_data_id
+            """, new { Table = lookupTable }, cancellationToken: cancellationToken))).AsList();
     }
 }

@@ -16,11 +16,12 @@ internal static class DocumentNumbers
         {
             Org = organizationId,
             Type = documentType,
-            Prefix = DocumentType.DefaultPrefix(documentType)
+            Prefix = DocumentType.DefaultPrefix(documentType),
+            Padding = DocumentType.DefaultPadding(documentType)
         };
         await connection.ExecuteAsync(new CommandDefinition("""
-            INSERT INTO public.document_sequence (organization_id, document_type, fiscal_year, prefix)
-            VALUES (@Org, @Type, 0, @Prefix)
+            INSERT INTO public.document_sequence (organization_id, document_type, fiscal_year, prefix, number_padding)
+            VALUES (@Org, @Type, 0, @Prefix, @Padding)
             ON CONFLICT ON CONSTRAINT ux_document_sequence DO NOTHING
             """, parameters, transaction, cancellationToken: cancellationToken));
 
