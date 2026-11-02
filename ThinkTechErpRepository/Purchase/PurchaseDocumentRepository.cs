@@ -66,7 +66,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
 
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         return connection;
     }
@@ -90,7 +90,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
 
     private async Task<DeleteOutcome> DeleteDraftAsync(string table, string key, int organizationId, long id, CancellationToken cancellationToken)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
             $"SELECT status FROM {table} WHERE organization_id = @Org AND {key} = @Id", new { Org = organizationId, Id = id },
             cancellationToken: cancellationToken));
@@ -366,7 +366,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
 
     public async Task<PagedResult<PurchaseInvoice>> GetInvoicesAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseInvoice>(connection,
             $"SELECT count(*) FROM purchase.purchase_invoice i LEFT JOIN purchase.supplier s ON s.supplier_id = i.supplier_id {InvoiceFilter}",
             $"{InvoiceSelect} {InvoiceFilter} ORDER BY i.invoice_date DESC, i.purchase_invoice_id DESC",
@@ -375,7 +375,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
 
     public async Task<PurchaseInvoice?> GetInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var invoice = await connection.QuerySingleOrDefaultAsync<PurchaseInvoice>(new CommandDefinition(
             $"{InvoiceSelect} WHERE i.organization_id = @Org AND i.purchase_invoice_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -720,7 +720,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
 
     public async Task<IReadOnlyList<OpenPurchaseInvoice>> GetOpenInvoicesAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<OpenPurchaseInvoice>(new CommandDefinition("""
             SELECT purchase_invoice_id AS Id, invoice_no AS InvoiceNo, invoice_date AS InvoiceDate, due_date AS DueDate,
                    supplier_invoice_no AS SupplierInvoiceNo, currency_lookup_data_id AS CurrencyLookupDataId,
@@ -734,7 +734,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
     public async Task<bool> SupplierInvoiceNoExistsAsync(
         int organizationId, int supplierId, string supplierInvoiceNo, long? excludeId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM purchase.purchase_invoice
                            WHERE organization_id = @Org AND supplier_id = @SupplierId AND status <> 'Cancelled'

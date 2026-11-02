@@ -51,7 +51,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 {
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         return connection;
     }
@@ -137,7 +137,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     public async Task<PagedResult<SalesInvoice>> GetInvoicesAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SalesInvoice>(connection,
             $"SELECT count(*) FROM sales.sales_invoice i LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id {InvoiceFilter}",
             $"{InvoiceSelect} {InvoiceFilter} ORDER BY i.invoice_date DESC, i.sales_invoice_id DESC",
@@ -146,7 +146,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     public async Task<SalesInvoice?> GetInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var invoice = await connection.QuerySingleOrDefaultAsync<SalesInvoice>(new CommandDefinition(
             $"{InvoiceSelect} WHERE i.organization_id = @Org AND i.sales_invoice_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -355,7 +355,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     public async Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
             "SELECT status FROM sales.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -568,7 +568,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     public async Task<IReadOnlyList<OpenSalesInvoice>> GetOpenInvoicesAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<OpenSalesInvoice>(new CommandDefinition("""
             SELECT sales_invoice_id AS Id, invoice_no AS InvoiceNo, invoice_date AS InvoiceDate, due_date AS DueDate,
                    currency_lookup_data_id AS CurrencyLookupDataId, total_amount AS TotalAmount,
@@ -582,7 +582,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     public async Task<IReadOnlyDictionary<string, long>> FindSerialsInStockAsync(
         int organizationId, int productId, int warehouseId, IReadOnlyCollection<string> serialNos, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<(string SerialNo, long Id)>(new CommandDefinition("""
             SELECT serial_no, serial_number_id FROM inventory.serial_number
             WHERE organization_id = @Org AND product_id = @ProductId AND warehouse_id = @WarehouseId AND status = 'InStock'
@@ -623,7 +623,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     public async Task<PagedResult<CustomerReceipt>> GetReceiptsAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<CustomerReceipt>(connection,
             $"SELECT count(*) FROM sales.customer_receipt r JOIN purchase.supplier c ON c.supplier_id = r.customer_id {ReceiptFilter}",
             $"{ReceiptSelect} {ReceiptFilter} ORDER BY r.receipt_date DESC, r.customer_receipt_id DESC",
@@ -632,7 +632,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
     public async Task<CustomerReceipt?> GetReceiptAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var receipt = await connection.QuerySingleOrDefaultAsync<CustomerReceipt>(new CommandDefinition(
             $"{ReceiptSelect} WHERE r.organization_id = @Org AND r.customer_receipt_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));

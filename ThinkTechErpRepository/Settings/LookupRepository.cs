@@ -59,7 +59,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
             Offset = offset
         };
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*) FROM public.lookup_table t {TableFilter};
             {TableSelect} {TableFilter} ORDER BY t.lookup_table_name, t.lookup_table_id LIMIT @Limit OFFSET @Offset;
@@ -71,7 +71,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
 
     public async Task<LookupTable?> GetTableAsync(long lookupTableId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<LookupTable>(new CommandDefinition(
             $"{TableSelect} WHERE t.lookup_table_id = @LookupTableId", new { LookupTableId = lookupTableId },
             cancellationToken: cancellationToken));
@@ -80,7 +80,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<bool> TableNameExistsAsync(
         string name, long? excludeLookupTableId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
                 SELECT 1 FROM public.lookup_table
@@ -92,7 +92,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<long> CreateTableAsync(
         LookupTableUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<long>(new CommandDefinition($"""
             INSERT INTO public.lookup_table (lookup_table_name, is_active, created_at, created_by)
             VALUES (@Name, @IsActive, {SecurityDb.NowUtc}, @UserId)
@@ -103,7 +103,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<bool> UpdateTableAsync(
         long lookupTableId, LookupTableUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public.lookup_table
             SET lookup_table_name = @Name,
@@ -118,7 +118,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<DeleteOutcome> DeleteTableAsync(long lookupTableId, CancellationToken cancellationToken = default)
     {
         // A table that still has values is kept (ON DELETE RESTRICT on lookup_data).
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM public.lookup_table WHERE lookup_table_id = @LookupTableId",
             new { LookupTableId = lookupTableId }, cancellationToken: cancellationToken));
@@ -137,7 +137,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
             Offset = offset
         };
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*) FROM public.lookup_data d {DataFilter};
             {DataSelect} {DataFilter}
@@ -151,7 +151,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
 
     public async Task<LookupData?> GetDataItemAsync(long lookupDataId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<LookupData>(new CommandDefinition(
             $"{DataSelect} WHERE d.lookup_data_id = @LookupDataId", new { LookupDataId = lookupDataId },
             cancellationToken: cancellationToken));
@@ -160,7 +160,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<bool> DataNameExistsAsync(
         long lookupTableId, string name, long? excludeLookupDataId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
                 SELECT 1 FROM public.lookup_data
@@ -174,7 +174,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<long> CreateDataAsync(
         LookupDataUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<long>(new CommandDefinition($"""
             INSERT INTO public.lookup_data (lookup_table_id, lookup_data_name, is_active, created_at, created_by)
             VALUES (@LookupTableId, @Name, @IsActive, {SecurityDb.NowUtc}, @UserId)
@@ -186,7 +186,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<bool> UpdateDataAsync(
         long lookupDataId, LookupDataUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public.lookup_data
             SET lookup_table_id = @LookupTableId,
@@ -202,7 +202,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<DeleteOutcome> DeleteDataAsync(long lookupDataId, CancellationToken cancellationToken = default)
     {
         // A value still referenced elsewhere (e.g. a subscription's currency) is kept.
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM public.lookup_data WHERE lookup_data_id = @LookupDataId",
             new { LookupDataId = lookupDataId }, cancellationToken: cancellationToken));
@@ -211,7 +211,7 @@ public sealed class LookupRepository(IDbConnectionFactory connectionFactory) : I
     public async Task<IReadOnlyList<LookupOption>> GetOptionsAsync(
         string lookupTableName, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<LookupOption>(new CommandDefinition("""
             SELECT d.lookup_data_id AS Id, d.lookup_data_name AS Name
             FROM public.lookup_data d

@@ -38,7 +38,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
             Offset = offset
         };
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*) FROM security.subscription_module m {ModuleFilter};
             {ModuleSelect} {ModuleFilter} ORDER BY m.module_name, m.subscription_module_id LIMIT @Limit OFFSET @Offset;
@@ -50,7 +50,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
 
     public async Task<SubscriptionModule?> GetModuleAsync(int subscriptionModuleId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SubscriptionModule>(new CommandDefinition(
             $"{ModuleSelect} WHERE m.subscription_module_id = @SubscriptionModuleId",
             new { SubscriptionModuleId = subscriptionModuleId }, cancellationToken: cancellationToken));
@@ -59,7 +59,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
     public async Task<bool> NameExistsAsync(
         string moduleName, int? excludeSubscriptionModuleId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
                 SELECT 1 FROM security.subscription_module
@@ -72,7 +72,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
     public async Task<int> CreateModuleAsync(
         SubscriptionModuleUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO security.subscription_module (module_name, is_active, remarks, created_at, created_by)
             VALUES (@ModuleName, @IsActive, @Remarks, {SecurityDb.NowUtc}, @UserId)
@@ -85,7 +85,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
         int subscriptionModuleId, SubscriptionModuleUpsertRequest request, int userId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security.subscription_module
             SET module_name = @ModuleName,
@@ -107,7 +107,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
     public async Task<DeleteOutcome> DeleteModuleAsync(int subscriptionModuleId, CancellationToken cancellationToken = default)
     {
         // A module that organizations subscribe to is kept; deactivate it instead.
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         try
         {
             var deleted = await connection.ExecuteAsync(new CommandDefinition(

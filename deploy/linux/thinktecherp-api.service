@@ -27,8 +27,7 @@ EnvironmentFile=/etc/thinktecherp/api.env
 # named after its configuration key and the app reads it from $CREDENTIALS_DIRECTORY.
 # Remove the same keys from api.env when you switch.
 #LoadCredential=Authentication__Jwt__SigningKey:/etc/thinktecherp/credentials/Authentication__Jwt__SigningKey
-#LoadCredential=ConnectionStrings__Website:/etc/thinktecherp/credentials/ConnectionStrings__Website
-#LoadCredential=ConnectionStrings__Security:/etc/thinktecherp/credentials/ConnectionStrings__Security
+#LoadCredential=ConnectionStrings__ThinkTechErp:/etc/thinktecherp/credentials/ConnectionStrings__ThinkTechErp
 
 NoNewPrivileges=true
 PrivateTmp=true

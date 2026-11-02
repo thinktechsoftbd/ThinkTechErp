@@ -65,7 +65,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     public async Task<PagedResult<Unit>> GetUnitsAsync(
         int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Unit>(connection,
             $"SELECT count(*) FROM inventory.unit u {UnitFilter}",
             $"{UnitSelect} {UnitFilter} ORDER BY u.unit_code, u.unit_id",
@@ -75,7 +75,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<Unit?> GetUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Unit>(new CommandDefinition(
             $"{UnitSelect} WHERE u.organization_id = @Org AND u.unit_id = @Id",
             new { Org = organizationId, Id = unitId }, cancellationToken: cancellationToken));
@@ -83,7 +83,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<int> CreateUnitAsync(int organizationId, UnitUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO inventory.unit (organization_id, unit_code, unit_name, unit_name_local, unit_type, iso_code,
                                         allow_decimal, is_active, created_at, created_by)
@@ -94,7 +94,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<bool> UpdateUnitAsync(int organizationId, int unitId, UnitUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", unitId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -108,7 +108,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<DeleteOutcome> DeleteUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM inventory.unit WHERE organization_id = @Org AND unit_id = @Id",
             new { Org = organizationId, Id = unitId }, cancellationToken: cancellationToken));
@@ -153,7 +153,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         int organizationId, string? search, bool? isActive, int? parentId, int limit, int offset,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Category>(connection,
             $"SELECT count(*) FROM inventory.category c {CategoryFilter}",
             $"{CategoryTree} {CategorySelect} {CategoryFilter} ORDER BY Path, c.sort_order, c.category_id",
@@ -163,7 +163,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<Category?> GetCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Category>(new CommandDefinition(
             $"{CategoryTree} {CategorySelect} WHERE c.organization_id = @Org AND c.category_id = @Id",
             new { Org = organizationId, Id = categoryId }, cancellationToken: cancellationToken));
@@ -171,7 +171,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<IReadOnlyList<int>> GetCategoryTreeIdsAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<int>(new CommandDefinition("""
             WITH RECURSIVE below AS (
                 SELECT category_id, 0 AS depth FROM inventory.category WHERE organization_id = @Org AND category_id = @Id
@@ -185,7 +185,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<int> CreateCategoryAsync(int organizationId, CategoryUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO inventory.category (organization_id, parent_category_id, category_code, category_name,
                                             category_name_local, sort_order, is_active, created_at, created_by)
@@ -196,7 +196,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<bool> UpdateCategoryAsync(int organizationId, int categoryId, CategoryUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", categoryId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -210,7 +210,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<DeleteOutcome> DeleteCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM inventory.category WHERE organization_id = @Org AND category_id = @Id",
             new { Org = organizationId, Id = categoryId }, cancellationToken: cancellationToken));
@@ -233,7 +233,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Brand>(connection,
             $"SELECT count(*) FROM inventory.brand b {BrandFilter}",
             $"{BrandSelect} {BrandFilter} ORDER BY b.brand_name, b.brand_id",
@@ -243,7 +243,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<Brand?> GetBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Brand>(new CommandDefinition(
             $"{BrandSelect} WHERE b.organization_id = @Org AND b.brand_id = @Id",
             new { Org = organizationId, Id = brandId }, cancellationToken: cancellationToken));
@@ -251,7 +251,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<int> CreateBrandAsync(int organizationId, BrandUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO inventory.brand (organization_id, brand_name, brand_name_local, is_active, created_at, created_by)
             VALUES (@Org, @Name, @NameLocal, @IsActive, {SecurityDb.NowUtc}, @UserId)
@@ -261,7 +261,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<bool> UpdateBrandAsync(int organizationId, int brandId, BrandUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", brandId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -274,7 +274,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<DeleteOutcome> DeleteBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM inventory.brand WHERE organization_id = @Org AND brand_id = @Id",
             new { Org = organizationId, Id = brandId }, cancellationToken: cancellationToken));
@@ -303,7 +303,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Warehouse>(connection,
             $"SELECT count(*) FROM inventory.warehouse w {WarehouseFilter}",
             $"{WarehouseSelect} {WarehouseFilter} ORDER BY w.warehouse_name, w.warehouse_id",
@@ -313,7 +313,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<Warehouse?> GetWarehouseAsync(int organizationId, int warehouseId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Warehouse>(new CommandDefinition(
             $"{WarehouseSelect} WHERE w.organization_id = @Org AND w.warehouse_id = @Id",
             new { Org = organizationId, Id = warehouseId }, cancellationToken: cancellationToken));
@@ -321,7 +321,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<int> CreateWarehouseAsync(int organizationId, WarehouseUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO inventory.warehouse (organization_id, warehouse_code, warehouse_name, warehouse_name_local,
                                              warehouse_type, address, phone, is_active, created_at, created_by)
@@ -332,7 +332,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<bool> UpdateWarehouseAsync(int organizationId, int warehouseId, WarehouseUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", warehouseId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -346,7 +346,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<DeleteOutcome> DeleteWarehouseAsync(int organizationId, int warehouseId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         // Empty balance rows (quantity 0, never moved) would block the delete; anything with movements stays.
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition("""
             DELETE FROM inventory.stock_balance b
@@ -360,7 +360,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<InventorySetting> GetSettingAsync(int organizationId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<InventorySetting>(new CommandDefinition("""
             SELECT true AS IsConfigured, s.base_currency_lookup_data_id AS BaseCurrencyLookupDataId,
                    d.lookup_data_name AS BaseCurrency, s.fiscal_year_start_month AS FiscalYearStartMonth,
@@ -396,7 +396,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task SaveSettingAsync(int organizationId, InventorySettingUpdateRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(new CommandDefinition($"""
             INSERT INTO inventory.inventory_setting (organization_id, base_currency_lookup_data_id, fiscal_year_start_month,
                 prices_include_tax, allow_negative_stock, require_approval, expiry_alert_days, default_warehouse_id,
@@ -417,7 +417,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<bool> CurrencyExistsAsync(long lookupDataId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM public.lookup_data d JOIN public.lookup_table t USING (lookup_table_id)
                            WHERE d.lookup_data_id = @Id AND lower(t.lookup_table_name) = 'currency')
@@ -428,7 +428,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     public async Task<InventoryOptions> GetOptionsAsync(int organizationId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = new { Org = organizationId, Pattern = (string?)null, IsActive = (bool?)null, ParentId = (int?)null };
         var units = (await connection.QueryAsync<Unit>(new CommandDefinition(
             $"{UnitSelect} {UnitFilter} ORDER BY u.unit_code", parameters, cancellationToken: cancellationToken))).AsList();
@@ -451,7 +451,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     public async Task<IReadOnlyList<TaxGroupOption>> GetTaxGroupOptionsAsync(
         int organizationId, IReadOnlyCollection<int>? ids, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var groups = (await connection.QueryAsync<TaxGroupOption>(new CommandDefinition("""
             SELECT tax_group_id AS Id, tax_group_name AS Name, is_active AS IsActive
             FROM public.tax_group

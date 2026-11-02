@@ -44,7 +44,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         CancellationToken cancellationToken = default)
     {
         var tableSql = GetQualifiedTable(table);
-        await using var connection = connectionFactory.CreateConnection("Website");
+        await using var connection = connectionFactory.CreateConnection();
         var jsonRows = await connection.QueryAsync<string>(
             new CommandDefinition(
                 $"SELECT to_jsonb(t)::text FROM {tableSql} AS t",
@@ -59,7 +59,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         CancellationToken cancellationToken = default)
     {
         var tableSql = GetQualifiedTable(table);
-        await using var connection = connectionFactory.CreateConnection("Website");
+        await using var connection = connectionFactory.CreateConnection();
         var key = await GetPrimaryKeyAsync(connection, table, cancellationToken);
         var json = await connection.QuerySingleOrDefaultAsync<string>(
             new CommandDefinition(
@@ -76,7 +76,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         CancellationToken cancellationToken = default)
     {
         var tableSql = GetQualifiedTable(table);
-        await using var connection = connectionFactory.CreateConnection("Website");
+        await using var connection = connectionFactory.CreateConnection();
         var columns = await GetValidatedColumnsAsync(connection, table, record, cancellationToken);
         var parameters = new DynamicParameters();
         var parameterNames = new List<string>();
@@ -102,7 +102,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         CancellationToken cancellationToken = default)
     {
         var tableSql = GetQualifiedTable(table);
-        await using var connection = connectionFactory.CreateConnection("Website");
+        await using var connection = connectionFactory.CreateConnection();
         var key = await GetPrimaryKeyAsync(connection, table, cancellationToken);
         var columns = await GetValidatedColumnsAsync(connection, table, record, cancellationToken);
         if (columns.Any(column => string.Equals(column.ColumnName, key, StringComparison.Ordinal)))
@@ -134,7 +134,7 @@ public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : 
         CancellationToken cancellationToken = default)
     {
         var tableSql = GetQualifiedTable(table);
-        await using var connection = connectionFactory.CreateConnection("Website");
+        await using var connection = connectionFactory.CreateConnection();
         var key = await GetPrimaryKeyAsync(connection, table, cancellationToken);
         var affected = await connection.ExecuteAsync(
             new CommandDefinition(

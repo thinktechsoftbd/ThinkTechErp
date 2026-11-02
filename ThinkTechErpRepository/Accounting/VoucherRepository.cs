@@ -73,14 +73,14 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
 
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         return connection;
     }
 
     public async Task<PagedResult<Voucher>> GetVouchersAsync(int organizationId, VoucherQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Voucher>(connection,
             $"SELECT count(*) {VoucherFrom} {VoucherFilter}",
             $"{VoucherSelect} {VoucherFrom} {VoucherFilter} ORDER BY v.voucher_date DESC, v.voucher_id DESC",
@@ -99,7 +99,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<Voucher?> GetVoucherAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var voucher = await connection.QuerySingleOrDefaultAsync<Voucher>(new CommandDefinition(
             $"{VoucherSelect} {VoucherFrom} WHERE v.organization_id = @Org AND v.voucher_id = @Id AND NOT v.is_deleted",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -283,7 +283,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<DeleteOutcome> DeleteVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         // The outer SELECT sees the row as it was before the UPDATE.
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"""
             WITH deleted AS (

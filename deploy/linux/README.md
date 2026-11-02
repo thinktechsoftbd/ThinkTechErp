@@ -12,13 +12,14 @@ Nothing to set up. When `ASPNETCORE_ENVIRONMENT=Development` (the Visual Studio 
 
 To use your own values instead, set them in Visual Studio with **Manage User Secrets**
 on the API project, or as environment variables (`Authentication__Jwt__SigningKey`,
-`ConnectionStrings__Security`, ...). Those take precedence over the defaults above.
+`ConnectionStrings__ThinkTechErp`, ...). Those take precedence over the defaults above.
 
 ## Production (Ubuntu VPS)
 
 In Production nothing is generated or defaulted: the API refuses to start unless the
-signing key and both connection strings (`Website`, `Security`)
-are supplied. They come from either an environment file or systemd credentials.
+signing key and the `ThinkTechErp` connection string are supplied. They come from
+either an environment file or systemd credentials. One connection string covers every
+schema, because all SQL names its schema (`security.users`, `sales.sales_invoice`, ...).
 
 ### 1. Install the runtime
 
@@ -65,7 +66,7 @@ the `LoadCredential=` lines in `thinktecherp-api.service` and remove those keys 
 sudo mkdir -p /etc/thinktecherp/credentials
 sudo chmod 700 /etc/thinktecherp/credentials
 openssl rand -base64 48 | tr -d '\n' | sudo tee /etc/thinktecherp/credentials/Authentication__Jwt__SigningKey > /dev/null
-printf '%s' 'Host=127.0.0.1;...;Search Path=security' | sudo tee /etc/thinktecherp/credentials/ConnectionStrings__Security > /dev/null
+printf '%s' 'Host=127.0.0.1;...' | sudo tee /etc/thinktecherp/credentials/ConnectionStrings__ThinkTechErp > /dev/null
 sudo chmod 600 /etc/thinktecherp/credentials/*
 ```
 

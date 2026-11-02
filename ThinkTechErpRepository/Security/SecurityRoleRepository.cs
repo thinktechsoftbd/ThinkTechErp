@@ -27,7 +27,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
 
     public async Task<IReadOnlyList<SecurityRole>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {RoleSelect} ORDER BY r.name;
             {RolePermissionSelect} ORDER BY p.code;
@@ -39,7 +39,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
 
     public async Task<SecurityRole?> GetRoleAsync(int roleId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {RoleSelect} WHERE r.id = @RoleId;
             {RolePermissionSelect} WHERE rp."roleId" = @RoleId ORDER BY p.code;
@@ -53,7 +53,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
 
     public async Task<bool> NameExistsAsync(string name, int? excludeRoleId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
                 SELECT 1 FROM security."Role"
@@ -64,7 +64,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
 
     public async Task<int> CreateRoleAsync(RoleUpsertRequest request, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var roleId = await connection.QuerySingleAsync<int>(new CommandDefinition("""
@@ -79,7 +79,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
 
     public async Task<bool> UpdateRoleAsync(int roleId, RoleUpsertRequest request, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var updated = await connection.ExecuteAsync(new CommandDefinition("""
@@ -101,7 +101,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
     public async Task<DeleteOutcome> DeleteRoleAsync(int roleId, CancellationToken cancellationToken = default)
     {
         // A role still assigned to users is kept: deleting it would silently strip their access.
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var deleted = await connection.ExecuteAsync(new CommandDefinition("""
             DELETE FROM security."Role"
             WHERE id = @RoleId

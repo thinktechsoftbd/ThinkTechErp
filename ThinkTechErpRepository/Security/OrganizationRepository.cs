@@ -36,7 +36,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
 
     public async Task<IReadOnlyList<Organization>> GetOrganizationsAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<Organization>(new CommandDefinition(
             $"{OrganizationSelect} ORDER BY organization_name_en, organization_id", cancellationToken: cancellationToken));
         return rows.AsList();
@@ -44,7 +44,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
 
     public async Task<Organization?> GetOrganizationAsync(int organizationId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Organization>(new CommandDefinition(
             $"{OrganizationSelect} WHERE organization_id = @OrganizationId", new { OrganizationId = organizationId },
             cancellationToken: cancellationToken));
@@ -52,7 +52,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
 
     public async Task<Organization?> GetOrganizationByObjectIdAsync(Guid objectId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Organization>(new CommandDefinition(
             $"{OrganizationSelect} WHERE object_id = @ObjectId", new { ObjectId = objectId },
             cancellationToken: cancellationToken));
@@ -64,7 +64,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
         var parameters = new DynamicParameters(request);
         parameters.Add("UserId", createdBy);
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO security.organization (
                 object_id, organization_name_en, organization_name_bn, slogan, organization_code, email, phone, website,
@@ -85,7 +85,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
         parameters.Add("OrganizationId", organizationId);
         parameters.Add("UserId", updatedBy);
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security.organization
             SET object_id = COALESCE(@ObjectId, object_id),

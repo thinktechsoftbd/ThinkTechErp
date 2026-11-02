@@ -27,7 +27,7 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
     public async Task<SubsidiaryLedger?> GetSubsidiaryLedgerAsync(
         int organizationId, int accountId, int? partyId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = new { Org = organizationId, AccountId = accountId, PartyId = partyId, From = from, To = to };
         var ledger = await connection.QuerySingleOrDefaultAsync<SubsidiaryLedger>(new CommandDefinition($"""
             SELECT h.acc_sub_class_id AS AccountId, coalesce(h.sub_code, '') AS AccountCode,
@@ -79,7 +79,7 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
     public async Task<IReadOnlyList<AccountBalanceRow>> GetBalancesAsync(
         int organizationId, DateOnly from, DateOnly to, bool includeZero, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<AccountBalanceRow>(new CommandDefinition("""
             SELECT h.acc_sub_class_id AS AccountId, coalesce(h.sub_code, '') AS Code, coalesce(h.sub_name, '') AS Name,
                    coalesce(h.nature, '') AS Nature,
@@ -111,7 +111,7 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
 
     public async Task<decimal> GetNetProfitAsync(int organizationId, DateOnly asOf, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<decimal>(new CommandDefinition("""
             SELECT coalesce(sum(e.credit_amount - e.debit_amount), 0)
             FROM accounting.ledger_entry e
@@ -123,7 +123,7 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
     public async Task<decimal> GetPartyBalanceAsync(
         int organizationId, int accountId, int partyId, DateOnly asOf, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<decimal>(new CommandDefinition($"""
             SELECT coalesce(sum(e.debit_amount - e.credit_amount), 0)
             FROM accounting.ledger_entry e

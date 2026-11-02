@@ -10,7 +10,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
     public async Task<DateTime> CreateRefreshTokenAsync(
         int userId, string tokenHash, TimeSpan lifetime, string? createdByIp, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
 
         // Keep the table small. Revoked tokens stay until they expire so a stolen, already
@@ -24,7 +24,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
 
     public async Task<RefreshTokenRecord?> GetRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<RefreshTokenRecord>(new CommandDefinition($"""
             SELECT id AS Id,
                    user_id AS UserId,
@@ -40,7 +40,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
     public async Task<DateTime?> RotateRefreshTokenAsync(
         int tokenId, string newTokenHash, TimeSpan lifetime, string? createdByIp, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var userId = await connection.QuerySingleOrDefaultAsync<int?>(new CommandDefinition($"""
@@ -60,7 +60,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
 
     public async Task RevokeRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security.refresh_token
             SET revoked_at = {SecurityDb.NowUtc}
@@ -70,7 +70,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
 
     public async Task RevokeAllRefreshTokensAsync(int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security.refresh_token
             SET revoked_at = {SecurityDb.NowUtc}
@@ -81,7 +81,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
     public async Task CreatePasswordResetTokenAsync(
         int userId, string tokenHash, TimeSpan lifetime, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition($"""
@@ -98,7 +98,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
     public async Task<int?> ResetPasswordAsync(
         string tokenHash, string newPasswordHash, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var userId = await connection.QuerySingleOrDefaultAsync<int?>(new CommandDefinition($"""

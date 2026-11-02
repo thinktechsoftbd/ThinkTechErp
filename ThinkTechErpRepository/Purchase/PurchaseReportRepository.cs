@@ -34,7 +34,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
     public async Task<SupplierLedger?> GetSupplierLedgerAsync(
         int organizationId, int supplierId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var ledger = await connection.QuerySingleOrDefaultAsync<SupplierLedger>(new CommandDefinition("""
             SELECT s.supplier_id AS SupplierId, s.supplier_code AS SupplierCode, s.supplier_name AS SupplierName,
                    coalesce((SELECT sum(l.credit_amount - l.debit_amount) FROM purchase.supplier_ledger l
@@ -109,7 +109,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
             ),
             filtered AS (SELECT * FROM report WHERE NOT @OnlyWithBalance OR Balance <> 0 OR OpenInvoiceCount > 0)
             """;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(Balance), 0), coalesce(sum(Days1To30 + Days31To60 + Days61To90 + Over90), 0) FROM filtered;
             {rows} SELECT * FROM filtered ORDER BY Balance DESC, SupplierName LIMIT @Limit OFFSET @Offset;
@@ -148,7 +148,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
             query.Limit,
             query.Offset
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*),
                    coalesce(round(sum(i.subtotal_amount * i.exchange_rate), 4), 0),
@@ -218,7 +218,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
             query.Limit,
             query.Offset
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(NetAmount), 0), coalesce(sum(TaxAmount), 0) FROM report;
             {rows} SELECT * FROM report ORDER BY NetAmount DESC, ProductName LIMIT @Limit OFFSET @Offset;

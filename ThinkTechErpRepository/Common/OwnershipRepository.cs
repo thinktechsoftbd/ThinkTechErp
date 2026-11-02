@@ -23,7 +23,7 @@ public sealed class OwnershipRepository(IDbConnectionFactory connectionFactory) 
         var list = ids.ToList();
         if (list.All(id => id is null))
             return;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await OrganizationGuard.EnsureAsync(connection, null, organizationId, entity, list, cancellationToken);
     }
@@ -36,7 +36,7 @@ public sealed class OwnershipRepository(IDbConnectionFactory connectionFactory) 
         var list = pairs.Distinct().ToList();
         if (list.Count == 0)
             return true;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var found = await connection.QuerySingleAsync<int>(new CommandDefinition("""
             SELECT count(*)::int FROM inventory.batch b
             JOIN unnest(@BatchIds, @ProductIds) AS x(batch_id, product_id) ON x.batch_id = b.batch_id AND x.product_id = b.product_id

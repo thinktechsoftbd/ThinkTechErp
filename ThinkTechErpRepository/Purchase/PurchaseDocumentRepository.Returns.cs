@@ -47,7 +47,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<PagedResult<PurchaseReturn>> GetReturnsAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseReturn>(connection,
             $"SELECT count(*) FROM purchase.purchase_return r LEFT JOIN purchase.supplier s ON s.supplier_id = r.supplier_id {ReturnFilter}",
             $"{ReturnSelect} {ReturnFilter} ORDER BY r.return_date DESC, r.purchase_return_id DESC",
@@ -56,7 +56,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<PurchaseReturn?> GetReturnAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var purchaseReturn = await connection.QuerySingleOrDefaultAsync<PurchaseReturn>(new CommandDefinition(
             $"{ReturnSelect} WHERE r.organization_id = @Org AND r.purchase_return_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -348,7 +348,7 @@ public sealed partial class PurchaseDocumentRepository
     public async Task<IReadOnlyDictionary<string, long>> FindSerialsInStockAsync(
         int organizationId, int productId, int warehouseId, IReadOnlyCollection<string> serialNos, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<(string SerialNo, long Id)>(new CommandDefinition("""
             SELECT serial_no, serial_number_id FROM inventory.serial_number
             WHERE organization_id = @Org AND product_id = @ProductId AND warehouse_id = @WarehouseId AND status = 'InStock'
@@ -388,7 +388,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<PagedResult<SupplierPayment>> GetPaymentsAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SupplierPayment>(connection,
             $"SELECT count(*) FROM purchase.supplier_payment p JOIN purchase.supplier s ON s.supplier_id = p.supplier_id {PaymentFilter}",
             $"{PaymentSelect} {PaymentFilter} ORDER BY p.payment_date DESC, p.supplier_payment_id DESC",
@@ -397,7 +397,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<SupplierPayment?> GetPaymentAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var payment = await connection.QuerySingleOrDefaultAsync<SupplierPayment>(new CommandDefinition(
             $"{PaymentSelect} WHERE p.organization_id = @Org AND p.supplier_payment_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));

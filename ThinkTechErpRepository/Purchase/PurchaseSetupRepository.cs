@@ -75,7 +75,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
     public async Task<PagedResult<Supplier>> GetSuppliersAsync(
         int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Supplier>(connection,
             $"SELECT count(*) FROM purchase.supplier s {SupplierFilter}",
             $"{SupplierSelect} {SupplierFilter} ORDER BY s.supplier_name, s.supplier_id",
@@ -85,7 +85,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<Supplier?> GetSupplierAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Supplier>(new CommandDefinition(
             $"{SupplierSelect} WHERE s.organization_id = @Org AND s.supplier_id = @Id AND s.is_supplier",
             new { Org = organizationId, Id = supplierId }, cancellationToken: cancellationToken));
@@ -94,7 +94,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
     public async Task<IReadOnlyList<SupplierOption>> GetSupplierOptionsAsync(
         int organizationId, string? search, int limit, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<SupplierOption>(new CommandDefinition($"""
             SELECT s.supplier_id AS Id, s.supplier_code AS Code, s.supplier_name AS Name, s.mobile AS Mobile,
                    s.payment_terms_days AS PaymentTermsDays, s.currency_lookup_data_id AS CurrencyLookupDataId,
@@ -111,7 +111,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<int> CreateSupplierAsync(int organizationId, SupplierUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO purchase.supplier (
                 organization_id, supplier_code, supplier_name, supplier_name_local, supplier_group_lookup_data_id,
@@ -133,7 +133,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<bool> UpdateSupplierAsync(int organizationId, int supplierId, SupplierUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", supplierId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -156,7 +156,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<DeleteOutcome> DeleteSupplierAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = new { Org = organizationId, Id = supplierId };
         // A party that is also a customer stays for the sales side; it only stops being a supplier.
         if (await connection.ExecuteAsync(new CommandDefinition("""
@@ -171,7 +171,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<bool> SupplierCodeExistsAsync(int organizationId, string code, int? excludeId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM purchase.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code)
                            AND (CAST(@ExcludeId AS int) IS NULL OR supplier_id <> @ExcludeId))
@@ -180,7 +180,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<bool> LookupValueExistsAsync(long lookupDataId, string lookupTableName, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM public.lookup_data d JOIN public.lookup_table t USING (lookup_table_id)
                            WHERE d.lookup_data_id = @Id AND lower(t.lookup_table_name) = lower(@Table))
@@ -205,7 +205,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<PagedResult<TaxRate>> GetTaxRatesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<TaxRate>(connection,
             $"SELECT count(*) FROM public.tax_rate r {TaxRateFilter}",
             $"{TaxRateSelect} {TaxRateFilter} ORDER BY r.tax_type, r.rate_percent, r.tax_code",
@@ -215,7 +215,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<TaxRate?> GetTaxRateAsync(int organizationId, int taxRateId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<TaxRate>(new CommandDefinition(
             $"{TaxRateSelect} WHERE r.organization_id = @Org AND r.tax_rate_id = @Id",
             new { Org = organizationId, Id = taxRateId }, cancellationToken: cancellationToken));
@@ -223,7 +223,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<int> CreateTaxRateAsync(int organizationId, TaxRateUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO public.tax_rate (organization_id, tax_code, tax_name, tax_type, rate_percent, is_recoverable,
                                          is_active, created_at, created_by)
@@ -234,7 +234,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<bool> UpdateTaxRateAsync(int organizationId, int taxRateId, TaxRateUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", taxRateId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -247,7 +247,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<DeleteOutcome> DeleteTaxRateAsync(int organizationId, int taxRateId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM public.tax_rate WHERE organization_id = @Org AND tax_rate_id = @Id",
             new { Org = organizationId, Id = taxRateId }, cancellationToken: cancellationToken));
@@ -255,7 +255,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<int> CountTaxRatesAsync(int organizationId, IReadOnlyCollection<int> taxRateIds, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition(
             "SELECT count(*)::int FROM public.tax_rate WHERE organization_id = @Org AND tax_rate_id = ANY(@Ids)",
             new { Org = organizationId, Ids = taxRateIds.Distinct().ToArray() }, cancellationToken: cancellationToken));
@@ -277,7 +277,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<PagedResult<TaxGroup>> GetTaxGroupsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var page = await RepositoryHelpers.PagedAsync<TaxGroup>(connection,
             $"SELECT count(*) FROM public.tax_group g {TaxGroupFilter}",
             $"{TaxGroupSelect} {TaxGroupFilter} ORDER BY g.tax_group_name, g.tax_group_id",
@@ -289,7 +289,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<TaxGroup?> GetTaxGroupAsync(int organizationId, int taxGroupId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var group = await connection.QuerySingleOrDefaultAsync<TaxGroup>(new CommandDefinition(
             $"{TaxGroupSelect} WHERE g.organization_id = @Org AND g.tax_group_id = @Id",
             new { Org = organizationId, Id = taxGroupId }, cancellationToken: cancellationToken));
@@ -318,7 +318,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<int> CreateTaxGroupAsync(int organizationId, TaxGroupUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var id = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
@@ -334,7 +334,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<bool> UpdateTaxGroupAsync(int organizationId, int taxGroupId, TaxGroupUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
@@ -372,7 +372,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
 
     public async Task<DeleteOutcome> DeleteTaxGroupAsync(int organizationId, int taxGroupId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM public.tax_group WHERE organization_id = @Org AND tax_group_id = @Id",
             new { Org = organizationId, Id = taxGroupId }, cancellationToken: cancellationToken));

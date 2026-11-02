@@ -43,7 +43,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<PagedResult<PurchaseOrder>> GetOrdersAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseOrder>(connection,
             $"SELECT count(*) FROM purchase.purchase_order o JOIN purchase.supplier s ON s.supplier_id = o.supplier_id {OrderFilter}",
             $"{OrderSelect} {OrderFilter} ORDER BY o.order_date DESC, o.purchase_order_id DESC",
@@ -52,7 +52,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<PurchaseOrder?> GetOrderAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var order = await connection.QuerySingleOrDefaultAsync<PurchaseOrder>(new CommandDefinition(
             $"{OrderSelect} WHERE o.organization_id = @Org AND o.purchase_order_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -243,7 +243,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<PagedResult<GoodsReceipt>> GetReceiptsAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<GoodsReceipt>(connection,
             $"SELECT count(*) FROM purchase.goods_receipt g LEFT JOIN purchase.supplier s ON s.supplier_id = g.supplier_id {ReceiptFilter}",
             $"{ReceiptSelect} {ReceiptFilter} ORDER BY g.receipt_date DESC, g.goods_receipt_id DESC",
@@ -252,7 +252,7 @@ public sealed partial class PurchaseDocumentRepository
 
     public async Task<GoodsReceipt?> GetReceiptAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var receipt = await connection.QuerySingleOrDefaultAsync<GoodsReceipt>(new CommandDefinition(
             $"{ReceiptSelect} WHERE g.organization_id = @Org AND g.goods_receipt_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));

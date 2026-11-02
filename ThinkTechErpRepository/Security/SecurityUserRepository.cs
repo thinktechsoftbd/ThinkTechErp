@@ -53,7 +53,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         string email, CancellationToken cancellationToken = default)
     {
         // Emails match regardless of case; an exact match wins if two accounts differ only by case.
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<SecurityUserCredentials>(new CommandDefinition(
             $"{CredentialsSelect} WHERE lower(email) = lower(@Email) ORDER BY (email = @Email) DESC, id LIMIT 1",
             new { Email = email }, cancellationToken: cancellationToken));
@@ -62,14 +62,14 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<SecurityUserCredentials?> GetCredentialsByIdAsync(
         int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SecurityUserCredentials>(new CommandDefinition(
             $"{CredentialsSelect} WHERE id = @UserId", new { UserId = userId }, cancellationToken: cancellationToken));
     }
 
     public async Task<UserAccess> GetAccessAsync(int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT r.name
             FROM security."UserRole" ur
@@ -90,7 +90,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     {
         // A per-user UserMenu row decides visibility when present; otherwise the menu is shown
         // when it has no role or the user holds that role.
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<MenuNode>(new CommandDefinition("""
             SELECT m.id AS Id,
                    m.title AS Title,
@@ -117,7 +117,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<bool> UpdatePasswordHashAsync(
         int userId, string passwordHash, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security."User"
             SET "passwordHash" = @PasswordHash, "updatedAt" = {SecurityDb.NowUtc}
@@ -136,7 +136,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
             Offset = offset
         };
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         long totalCount;
         List<SecurityUser> users;
         using (var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
@@ -154,7 +154,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
 
     public async Task<SecurityUser?> GetUserAsync(int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var user = await connection.QuerySingleOrDefaultAsync<SecurityUser>(new CommandDefinition(
             $"{UserSelect} WHERE u.id = @UserId", new { UserId = userId }, cancellationToken: cancellationToken));
         if (user is not null)
@@ -166,7 +166,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<bool> EmailExistsAsync(
         string email, int? excludeUserId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
                 SELECT 1 FROM security."User"
@@ -178,7 +178,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<int> CreateUserAsync(
         UserCreateRequest request, string passwordHash, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var userId = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
@@ -196,7 +196,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<bool> UpdateUserAsync(
         int userId, UserUpdateRequest request, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
@@ -222,7 +222,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<UserPermissionSet?> GetUserPermissionsAsync(
         int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT EXISTS (SELECT 1 FROM security."User" WHERE id = @UserId);
             SELECT p.id AS Id, p.code AS Code, p.name AS Name, p.description AS Description
@@ -245,7 +245,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<bool> SetUserPermissionsAsync(
         int userId, int[] permissionIds, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         if (!await UserExistsAsync(connection, transaction, userId, cancellationToken))
@@ -264,7 +264,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<IReadOnlyList<UserMenuAccess>?> GetUserMenusAsync(
         int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM security."User" WHERE id = @UserId);
             SELECT um."menuId" AS MenuId,
@@ -288,7 +288,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     public async Task<bool> SetUserMenusAsync(
         int userId, UserMenuAccessItem[] menus, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         if (!await UserExistsAsync(connection, transaction, userId, cancellationToken))

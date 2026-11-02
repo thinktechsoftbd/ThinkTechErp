@@ -22,7 +22,7 @@ public sealed class UserOrganizationRepository(IDbConnectionFactory connectionFa
     public async Task<IReadOnlyList<UserOrganization>> GetAccessibleAsync(
         int userId, bool includeAll, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<UserOrganization>(new CommandDefinition("""
             SELECT o.organization_id AS OrganizationId,
                    o.organization_name_en AS Name,
@@ -39,7 +39,7 @@ public sealed class UserOrganizationRepository(IDbConnectionFactory connectionFa
 
     public async Task<IReadOnlyList<UserOrganization>> GetLinkedAsync(int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<UserOrganization>(new CommandDefinition("""
             SELECT o.organization_id AS OrganizationId, o.organization_name_en AS Name, o.organization_code AS Code,
                    uo.is_default AS IsDefault, true AS IsLinked
@@ -53,7 +53,7 @@ public sealed class UserOrganizationRepository(IDbConnectionFactory connectionFa
 
     public async Task<bool> UserExistsAsync(int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
             """SELECT EXISTS (SELECT 1 FROM security."User" WHERE id = @UserId)""", new { UserId = userId },
             cancellationToken: cancellationToken));
@@ -63,7 +63,7 @@ public sealed class UserOrganizationRepository(IDbConnectionFactory connectionFa
         int userId, IReadOnlyCollection<int> organizationIds, int? defaultOrganizationId, int actingUserId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(

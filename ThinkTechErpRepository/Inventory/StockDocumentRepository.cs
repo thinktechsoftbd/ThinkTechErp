@@ -117,7 +117,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     public async Task<PagedResult<StockAdjustment>> GetAdjustmentsAsync(int organizationId, StockDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockAdjustment>(connection,
             $"SELECT count(*) FROM inventory.stock_adjustment a {AdjustmentFilter}",
             $"{AdjustmentSelect} {AdjustmentFilter} ORDER BY a.adjustment_date DESC, a.stock_adjustment_id DESC",
@@ -135,7 +135,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     public async Task<StockAdjustment?> GetAdjustmentAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var adjustment = await connection.QuerySingleOrDefaultAsync<StockAdjustment>(new CommandDefinition(
             $"{AdjustmentSelect} WHERE a.organization_id = @Org AND a.stock_adjustment_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -380,7 +380,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     public async Task<PagedResult<StockTransfer>> GetTransfersAsync(int organizationId, StockDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockTransfer>(connection,
             $"SELECT count(*) FROM inventory.stock_transfer t {TransferFilter}",
             $"{TransferSelect} {TransferFilter} ORDER BY t.transfer_date DESC, t.stock_transfer_id DESC",
@@ -389,7 +389,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     public async Task<StockTransfer?> GetTransferAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var transfer = await connection.QuerySingleOrDefaultAsync<StockTransfer>(new CommandDefinition(
             $"{TransferSelect} WHERE t.organization_id = @Org AND t.stock_transfer_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -658,7 +658,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     public async Task<PagedResult<StockCount>> GetCountsAsync(int organizationId, StockDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockCount>(connection,
             $"SELECT count(*) FROM inventory.stock_count c {CountFilter}",
             $"{CountSelect} {CountFilter} ORDER BY c.count_date DESC, c.stock_count_id DESC",
@@ -667,7 +667,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     public async Task<StockCount?> GetCountAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var count = await connection.QuerySingleOrDefaultAsync<StockCount>(new CommandDefinition(
             $"{CountSelect} WHERE c.organization_id = @Org AND c.stock_count_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -842,7 +842,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         return connection;
     }
@@ -870,7 +870,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
     private async Task<DeleteOutcome> DeleteDraftAsync(string table, string key, int organizationId, long id, CancellationToken cancellationToken)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
             $"SELECT status FROM {table} WHERE organization_id = @Org AND {key} = @Id", new { Org = organizationId, Id = id },
             cancellationToken: cancellationToken));

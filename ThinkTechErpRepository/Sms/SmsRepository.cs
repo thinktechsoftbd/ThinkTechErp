@@ -46,7 +46,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 {
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         return connection;
     }
@@ -72,7 +72,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<IReadOnlyList<SmsProvider>> GetProvidersAsync(bool? isActive, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<SmsProvider>(new CommandDefinition($"""
             {ProviderSelect}
             WHERE CAST(@IsActive AS boolean) IS NULL OR p.is_active = @IsActive
@@ -82,14 +82,14 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<SmsProvider?> GetProviderAsync(int id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SmsProvider>(new CommandDefinition(
             $"{ProviderSelect} WHERE p.sms_provider_id = @Id", new { Id = id }, cancellationToken: cancellationToken));
     }
 
     public async Task<int> CreateProviderAsync(SmsProviderUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO sms.sms_provider (provider_name, provider_code, api_base_url, api_username, api_password, api_key,
                                           is_active, created_at, created_by)
@@ -111,7 +111,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     public async Task<bool> UpdateProviderAsync(
         int id, SmsProviderUpsertRequest request, bool clearPassword, bool clearKey, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         // A secret not sent keeps its stored value; one sent empty is removed.
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE sms.sms_provider
@@ -138,7 +138,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<DeleteOutcome> DeleteProviderAsync(int id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM sms.sms_provider WHERE sms_provider_id = @Id", new { Id = id }, cancellationToken: cancellationToken));
     }
@@ -209,7 +209,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<PagedResult<SmsPurchase>> GetPurchasesAsync(SmsListQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SmsPurchase>(connection,
             $"SELECT count(*) FROM sms.sms_purchase s JOIN sms.sms_provider p ON p.sms_provider_id = s.sms_provider_id {PurchaseFilter}",
             $"{PurchaseSelect} {PurchaseFilter} ORDER BY s.purchase_date DESC, s.sms_purchase_id DESC",
@@ -218,7 +218,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<SmsPurchase?> GetPurchaseAsync(long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SmsPurchase>(new CommandDefinition(
             $"{PurchaseSelect} WHERE s.sms_purchase_id = @Id", new { Id = id }, cancellationToken: cancellationToken));
     }
@@ -325,7 +325,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<PagedResult<SmsAllocation>> GetAllocationsAsync(SmsListQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SmsAllocation>(connection, $"""
             SELECT count(*) FROM sms.sms_allocation a
             JOIN sms.sms_provider p ON p.sms_provider_id = a.sms_provider_id
@@ -338,7 +338,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<SmsAllocation?> GetAllocationAsync(long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SmsAllocation>(new CommandDefinition(
             $"{AllocationSelect} WHERE a.sms_allocation_id = @Id", new { Id = id }, cancellationToken: cancellationToken));
     }
@@ -512,7 +512,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     public async Task<PagedResult<SmsOrganizationBalance>> GetOrganizationBalancesAsync(
         string? search, bool onlyAllocated, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SmsOrganizationBalance>(connection, $"""
             SELECT count(*) FROM security.organization o
             LEFT JOIN (SELECT organization_id, sum(allocated_sms)::bigint AS allocated FROM sms.sms_allocation GROUP BY organization_id) a
@@ -525,7 +525,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<SmsOrganizationBalance?> GetOrganizationBalanceAsync(Guid objectId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SmsOrganizationBalance>(new CommandDefinition(
             $"{BalanceRows} WHERE o.object_id = @ObjectId", new { ObjectId = objectId }, cancellationToken: cancellationToken));
     }
@@ -566,7 +566,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<bool> IsOrganizationCreatedByAsync(Guid objectId, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
             "SELECT EXISTS (SELECT 1 FROM security.organization WHERE object_id = @ObjectId AND created_by = @UserId)",
             new { ObjectId = objectId, UserId = userId }, cancellationToken: cancellationToken));
@@ -578,7 +578,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<SmsOverview> GetOverviewAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var providers = (await connection.QueryAsync<SmsProvider>(new CommandDefinition(
             $"{ProviderSelect} ORDER BY p.is_active DESC, p.provider_name", cancellationToken: cancellationToken))).AsList();
         var totals = await connection.QuerySingleAsync<(long Used, int Organizations, decimal Spend)>(new CommandDefinition("""
@@ -614,7 +614,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     public async Task<string?> GetCurrencyCodeAsync(int currencyId, string currencyLookupTable, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition("""
             SELECT d.lookup_data_name FROM public.lookup_data d JOIN public.lookup_table t USING (lookup_table_id)
             WHERE d.lookup_data_id = @Id AND lower(t.lookup_table_name) = lower(@Table)

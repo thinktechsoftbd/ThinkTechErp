@@ -32,7 +32,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
     public async Task<IReadOnlyList<LedgerHeadOption>> GetLedgerHeadsAsync(
         string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<LedgerHeadOption>(new CommandDefinition("""
             SELECT h.acc_sub_class_id AS Id, coalesce(h.sub_code, '') AS Code, coalesce(h.sub_name, '') AS Name,
                    coalesce(h.nature, '') AS Nature, concat_ws('/', h.map_name, h.main_name, h.class_name, h.parent_name) AS Path
@@ -57,7 +57,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
             FROM accounting.ledger_head h
             WHERE CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern
             """;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<LedgerHeadOption>(connection,
             $"SELECT count(*) {filter}",
             $"""
@@ -83,7 +83,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
             PartyType.Customer => "AND p.is_customer",
             _ => ""
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<PartyOption>(new CommandDefinition($"""
             SELECT p.supplier_id AS Id, p.supplier_code AS Code, p.supplier_name AS Name, p.mobile AS Mobile,
                    p.is_supplier AS IsSupplier, p.is_customer AS IsCustomer, p.is_active AS IsActive
@@ -100,7 +100,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
 
     public async Task<IReadOnlyList<LookupValueOption>> GetLookupValuesAsync(string lookupTable, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<LookupValueOption>(new CommandDefinition("""
             SELECT d.lookup_data_id AS Id, d.lookup_data_name AS Name, d.is_active AS IsActive
             FROM public.lookup_data d

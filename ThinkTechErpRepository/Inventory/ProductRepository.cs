@@ -102,7 +102,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<PagedResult<Product>> GetProductsAsync(int organizationId, ProductQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Product>(connection,
             $"SELECT count(*) FROM inventory.product p {ProductFilter}",
             $"{ProductSelect} {ProductFilter} ORDER BY p.product_name, p.product_id",
@@ -120,7 +120,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<Product?> GetProductAsync(int organizationId, int productId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var product = await connection.QuerySingleOrDefaultAsync<Product>(new CommandDefinition(
             $"{ProductSelect} WHERE p.organization_id = @Org AND p.product_id = @Id",
             new { Org = organizationId, Id = productId }, cancellationToken: cancellationToken));
@@ -154,7 +154,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<int> CreateProductAsync(int organizationId, ProductUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var productId = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
@@ -177,7 +177,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<bool> UpdateProductAsync(int organizationId, int productId, ProductUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var parameters = ProductParams(organizationId, request, userId);
@@ -256,7 +256,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<DeleteOutcome> DeleteProductAsync(int organizationId, int productId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         // Empty balance rows of a product that never moved don't count as use.
@@ -275,7 +275,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
     public async Task<bool> HasMovementsAsync(int productId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
             "SELECT EXISTS (SELECT 1 FROM inventory.stock_movement WHERE product_id = @Id)",
             new { Id = productId }, cancellationToken: cancellationToken));
@@ -301,7 +301,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
     public async Task<IReadOnlyList<ProductLookupItem>> SearchAsync(
         int organizationId, string? search, bool stockOnly, int? warehouseId, int limit, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var items = (await connection.QueryAsync<ProductLookupItem>(new CommandDefinition($"""
             {LookupSelect}
             WHERE p.organization_id = @Org AND p.is_active
@@ -333,7 +333,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         if (ids.Length == 0)
             return new Dictionary<int, ProductLookupItem>();
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var items = (await connection.QueryAsync<ProductLookupItem>(new CommandDefinition(
             $"{LookupSelect} WHERE p.organization_id = @Org AND p.product_id = ANY(@Ids)",
             new { Org = organizationId, Ids = ids, Search = (string?)null, WarehouseId = (int?)null },
@@ -354,7 +354,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
     public async Task<IReadOnlyList<BatchStockItem>> GetBatchStockAsync(
         int organizationId, int productId, int warehouseId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<BatchStockItem>(new CommandDefinition("""
             SELECT b.batch_id AS BatchId, b.batch_no AS BatchNo, b.manufacture_date AS ManufactureDate,
                    b.expiry_date AS ExpiryDate, sb.quantity AS Quantity, sb.average_cost AS AverageCost
@@ -370,7 +370,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
     public async Task<IReadOnlyList<SerialStockItem>> GetSerialStockAsync(
         int organizationId, int productId, int warehouseId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<SerialStockItem>(new CommandDefinition("""
             SELECT serial_number_id AS SerialNumberId, serial_no AS SerialNo, batch_id AS BatchId
             FROM inventory.serial_number

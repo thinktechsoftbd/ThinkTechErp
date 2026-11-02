@@ -59,7 +59,7 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
 
     public async Task<IReadOnlyList<AccountClassNode>> GetTreeAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition("""
             SELECT acc_ac_parent_class_id AS Id, 0 AS ParentId, parent_code AS Code, name AS Name
             FROM accounting.acc_ac_parent_class ORDER BY parent_code, acc_ac_parent_class_id;
@@ -112,7 +112,7 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
 
     public async Task<AccountClassNode?> CreateAsync(string kind, int parentId, string name, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var node = kind switch
@@ -233,7 +233,7 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
     public async Task<AccountClassNode?> RenameAsync(string kind, int id, string name, CancellationToken cancellationToken = default)
     {
         var level = Levels[kind];
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var row = await connection.QuerySingleOrDefaultAsync<Row>(new CommandDefinition($"""
             UPDATE {level.Table} SET {level.Name} = @Name WHERE {level.Key} = @Id
             RETURNING {level.Key} AS Id, {level.Code} AS Code, {level.Name} AS Name
@@ -246,7 +246,7 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
         var level = Levels[kind];
         if (level.ChildTable is null)
             return false;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
             $"SELECT EXISTS (SELECT 1 FROM {level.ChildTable} WHERE {level.ChildKey} = @Id)",
             new { Id = id }, cancellationToken: cancellationToken));
@@ -255,7 +255,7 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
     public async Task<DeleteOutcome> DeleteAsync(string kind, int id, CancellationToken cancellationToken = default)
     {
         var level = Levels[kind];
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         // A voucher line still pointing at it (acc_voucher_detail → main class) answers InUse.
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             $"DELETE FROM {level.Table} WHERE {level.Key} = @Id", new { Id = id }, cancellationToken: cancellationToken));

@@ -92,7 +92,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
                   AND (NOT @LowStockOnly OR (p.reorder_level > 0 AND coalesce(s.quantity, 0) <= p.reorder_level))
             )
             """;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(Quantity), 0), coalesce(sum(StockValue), 0) FROM report;
             {rows} SELECT * FROM report ORDER BY ProductName, WarehouseName NULLS FIRST LIMIT @Limit OFFSET @Offset;
@@ -111,7 +111,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
     public async Task<StockCard?> GetStockCardAsync(
         int organizationId, int productId, int? warehouseId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var card = await connection.QuerySingleOrDefaultAsync<StockCard>(new CommandDefinition("""
             SELECT p.product_id AS ProductId, p.product_code AS ProductCode, p.product_name AS ProductName,
                    u.unit_code AS BaseUnitCode, w.warehouse_id AS WarehouseId, w.warehouse_name AS WarehouseName,
@@ -171,7 +171,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
             "brand" => ("br.brand_id", "coalesce(br.brand_name, 'No brand')", "LEFT JOIN inventory.brand br ON br.brand_id = p.brand_id"),
             _ => ("c.category_id", "coalesce(c.category_name, 'Uncategorized')", "LEFT JOIN inventory.category c ON c.category_id = p.category_id")
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<StockValuationRow>(new CommandDefinition($"""
             SELECT {key} AS GroupId, {name} AS GroupName, count(DISTINCT b.product_id)::int AS ProductCount,
                    sum(b.quantity) AS Quantity, round(sum(b.quantity * b.average_cost), 4) AS StockValue
@@ -212,7 +212,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
             query.Limit,
             query.Offset
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*), coalesce(sum(greatest(m.quantity, 0)), 0), coalesce(sum(greatest(-m.quantity, 0)), 0),
                    coalesce(sum(m.total_cost), 0) {filter};
@@ -266,7 +266,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
                 FROM report WHERE Quantity <= ReorderLevel
             )
             """;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(SuggestedQuantity * LastPurchaseCost), 0) FROM due;
             {rows} SELECT * FROM due ORDER BY (Quantity / nullif(ReorderLevel, 0)), ProductName LIMIT @Limit OFFSET @Offset;
@@ -306,7 +306,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
             Limit = limit,
             Offset = offset
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*), coalesce(sum(sb.quantity * sb.average_cost), 0),
                    coalesce(sum(sb.quantity * sb.average_cost) FILTER (WHERE b.expiry_date < current_date), 0) {filter};

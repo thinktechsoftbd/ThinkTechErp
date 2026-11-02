@@ -2,16 +2,12 @@ using Npgsql;
 
 namespace ThinkTechErpRepository.Database;
 
-public sealed class NpgsqlConnectionFactory(
-    IReadOnlyDictionary<string, string> connectionStrings) : IDbConnectionFactory
+// One data source (and so one connection pool) for every schema: all SQL names its schema.
+public sealed class NpgsqlConnectionFactory(string connectionString) : IDbConnectionFactory, IDisposable
 {
-    public NpgsqlConnection CreateConnection(string schema)
-    {
-        if (!connectionStrings.TryGetValue(schema, out var connectionString))
-        {
-            throw new ArgumentException($"No PostgreSQL connection is configured for schema '{schema}'.", nameof(schema));
-        }
+    private readonly NpgsqlDataSource dataSource = NpgsqlDataSource.Create(connectionString);
 
-        return new NpgsqlConnection(connectionString);
-    }
+    public NpgsqlConnection CreateConnection() => dataSource.CreateConnection();
+
+    public void Dispose() => dataSource.Dispose();
 }

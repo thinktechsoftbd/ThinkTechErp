@@ -58,7 +58,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
             Offset = offset
         };
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*)
             FROM security.subscription s
@@ -76,7 +76,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
 
     public async Task<Subscription?> GetSubscriptionAsync(long subscriptionId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Subscription>(new CommandDefinition(
             $"{SubscriptionSelect} WHERE s.subscription_id = @SubscriptionId", new { SubscriptionId = subscriptionId },
             cancellationToken: cancellationToken));
@@ -86,7 +86,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
         int organizationId, int subscriptionModuleId, DateOnly startDate, DateOnly endDate,
         long? excludeSubscriptionId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
                 SELECT 1 FROM security.subscription
@@ -112,7 +112,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
         var parameters = new DynamicParameters(request);
         parameters.Add("UserId", userId);
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<long>(new CommandDefinition($"""
             INSERT INTO security.subscription (
                 organization_id, subscription_module_id, subscription_type, billing_period_type, billing_period_count,
@@ -136,7 +136,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
         parameters.Add("SubscriptionId", subscriptionId);
         parameters.Add("UserId", userId);
 
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE security.subscription
             SET organization_id = @OrganizationId,
@@ -162,7 +162,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
 
     public async Task<bool> DeleteSubscriptionAsync(long subscriptionId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition(
             "DELETE FROM security.subscription WHERE subscription_id = @SubscriptionId",
             new { SubscriptionId = subscriptionId }, cancellationToken: cancellationToken)) > 0;
@@ -171,7 +171,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
     public async Task<SubscriptionOrganization?> FindOrganizationAsync(
         Guid organizationObjectId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SubscriptionOrganization>(new CommandDefinition("""
             SELECT organization_id AS Id,
                    object_id AS ObjectId,
@@ -185,7 +185,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
     public async Task<IReadOnlyList<CurrentSubscription>> GetCurrentSubscriptionsAsync(
         int organizationId, string? moduleName, DateOnly today, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<CurrentSubscription>(new CommandDefinition("""
             SELECT m.module_name AS ModuleName,
                    s.subscription_type AS SubscriptionType,

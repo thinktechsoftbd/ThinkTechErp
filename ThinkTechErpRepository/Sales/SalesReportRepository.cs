@@ -35,7 +35,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
     public async Task<CustomerLedger?> GetCustomerLedgerAsync(
         int organizationId, int customerId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var ledger = await connection.QuerySingleOrDefaultAsync<CustomerLedger>(new CommandDefinition("""
             SELECT c.supplier_id AS CustomerId, c.supplier_code AS CustomerCode, c.supplier_name AS CustomerName,
                    c.mobile AS Mobile,
@@ -111,7 +111,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
             ),
             filtered AS (SELECT * FROM report WHERE NOT @OnlyWithBalance OR Balance <> 0 OR OpenInvoiceCount > 0)
             """;
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(Balance), 0), coalesce(sum(Days1To30 + Days31To60 + Days61To90 + Over90), 0) FROM filtered;
             {rows} SELECT * FROM filtered ORDER BY Balance DESC, CustomerName LIMIT @Limit OFFSET @Offset;
@@ -171,7 +171,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
             query.Limit,
             query.Offset
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(SubtotalAmount), 0), coalesce(sum(DiscountAmount), 0), coalesce(sum(TaxAmount), 0),
                           coalesce(sum(TotalAmount), 0), coalesce(sum(PaidAmount), 0), coalesce(sum(DueAmount), 0),
@@ -279,7 +279,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
             query.Limit,
             query.Offset
         };
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             {rows} SELECT count(*), coalesce(sum(NetAmount), 0), coalesce(sum(TaxAmount), 0), coalesce(sum(CostAmount), 0),
                           coalesce(sum(Profit), 0) FROM priced;

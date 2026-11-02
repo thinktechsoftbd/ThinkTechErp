@@ -49,7 +49,7 @@ public sealed partial class SalesDocumentRepository
 
     public async Task<PagedResult<SalesReturn>> GetReturnsAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SalesReturn>(connection, $"""
             SELECT count(*) FROM sales.sales_return r
             LEFT JOIN purchase.supplier c ON c.supplier_id = r.customer_id
@@ -62,7 +62,7 @@ public sealed partial class SalesDocumentRepository
 
     public async Task<SalesReturn?> GetReturnAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var salesReturn = await connection.QuerySingleOrDefaultAsync<SalesReturn>(new CommandDefinition(
             $"{ReturnSelect} WHERE r.organization_id = @Org AND r.sales_return_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -244,7 +244,7 @@ public sealed partial class SalesDocumentRepository
 
     public async Task<DeleteOutcome> DeleteReturnAsync(int organizationId, long id, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
             "SELECT status FROM sales.sales_return WHERE organization_id = @Org AND sales_return_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
@@ -271,7 +271,7 @@ public sealed partial class SalesDocumentRepository
 
     public async Task<decimal> GetRefundRoomAsync(int organizationId, long invoiceId, long? excludeReturnId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<decimal?>(new CommandDefinition(RefundRoomSql,
             new { Org = organizationId, InvoiceId = invoiceId, ExcludeId = excludeReturnId }, cancellationToken: cancellationToken)) ?? 0;
     }

@@ -28,20 +28,15 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionStrings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var schema in new[] { "Website", "Security" })
+        var connectionString = configuration.GetConnectionString("ThinkTechErp");
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            var connectionString = configuration.GetConnectionString(schema);
-            if (string.IsNullOrWhiteSpace(connectionString))
-            {
-                throw new InvalidOperationException(
-                    $"Connection string '{schema}' is missing. Set ConnectionStrings__{schema}.");
-            }
-
-            connectionStrings.Add(schema, connectionString);
+            throw new InvalidOperationException(
+                "Connection string 'ThinkTechErp' is missing. Set ConnectionStrings__ThinkTechErp.");
         }
 
-        services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionStrings));
+        // Created by the container so it disposes the data source on shutdown.
+        services.AddSingleton<IDbConnectionFactory>(_ => new NpgsqlConnectionFactory(connectionString));
         services.AddScoped<IWebsiteRepository, WebsiteRepository>();
         services.AddScoped<IWebsiteService, WebsiteService>();
         services.AddScoped<ISmsRepository, SmsRepository>();

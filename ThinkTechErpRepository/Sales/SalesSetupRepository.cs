@@ -58,7 +58,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     public async Task<PagedResult<Customer>> GetCustomersAsync(
         int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Customer>(connection,
             $"SELECT count(*) FROM purchase.supplier c {CustomerFilter}",
             $"{CustomerSelect} {CustomerFilter} ORDER BY c.supplier_name, c.supplier_id",
@@ -68,7 +68,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<Customer>(new CommandDefinition(
             $"{CustomerSelect} WHERE c.organization_id = @Org AND c.supplier_id = @Id AND c.is_customer",
             new { Org = organizationId, Id = customerId }, cancellationToken: cancellationToken));
@@ -77,7 +77,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     public async Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
         int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         // Shops find customers by mobile number, so an exact mobile match comes first.
         return (await connection.QueryAsync<CustomerOption>(new CommandDefinition($"""
             SELECT c.supplier_id AS Id, c.supplier_code AS Code, c.supplier_name AS Name, c.mobile AS Mobile,
@@ -104,7 +104,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<int> CreateCustomerAsync(int organizationId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(request.Code))
@@ -143,7 +143,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<bool> UpdateCustomerAsync(int organizationId, int customerId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", customerId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
@@ -163,7 +163,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<DeleteOutcome> DeleteCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         var parameters = new { Org = organizationId, Id = customerId };
         // A party that is also a supplier stays for the purchase side; it only stops being a customer.
         if (await connection.ExecuteAsync(new CommandDefinition("""
@@ -178,7 +178,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<bool> CustomerCodeExistsAsync(int organizationId, string code, int? excludeId, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM purchase.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code)
                            AND (CAST(@ExcludeId AS int) IS NULL OR supplier_id <> @ExcludeId))
@@ -187,7 +187,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
 
     public async Task<bool> LookupValueExistsAsync(long lookupDataId, string lookupTableName, CancellationToken cancellationToken = default)
     {
-        await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
+        await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (SELECT 1 FROM public.lookup_data d JOIN public.lookup_table t USING (lookup_table_id)
                            WHERE d.lookup_data_id = @Id AND lower(t.lookup_table_name) = lower(@Table))
