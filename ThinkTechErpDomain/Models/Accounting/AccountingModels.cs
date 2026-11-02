@@ -90,7 +90,7 @@ public sealed class LedgerHeadOption
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Nature { get; set; } = string.Empty;
-    /// <summary>Main class › map class, to tell heads with similar names apart.</summary>
+    /// <summary>Map class/main class/account class/parent class, to tell heads with similar names apart.</summary>
     public string? Path { get; set; }
 }
 
@@ -160,6 +160,8 @@ public sealed class VoucherLine
     public int AccountId { get; set; }
     public string AccountCode { get; set; } = string.Empty;
     public string AccountName { get; set; } = string.Empty;
+    /// <summary>Map class/main class/account class/parent class of the head.</summary>
+    public string? AccountPath { get; set; }
     /// <summary>The supplier or customer the line is for, if any (voucher_line.party_id).</summary>
     public int? PartyId { get; set; }
     public string? PartyCode { get; set; }

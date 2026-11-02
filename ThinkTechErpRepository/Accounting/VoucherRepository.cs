@@ -107,6 +107,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         voucher.Lines = (await connection.QueryAsync<VoucherLine>(new CommandDefinition("""
             SELECT l.voucher_line_id AS Id, l.line_no AS LineNo, l.acc_sub_class_id AS AccountId,
                    coalesce(trim(a.sub_code), '') AS AccountCode, coalesce(a.sub_name, '') AS AccountName,
+                   concat_ws('/', lh.map_name, lh.main_name, lh.class_name, lh.parent_name) AS AccountPath,
                    l.party_id AS PartyId, p.supplier_code AS PartyCode, p.supplier_name AS PartyName,
                    l.debit_amount AS DebitAmount, l.credit_amount AS CreditAmount,
                    l.lk_currency_id AS CurrencyLookupDataId, cur.lookup_data_name AS Currency,
@@ -115,6 +116,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                    l.updated_at AT TIME ZONE 'utc' AS UpdatedAt, l.updated_by AS UpdatedBy
             FROM accounting.voucher_line l
             JOIN accounting.acc_sub_class a ON a.acc_sub_class_id = l.acc_sub_class_id
+            LEFT JOIN accounting.ledger_head lh ON lh.acc_sub_class_id = l.acc_sub_class_id
             LEFT JOIN purchase.supplier p ON p.supplier_id = l.party_id
             LEFT JOIN public.lookup_data cur ON cur.lookup_data_id = l.lk_currency_id
             WHERE l.voucher_id = @Id

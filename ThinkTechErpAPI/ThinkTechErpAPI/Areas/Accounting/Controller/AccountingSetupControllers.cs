@@ -24,7 +24,8 @@ public sealed class AccountingLedgerHeadsController(ILedgerLookupService lookups
         => Ok(await lookups.GetLedgerHeadsAsync(search, Ids.Parse(ids), limit, cancellationToken));
 
     /// <summary>
-    /// A page of sub classes for the search-as-you-type pickers: by code, name, or the map or main class name.
+    /// A page of sub classes for the search-as-you-type pickers, by sub code or sub name; each with its
+    /// map/main/account/parent class path.
     /// </summary>
     [HttpGet("search")]
     public async Task<ActionResult<PagedResult<LedgerHeadOption>>> SearchLedgerHeads(

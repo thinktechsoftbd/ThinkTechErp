@@ -14,8 +14,8 @@ public interface ILedgerLookupRepository
     Task<IReadOnlyList<LedgerHeadOption>> GetLedgerHeadsAsync(
         string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default);
     /// <summary>
-    /// A page of sub classes for the ledger head pickers, matching the code, the name or the map or main class
-    /// name; codes starting with the search come first, then by code.
+    /// A page of sub classes for the ledger head pickers, matching the sub code or sub name; codes starting with
+    /// the search come first, then by code.
     /// </summary>
     Task<PagedResult<LedgerHeadOption>> SearchLedgerHeadsAsync(
         string? search, int limit, int offset, CancellationToken cancellationToken = default);
@@ -35,11 +35,10 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return (await connection.QueryAsync<LedgerHeadOption>(new CommandDefinition("""
             SELECT h.acc_sub_class_id AS Id, coalesce(h.sub_code, '') AS Code, coalesce(h.sub_name, '') AS Name,
-                   coalesce(h.nature, '') AS Nature, concat_ws(' › ', h.main_name, h.map_name) AS Path
+                   coalesce(h.nature, '') AS Nature, concat_ws('/', h.map_name, h.main_name, h.class_name, h.parent_name) AS Path
             FROM accounting.ledger_head h
             WHERE (CAST(@Ids AS int[]) IS NULL OR h.acc_sub_class_id = ANY(@Ids))
-              AND (CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern
-                   OR h.map_name ILIKE @Pattern)
+              AND (CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern)
             ORDER BY (h.sub_code ILIKE @Prefix) DESC, h.sub_code
             LIMIT @Limit
             """, new
@@ -57,14 +56,13 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
         const string filter = """
             FROM accounting.ledger_head h
             WHERE CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern
-               OR h.map_name ILIKE @Pattern OR h.main_name ILIKE @Pattern
             """;
         await using var connection = connectionFactory.CreateConnection(SecurityDb.Connection);
         return await RepositoryHelpers.PagedAsync<LedgerHeadOption>(connection,
             $"SELECT count(*) {filter}",
             $"""
             SELECT h.acc_sub_class_id AS Id, coalesce(h.sub_code, '') AS Code, coalesce(h.sub_name, '') AS Name,
-                   coalesce(h.nature, '') AS Nature, concat_ws(' › ', h.main_name, h.map_name) AS Path
+                   coalesce(h.nature, '') AS Nature, concat_ws('/', h.map_name, h.main_name, h.class_name, h.parent_name) AS Path
             {filter}
             ORDER BY (h.sub_code ILIKE @Prefix) DESC, h.sub_code, h.acc_sub_class_id
             """,
