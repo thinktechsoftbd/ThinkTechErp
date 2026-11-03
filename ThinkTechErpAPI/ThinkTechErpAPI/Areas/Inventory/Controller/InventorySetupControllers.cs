@@ -194,6 +194,49 @@ public sealed class InventoryProductsController(IProductService products) : Orga
             "The product has stock or appears on documents. Deactivate it instead.");
 }
 
+/// <summary>
+/// Payment sources (Cash, a bank, bKash, ...) with the ledger head each kind of payment posts to. Shared by every
+/// organization: anyone with inventory, purchase or sales access reads them; INVENTORY.M or PURCHASE.M changes them.
+/// </summary>
+[Route("api/inventory/payment-sources")]
+[Authorize(Policy = InventoryPolicies.Lookup)]
+public sealed class InventoryPaymentSourcesController(IPaymentSourceService paymentSources) : ErpControllerBase
+{
+    /// <summary>A page of sources, each with its lines; search matches the names and what the lines are for.</summary>
+    [HttpGet]
+    public async Task<ActionResult<PagedResult<PaymentSource>>> GetPaymentSources(
+        [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive,
+        [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
+        CancellationToken cancellationToken = default)
+        => Ok(await paymentSources.GetPaymentSourcesAsync(search, isActive, limit, offset, cancellationToken));
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<PaymentSource>> GetPaymentSource(int id, CancellationToken cancellationToken)
+        => OkOrNotFound(await paymentSources.GetPaymentSourceAsync(id, cancellationToken));
+
+    [HttpPost]
+    [Authorize(Policy = InventoryPolicies.SharedManage)]
+    public async Task<ActionResult<PaymentSource>> CreatePaymentSource(
+        [FromBody] PaymentSourceUpsertRequest request, CancellationToken cancellationToken)
+    {
+        var source = await paymentSources.CreatePaymentSourceAsync(request, UserId, cancellationToken);
+        return CreatedAtAction(nameof(GetPaymentSource), new { id = source.Id }, source);
+    }
+
+    /// <summary>Saves the source and its lines: lines with an id are kept and updated, new ones added, the rest deleted.</summary>
+    [HttpPut("{id:int}")]
+    [Authorize(Policy = InventoryPolicies.SharedManage)]
+    public async Task<ActionResult<PaymentSource>> UpdatePaymentSource(
+        int id, [FromBody] PaymentSourceUpsertRequest request, CancellationToken cancellationToken)
+        => OkOrNotFound(await paymentSources.UpdatePaymentSourceAsync(id, request, UserId, cancellationToken));
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Policy = InventoryPolicies.SharedManage)]
+    public async Task<IActionResult> DeletePaymentSource(int id, CancellationToken cancellationToken)
+        => DeleteResult(await paymentSources.DeletePaymentSourceAsync(id, cancellationToken),
+            "Documents use this payment source. Deactivate it instead.");
+}
+
 /// <summary>Settings and pickers the inventory and purchase screens share.</summary>
 [Route("api/inventory")]
 [Authorize(Policy = InventoryPolicies.Lookup)]

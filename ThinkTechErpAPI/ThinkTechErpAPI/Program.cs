@@ -219,6 +219,11 @@ builder.Services.AddAuthorization(options =>
             PurchaseRules.ViewPurchasePermission, PurchaseRules.ManagePurchasePermission,
             SalesRules.ViewSalesPermission, SalesRules.ManageSalesPermission));
 
+    options.AddPolicy(InventoryPolicies.SharedManage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            InventoryRules.ManageInventoryPermission, PurchaseRules.ManagePurchasePermission));
+
     options.AddPolicy(PurchasePolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,

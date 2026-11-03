@@ -13,6 +13,9 @@ public static class InventoryPolicies
     /// purchase and sales screens need as well.
     /// </summary>
     public const string Lookup = "InventoryLookup";
+
+    /// <summary>INVENTORY.M or PURCHASE.M: setup both modules share, such as payment sources.</summary>
+    public const string SharedManage = "InventoryOrPurchaseManage";
 }
 
 public static class SalesPolicies
