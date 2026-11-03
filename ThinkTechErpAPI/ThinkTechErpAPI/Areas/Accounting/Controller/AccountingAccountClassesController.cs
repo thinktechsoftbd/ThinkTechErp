@@ -8,7 +8,7 @@ using ThinkTechErpService.Accounting;
 namespace ThinkTechErpAPI.Areas.Accounting.Controller;
 
 /// <summary>
-/// The chart of accounts tree on the accounting.acc_* tables, as in MediDesk: Parent Class → Account Class →
+/// The chart of accounts tree on the acc_* tables, as in MediDesk: Parent Class → Account Class →
 /// Main Class → Map Class → Sub Class. One chart for every organization; parent and account classes are fixed,
 /// main, map and sub classes are added (with the next code), renamed and deleted. kind is main, map or sub.
 /// </summary>

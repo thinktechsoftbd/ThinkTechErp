@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace ThinkTechErpDomain.Models.Accounting;
 
 /// <summary>
-/// The levels of the classic chart of accounts kept in the accounting.acc_* tables (as in MediDesk):
+/// The levels of the classic chart of accounts kept in the acc_* tables (as in MediDesk):
 /// parent class → account class → main class → map class → sub class. One chart, shared by every organization.
 /// Parent and account classes are fixed; main, map and sub classes are added, renamed and deleted from the tree.
 /// </summary>

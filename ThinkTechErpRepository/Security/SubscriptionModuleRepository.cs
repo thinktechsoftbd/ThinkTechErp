@@ -13,13 +13,13 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
                m.module_name AS ModuleName,
                m.is_active AS IsActive,
                m.remarks AS Remarks,
-               (SELECT count(*) FROM security.subscription s
+               (SELECT count(*) FROM public.subscription s
                 WHERE s.subscription_module_id = m.subscription_module_id)::int AS SubscriptionCount,
                m.created_at AT TIME ZONE 'utc' AS CreatedAt,
                m.created_by AS CreatedBy,
                m.updated_at AT TIME ZONE 'utc' AS UpdatedAt,
                m.updated_by AS UpdatedBy
-        FROM security.subscription_module m
+        FROM public.subscription_module m
         """;
 
     private const string ModuleFilter = """
@@ -40,7 +40,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
 
         await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
-            SELECT count(*) FROM security.subscription_module m {ModuleFilter};
+            SELECT count(*) FROM public.subscription_module m {ModuleFilter};
             {ModuleSelect} {ModuleFilter} ORDER BY m.module_name, m.subscription_module_id LIMIT @Limit OFFSET @Offset;
             """, parameters, cancellationToken: cancellationToken));
         var totalCount = await results.ReadSingleAsync<long>();
@@ -62,7 +62,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
-                SELECT 1 FROM security.subscription_module
+                SELECT 1 FROM public.subscription_module
                 WHERE lower(module_name) = lower(@ModuleName)
                   AND (CAST(@ExcludeId AS integer) IS NULL OR subscription_module_id <> @ExcludeId))
             """, new { ModuleName = moduleName, ExcludeId = excludeSubscriptionModuleId },
@@ -74,7 +74,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO security.subscription_module (module_name, is_active, remarks, created_at, created_by)
+            INSERT INTO public.subscription_module (module_name, is_active, remarks, created_at, created_by)
             VALUES (@ModuleName, @IsActive, @Remarks, {SecurityDb.NowUtc}, @UserId)
             RETURNING subscription_module_id
             """, new { request.ModuleName, request.IsActive, request.Remarks, UserId = userId },
@@ -87,7 +87,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE security.subscription_module
+            UPDATE public.subscription_module
             SET module_name = @ModuleName,
                 is_active = @IsActive,
                 remarks = @Remarks,
@@ -111,7 +111,7 @@ public sealed class SubscriptionModuleRepository(IDbConnectionFactory connection
         try
         {
             var deleted = await connection.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM security.subscription_module WHERE subscription_module_id = @SubscriptionModuleId",
+                "DELETE FROM public.subscription_module WHERE subscription_module_id = @SubscriptionModuleId",
                 new { SubscriptionModuleId = subscriptionModuleId }, cancellationToken: cancellationToken));
             return deleted > 0 ? DeleteOutcome.Deleted : DeleteOutcome.NotFound;
         }

@@ -30,9 +30,9 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
                s.created_by AS CreatedBy,
                s.updated_at AT TIME ZONE 'utc' AS UpdatedAt,
                s.updated_by AS UpdatedBy
-        FROM security.subscription s
-        JOIN security.organization o ON o.organization_id = s.organization_id
-        JOIN security.subscription_module m ON m.subscription_module_id = s.subscription_module_id
+        FROM public.subscription s
+        JOIN public.organization o ON o.organization_id = s.organization_id
+        JOIN public.subscription_module m ON m.subscription_module_id = s.subscription_module_id
         JOIN public.lookup_data c ON c.lookup_data_id = s.currency_lookup_data_id
         """;
 
@@ -61,9 +61,9 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT count(*)
-            FROM security.subscription s
-            JOIN security.organization o ON o.organization_id = s.organization_id
-            JOIN security.subscription_module m ON m.subscription_module_id = s.subscription_module_id
+            FROM public.subscription s
+            JOIN public.organization o ON o.organization_id = s.organization_id
+            JOIN public.subscription_module m ON m.subscription_module_id = s.subscription_module_id
             {SubscriptionFilterSql};
             {SubscriptionSelect} {SubscriptionFilterSql}
             ORDER BY s.subscription_start_date DESC, s.subscription_id DESC
@@ -89,7 +89,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
-                SELECT 1 FROM security.subscription
+                SELECT 1 FROM public.subscription
                 WHERE organization_id = @OrganizationId
                   AND subscription_module_id = @SubscriptionModuleId
                   AND status IN ('Pending', 'Active')
@@ -114,7 +114,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
 
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-            INSERT INTO security.subscription (
+            INSERT INTO public.subscription (
                 organization_id, subscription_module_id, subscription_type, billing_period_type, billing_period_count,
                 subscription_start_date, subscription_end_date, currency_lookup_data_id, local_exchange_rate,
                 subtotal_amount, discount_percentage, discount_amount, vat_amount, total_amount, status,
@@ -138,7 +138,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
 
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE security.subscription
+            UPDATE public.subscription
             SET organization_id = @OrganizationId,
                 subscription_module_id = @SubscriptionModuleId,
                 subscription_type = @SubscriptionType,
@@ -164,7 +164,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM security.subscription WHERE subscription_id = @SubscriptionId",
+            "DELETE FROM public.subscription WHERE subscription_id = @SubscriptionId",
             new { SubscriptionId = subscriptionId }, cancellationToken: cancellationToken)) > 0;
     }
 
@@ -177,7 +177,7 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
                    object_id AS ObjectId,
                    organization_name_en AS Name,
                    is_active AS IsActive
-            FROM security.organization
+            FROM public.organization
             WHERE object_id = @ObjectId
             """, new { ObjectId = organizationObjectId }, cancellationToken: cancellationToken));
     }
@@ -192,8 +192,8 @@ public sealed class SubscriptionRepository(IDbConnectionFactory connectionFactor
                    s.billing_period_type AS BillingPeriodType,
                    s.subscription_start_date AS StartDate,
                    s.subscription_end_date AS EndDate
-            FROM security.subscription s
-            JOIN security.subscription_module m ON m.subscription_module_id = s.subscription_module_id
+            FROM public.subscription s
+            JOIN public.subscription_module m ON m.subscription_module_id = s.subscription_module_id
             WHERE s.organization_id = @OrganizationId
               AND s.status = 'Active'
               AND s.subscription_start_date <= @Today

@@ -4,7 +4,7 @@ namespace ThinkTechErpService.Security;
 
 /// <summary>
 /// bcrypt with work factor 12, the format existing users' hashes already use ($2a$12$), so hashes
-/// stay interchangeable with any other application that reads security."User".
+/// stay interchangeable with any other application that reads public."User".
 /// </summary>
 public sealed class BcryptPasswordHasher : IPasswordHasher
 {

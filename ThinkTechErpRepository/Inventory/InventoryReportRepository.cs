@@ -70,7 +70,7 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
                 SELECT b.product_id, CASE WHEN @ByWarehouse THEN b.warehouse_id END AS warehouse_id,
                        sum(b.quantity) AS quantity, sum(b.reserved_quantity) AS reserved,
                        sum(b.quantity * b.average_cost) AS value
-                FROM inventory.stock_balance b
+                FROM public.stock_balance b
                 WHERE b.organization_id = @Org AND (CAST(@WarehouseId AS int) IS NULL OR b.warehouse_id = @WarehouseId)
                 GROUP BY 1, 2
             ),
@@ -82,11 +82,11 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
                        CASE WHEN coalesce(s.quantity, 0) <> 0 THEN round(s.value / s.quantity, 6) ELSE 0 END AS AverageCost,
                        round(coalesce(s.value, 0), 4) AS StockValue, p.reorder_level AS ReorderLevel,
                        (p.reorder_level > 0 AND coalesce(s.quantity, 0) <= p.reorder_level) AS NeedsReorder
-                FROM inventory.product p
-                JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-                LEFT JOIN inventory.category c ON c.category_id = p.category_id
+                FROM public.product p
+                JOIN public.unit u ON u.unit_id = p.base_unit_id
+                LEFT JOIN public.category c ON c.category_id = p.category_id
                 LEFT JOIN stock s ON s.product_id = p.product_id
-                LEFT JOIN inventory.warehouse w ON w.warehouse_id = s.warehouse_id
+                LEFT JOIN public.warehouse w ON w.warehouse_id = s.warehouse_id
                 WHERE {ProductScope}
                   AND (@IncludeZero OR coalesce(s.quantity, 0) <> 0)
                   AND (NOT @LowStockOnly OR (p.reorder_level > 0 AND coalesce(s.quantity, 0) <= p.reorder_level))
@@ -115,15 +115,15 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
         var card = await connection.QuerySingleOrDefaultAsync<StockCard>(new CommandDefinition("""
             SELECT p.product_id AS ProductId, p.product_code AS ProductCode, p.product_name AS ProductName,
                    u.unit_code AS BaseUnitCode, w.warehouse_id AS WarehouseId, w.warehouse_name AS WarehouseName,
-                   coalesce((SELECT sum(m.quantity) FROM inventory.stock_movement m
+                   coalesce((SELECT sum(m.quantity) FROM public.stock_movement m
                              WHERE m.product_id = p.product_id AND m.movement_date < @From
                                AND (CAST(@WarehouseId AS int) IS NULL OR m.warehouse_id = @WarehouseId)), 0) AS OpeningQuantity,
-                   coalesce((SELECT sum(m.total_cost) FROM inventory.stock_movement m
+                   coalesce((SELECT sum(m.total_cost) FROM public.stock_movement m
                              WHERE m.product_id = p.product_id AND m.movement_date < @From
                                AND (CAST(@WarehouseId AS int) IS NULL OR m.warehouse_id = @WarehouseId)), 0) AS OpeningValue
-            FROM inventory.product p
-            JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-            LEFT JOIN inventory.warehouse w ON w.warehouse_id = @WarehouseId AND w.organization_id = p.organization_id
+            FROM public.product p
+            JOIN public.unit u ON u.unit_id = p.base_unit_id
+            LEFT JOIN public.warehouse w ON w.warehouse_id = @WarehouseId AND w.organization_id = p.organization_id
             WHERE p.organization_id = @Org AND p.product_id = @ProductId
             """, new { Org = organizationId, ProductId = productId, WarehouseId = warehouseId, From = from },
             cancellationToken: cancellationToken));
@@ -136,9 +136,9 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
                    w.warehouse_name AS WarehouseName, b.batch_no AS BatchNo,
                    greatest(m.quantity, 0) AS QuantityIn, greatest(-m.quantity, 0) AS QuantityOut,
                    m.unit_cost AS UnitCost, m.total_cost AS Value
-            FROM inventory.stock_movement m
-            JOIN inventory.warehouse w ON w.warehouse_id = m.warehouse_id
-            LEFT JOIN inventory.batch b ON b.batch_id = m.batch_id
+            FROM public.stock_movement m
+            JOIN public.warehouse w ON w.warehouse_id = m.warehouse_id
+            LEFT JOIN public.batch b ON b.batch_id = m.batch_id
             WHERE m.organization_id = @Org AND m.product_id = @ProductId AND m.movement_date BETWEEN @From AND @To
               AND (CAST(@WarehouseId AS int) IS NULL OR m.warehouse_id = @WarehouseId)
             ORDER BY m.movement_date, m.stock_movement_id
@@ -167,16 +167,16 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
     {
         var (key, name, join) = groupBy switch
         {
-            "warehouse" => ("w.warehouse_id", "w.warehouse_name", "JOIN inventory.warehouse w ON w.warehouse_id = b.warehouse_id"),
-            "brand" => ("br.brand_id", "coalesce(br.brand_name, 'No brand')", "LEFT JOIN inventory.brand br ON br.brand_id = p.brand_id"),
-            _ => ("c.category_id", "coalesce(c.category_name, 'Uncategorized')", "LEFT JOIN inventory.category c ON c.category_id = p.category_id")
+            "warehouse" => ("w.warehouse_id", "w.warehouse_name", "JOIN public.warehouse w ON w.warehouse_id = b.warehouse_id"),
+            "brand" => ("br.brand_id", "coalesce(br.brand_name, 'No brand')", "LEFT JOIN public.brand br ON br.brand_id = p.brand_id"),
+            _ => ("c.category_id", "coalesce(c.category_name, 'Uncategorized')", "LEFT JOIN public.category c ON c.category_id = p.category_id")
         };
         await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<StockValuationRow>(new CommandDefinition($"""
             SELECT {key} AS GroupId, {name} AS GroupName, count(DISTINCT b.product_id)::int AS ProductCount,
                    sum(b.quantity) AS Quantity, round(sum(b.quantity * b.average_cost), 4) AS StockValue
-            FROM inventory.stock_balance b
-            JOIN inventory.product p ON p.product_id = b.product_id
+            FROM public.stock_balance b
+            JOIN public.product p ON p.product_id = b.product_id
             {join}
             WHERE b.organization_id = @Org AND b.quantity <> 0
               AND (CAST(@WarehouseId AS int) IS NULL OR b.warehouse_id = @WarehouseId)
@@ -188,11 +188,11 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
     public async Task<ReportPage<StockMovementRow>> GetMovementsAsync(int organizationId, MovementReportQuery query, CancellationToken cancellationToken = default)
     {
         const string filter = """
-            FROM inventory.stock_movement m
-            JOIN inventory.product p ON p.product_id = m.product_id
-            JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-            JOIN inventory.warehouse w ON w.warehouse_id = m.warehouse_id
-            LEFT JOIN inventory.batch b ON b.batch_id = m.batch_id
+            FROM public.stock_movement m
+            JOIN public.product p ON p.product_id = m.product_id
+            JOIN public.unit u ON u.unit_id = p.base_unit_id
+            JOIN public.warehouse w ON w.warehouse_id = m.warehouse_id
+            LEFT JOIN public.batch b ON b.batch_id = m.batch_id
             WHERE m.organization_id = @Org AND m.movement_date BETWEEN @From AND @To
               AND (CAST(@WarehouseId AS int) IS NULL OR m.warehouse_id = @WarehouseId)
               AND (CAST(@ProductId AS int) IS NULL OR m.product_id = @ProductId)
@@ -252,13 +252,13 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
             WITH report AS (
                 SELECT p.product_id AS ProductId, p.product_code AS ProductCode, p.product_name AS ProductName,
                        c.category_name AS CategoryName, u.unit_code AS BaseUnitCode,
-                       coalesce((SELECT sum(b.quantity) FROM inventory.stock_balance b WHERE b.product_id = p.product_id
+                       coalesce((SELECT sum(b.quantity) FROM public.stock_balance b WHERE b.product_id = p.product_id
                                  AND (CAST(@WarehouseId AS int) IS NULL OR b.warehouse_id = @WarehouseId)), 0) AS Quantity,
                        p.reorder_level AS ReorderLevel, p.reorder_quantity AS ReorderQuantity,
                        p.last_purchase_cost AS LastPurchaseCost
-                FROM inventory.product p
-                JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-                LEFT JOIN inventory.category c ON c.category_id = p.category_id
+                FROM public.product p
+                JOIN public.unit u ON u.unit_id = p.base_unit_id
+                LEFT JOIN public.category c ON c.category_id = p.category_id
                 WHERE {ProductScope} AND p.is_active AND p.reorder_level > 0
             ),
             due AS (
@@ -286,11 +286,11 @@ public sealed class InventoryReportRepository(IDbConnectionFactory connectionFac
         int organizationId, int withinDays, int? warehouseId, string? search, int limit, int offset, CancellationToken cancellationToken = default)
     {
         const string filter = """
-            FROM inventory.stock_balance sb
-            JOIN inventory.batch b ON b.batch_id = sb.batch_id
-            JOIN inventory.product p ON p.product_id = sb.product_id
-            JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-            JOIN inventory.warehouse w ON w.warehouse_id = sb.warehouse_id
+            FROM public.stock_balance sb
+            JOIN public.batch b ON b.batch_id = sb.batch_id
+            JOIN public.product p ON p.product_id = sb.product_id
+            JOIN public.unit u ON u.unit_id = p.base_unit_id
+            JOIN public.warehouse w ON w.warehouse_id = sb.warehouse_id
             WHERE sb.organization_id = @Org AND sb.quantity > 0 AND b.expiry_date IS NOT NULL
               AND b.expiry_date <= current_date + @Days
               AND (CAST(@WarehouseId AS int) IS NULL OR sb.warehouse_id = @WarehouseId)

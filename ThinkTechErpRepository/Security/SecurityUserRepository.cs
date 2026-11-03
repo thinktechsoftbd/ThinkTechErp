@@ -14,7 +14,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
                "photoUrl" AS PhotoUrl,
                "passwordHash" AS PasswordHash,
                status::text AS Status
-        FROM security."User"
+        FROM public."User"
         """;
 
     private const string UserSelect = """
@@ -25,7 +25,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
                u.status::text AS Status,
                u."createdAt" AT TIME ZONE 'utc' AS CreatedAt,
                u."updatedAt" AT TIME ZONE 'utc' AS UpdatedAt
-        FROM security."User" u
+        FROM public."User" u
         """;
 
     private const string UserFilter = """
@@ -36,15 +36,15 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     // Permissions from the user's roles plus the ones granted to the user directly.
     private const string EffectivePermissionsSelect = """
         SELECT p.code
-        FROM security."Permission" p
+        FROM public."Permission" p
         WHERE p.id IN (
             SELECT rp."permissionId"
-            FROM security."RolePermission" rp
-            JOIN security."UserRole" ur ON ur."roleId" = rp."roleId"
+            FROM public."RolePermission" rp
+            JOIN public."UserRole" ur ON ur."roleId" = rp."roleId"
             WHERE ur."userId" = @UserId
             UNION
             SELECT up."permissionId"
-            FROM security."UserPermission" up
+            FROM public."UserPermission" up
             WHERE up."userId" = @UserId)
         ORDER BY p.code
         """;
@@ -72,8 +72,8 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
             SELECT r.name
-            FROM security."UserRole" ur
-            JOIN security."Role" r ON r.id = ur."roleId"
+            FROM public."UserRole" ur
+            JOIN public."Role" r ON r.id = ur."roleId"
             WHERE ur."userId" = @UserId
             ORDER BY r.name;
             {EffectivePermissionsSelect};
@@ -101,13 +101,13 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
                    um."canCreate" AS CanCreate,
                    um."canEdit" AS CanEdit,
                    um."canDelete" AS CanDelete
-            FROM security."Menu" m
-            LEFT JOIN security."UserMenu" um ON um."menuId" = m.id AND um."userId" = @UserId
+            FROM public."Menu" m
+            LEFT JOIN public."UserMenu" um ON um."menuId" = m.id AND um."userId" = @UserId
             WHERE m."isActive"
               AND CASE
                       WHEN um."userId" IS NOT NULL THEN um."canView"
                       ELSE m."roleId" IS NULL
-                           OR m."roleId" IN (SELECT ur."roleId" FROM security."UserRole" ur WHERE ur."userId" = @UserId)
+                           OR m."roleId" IN (SELECT ur."roleId" FROM public."UserRole" ur WHERE ur."userId" = @UserId)
                   END
             ORDER BY m."sortOrder", m.id
             """, new { UserId = userId }, cancellationToken: cancellationToken));
@@ -119,7 +119,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE security."User"
+            UPDATE public."User"
             SET "passwordHash" = @PasswordHash, "updatedAt" = {SecurityDb.NowUtc}
             WHERE id = @UserId
             """, new { UserId = userId, PasswordHash = passwordHash }, cancellationToken: cancellationToken)) > 0;
@@ -140,7 +140,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         long totalCount;
         List<SecurityUser> users;
         using (var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
-            SELECT count(*) FROM security."User" u {UserFilter};
+            SELECT count(*) FROM public."User" u {UserFilter};
             {UserSelect} {UserFilter} ORDER BY u.name, u.id LIMIT @Limit OFFSET @Offset;
             """, parameters, cancellationToken: cancellationToken)))
         {
@@ -169,7 +169,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
-                SELECT 1 FROM security."User"
+                SELECT 1 FROM public."User"
                 WHERE lower(email) = lower(@Email)
                   AND (CAST(@ExcludeUserId AS integer) IS NULL OR id <> @ExcludeUserId))
             """, new { Email = email, ExcludeUserId = excludeUserId }, cancellationToken: cancellationToken));
@@ -182,8 +182,8 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var userId = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO security."User" (name, email, "passwordHash", "photoUrl", status, "createdAt", "updatedAt")
-            VALUES (@Name, @Email, @PasswordHash, @PhotoUrl, CAST(@Status AS security."UserStatus"),
+            INSERT INTO public."User" (name, email, "passwordHash", "photoUrl", status, "createdAt", "updatedAt")
+            VALUES (@Name, @Email, @PasswordHash, @PhotoUrl, CAST(@Status AS public."UserStatus"),
                     {SecurityDb.NowUtc}, {SecurityDb.NowUtc})
             RETURNING id
             """, new { request.Name, request.Email, PasswordHash = passwordHash, request.PhotoUrl, request.Status },
@@ -200,11 +200,11 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE security."User"
+            UPDATE public."User"
             SET name = @Name,
                 email = @Email,
                 "photoUrl" = @PhotoUrl,
-                status = CAST(@Status AS security."UserStatus"),
+                status = CAST(@Status AS public."UserStatus"),
                 "updatedAt" = {SecurityDb.NowUtc}
             WHERE id = @UserId
             """, new { UserId = userId, request.Name, request.Email, request.PhotoUrl, request.Status },
@@ -224,10 +224,10 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
-            SELECT EXISTS (SELECT 1 FROM security."User" WHERE id = @UserId);
+            SELECT EXISTS (SELECT 1 FROM public."User" WHERE id = @UserId);
             SELECT p.id AS Id, p.code AS Code, p.name AS Name, p.description AS Description
-            FROM security."UserPermission" up
-            JOIN security."Permission" p ON p.id = up."permissionId"
+            FROM public."UserPermission" up
+            JOIN public."Permission" p ON p.id = up."permissionId"
             WHERE up."userId" = @UserId
             ORDER BY p.code;
             {EffectivePermissionsSelect};
@@ -252,8 +252,8 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
             return false;
 
         await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."UserPermission" WHERE "userId" = @UserId;
-            INSERT INTO security."UserPermission" ("userId", "permissionId")
+            DELETE FROM public."UserPermission" WHERE "userId" = @UserId;
+            INSERT INTO public."UserPermission" ("userId", "permissionId")
             SELECT DISTINCT @UserId, permission_id
             FROM unnest(CAST(@PermissionIds AS integer[])) AS t(permission_id);
             """, new { UserId = userId, PermissionIds = permissionIds }, transaction, cancellationToken: cancellationToken));
@@ -266,7 +266,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition("""
-            SELECT EXISTS (SELECT 1 FROM security."User" WHERE id = @UserId);
+            SELECT EXISTS (SELECT 1 FROM public."User" WHERE id = @UserId);
             SELECT um."menuId" AS MenuId,
                    m.title AS Title,
                    m.path AS Path,
@@ -274,8 +274,8 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
                    um."canCreate" AS CanCreate,
                    um."canEdit" AS CanEdit,
                    um."canDelete" AS CanDelete
-            FROM security."UserMenu" um
-            JOIN security."Menu" m ON m.id = um."menuId"
+            FROM public."UserMenu" um
+            JOIN public."Menu" m ON m.id = um."menuId"
             WHERE um."userId" = @UserId
             ORDER BY m."sortOrder", m.id;
             """, new { UserId = userId }, cancellationToken: cancellationToken));
@@ -295,8 +295,8 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
             return false;
 
         await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."UserMenu" WHERE "userId" = @UserId;
-            INSERT INTO security."UserMenu" ("userId", "menuId", "canView", "canCreate", "canEdit", "canDelete")
+            DELETE FROM public."UserMenu" WHERE "userId" = @UserId;
+            INSERT INTO public."UserMenu" ("userId", "menuId", "canView", "canCreate", "canEdit", "canDelete")
             SELECT @UserId, t.menu_id, t.can_view, t.can_create, t.can_edit, t.can_delete
             FROM unnest(CAST(@MenuIds AS integer[]), CAST(@CanView AS boolean[]), CAST(@CanCreate AS boolean[]),
                         CAST(@CanEdit AS boolean[]), CAST(@CanDelete AS boolean[]))
@@ -317,15 +317,15 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
     private static async Task<bool> UserExistsAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, int userId, CancellationToken cancellationToken)
         => await connection.QuerySingleAsync<bool>(new CommandDefinition(
-            """SELECT EXISTS (SELECT 1 FROM security."User" WHERE id = @UserId)""",
+            """SELECT EXISTS (SELECT 1 FROM public."User" WHERE id = @UserId)""",
             new { UserId = userId }, transaction, cancellationToken: cancellationToken));
 
     private static Task ReplaceRolesAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, int userId, int[] roleIds,
         CancellationToken cancellationToken)
         => connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."UserRole" WHERE "userId" = @UserId;
-            INSERT INTO security."UserRole" ("userId", "roleId")
+            DELETE FROM public."UserRole" WHERE "userId" = @UserId;
+            INSERT INTO public."UserRole" ("userId", "roleId")
             SELECT DISTINCT @UserId, role_id
             FROM unnest(CAST(@RoleIds AS integer[])) AS t(role_id);
             """, new { UserId = userId, RoleIds = roleIds }, transaction, cancellationToken: cancellationToken));
@@ -338,8 +338,8 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
 
         var rows = await connection.QueryAsync<UserRoleRow>(new CommandDefinition("""
             SELECT ur."userId" AS UserId, r.id AS Id, r.name AS Name
-            FROM security."UserRole" ur
-            JOIN security."Role" r ON r.id = ur."roleId"
+            FROM public."UserRole" ur
+            JOIN public."Role" r ON r.id = ur."roleId"
             WHERE ur."userId" = ANY(@UserIds)
             ORDER BY r.name
             """, new { UserIds = users.Select(u => u.Id).ToArray() }, cancellationToken: cancellationToken));

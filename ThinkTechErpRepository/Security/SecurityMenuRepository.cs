@@ -15,7 +15,7 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
                "parentId" AS ParentId,
                "roleId" AS RoleId,
                "isActive" AS IsActive
-        FROM security."Menu"
+        FROM public."Menu"
         """;
 
     public async Task<IReadOnlyList<SecurityMenu>> GetMenusAsync(CancellationToken cancellationToken = default)
@@ -38,7 +38,7 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            INSERT INTO security."Menu" (title, path, icon, "sortOrder", "parentId", "roleId", "isActive")
+            INSERT INTO public."Menu" (title, path, icon, "sortOrder", "parentId", "roleId", "isActive")
             VALUES (@Title, @Path, @Icon, @SortOrder, @ParentId, @RoleId, @IsActive)
             RETURNING id
             """, request, cancellationToken: cancellationToken));
@@ -48,7 +48,7 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE security."Menu"
+            UPDATE public."Menu"
             SET title = @Title,
                 path = @Path,
                 icon = @Icon,
@@ -75,15 +75,15 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
         // Submenus cascade on delete in the database, so a menu that still has children is kept.
         await using var connection = connectionFactory.CreateConnection();
         var deleted = await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."Menu"
+            DELETE FROM public."Menu"
             WHERE id = @MenuId
-              AND NOT EXISTS (SELECT 1 FROM security."Menu" child WHERE child."parentId" = @MenuId)
+              AND NOT EXISTS (SELECT 1 FROM public."Menu" child WHERE child."parentId" = @MenuId)
             """, new { MenuId = menuId }, cancellationToken: cancellationToken));
         if (deleted > 0)
             return DeleteOutcome.Deleted;
 
         var exists = await connection.QuerySingleAsync<bool>(new CommandDefinition(
-            """SELECT EXISTS (SELECT 1 FROM security."Menu" WHERE id = @MenuId)""",
+            """SELECT EXISTS (SELECT 1 FROM public."Menu" WHERE id = @MenuId)""",
             new { MenuId = menuId }, cancellationToken: cancellationToken));
         return exists ? DeleteOutcome.InUse : DeleteOutcome.NotFound;
     }
@@ -94,10 +94,10 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             WITH RECURSIVE ancestors AS (
-                SELECT id, "parentId" FROM security."Menu" WHERE id = @MenuId
+                SELECT id, "parentId" FROM public."Menu" WHERE id = @MenuId
                 UNION
                 SELECT m.id, m."parentId"
-                FROM security."Menu" m
+                FROM public."Menu" m
                 JOIN ancestors a ON m.id = a."parentId")
             SELECT EXISTS (SELECT 1 FROM ancestors WHERE id = @RootMenuId)
             """, new { MenuId = menuId, RootMenuId = rootMenuId }, cancellationToken: cancellationToken));

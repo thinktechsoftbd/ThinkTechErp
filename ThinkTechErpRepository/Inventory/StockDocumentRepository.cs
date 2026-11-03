@@ -83,13 +83,13 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                a.warehouse_id AS WarehouseId, w.warehouse_name AS WarehouseName, a.reason AS Reason,
                a.stock_count_id AS StockCountId, sc.count_no AS StockCountNo, a.status AS Status,
                a.total_value AS TotalValue,
-               (SELECT count(*) FROM inventory.stock_adjustment_line l WHERE l.stock_adjustment_id = a.stock_adjustment_id)::int AS LineCount,
+               (SELECT count(*) FROM public.stock_adjustment_line l WHERE l.stock_adjustment_id = a.stock_adjustment_id)::int AS LineCount,
                a.posted_at AT TIME ZONE 'utc' AS PostedAt, a.posted_by AS PostedBy, a.remarks AS Remarks,
                a.created_at AT TIME ZONE 'utc' AS CreatedAt, a.created_by AS CreatedBy,
                a.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.stock_adjustment a
-        JOIN inventory.warehouse w ON w.warehouse_id = a.warehouse_id
-        LEFT JOIN inventory.stock_count sc ON sc.stock_count_id = a.stock_count_id
+        FROM public.stock_adjustment a
+        JOIN public.warehouse w ON w.warehouse_id = a.warehouse_id
+        LEFT JOIN public.stock_count sc ON sc.stock_count_id = a.stock_count_id
         """;
 
     private const string AdjustmentFilter = """
@@ -119,7 +119,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockAdjustment>(connection,
-            $"SELECT count(*) FROM inventory.stock_adjustment a {AdjustmentFilter}",
+            $"SELECT count(*) FROM public.stock_adjustment a {AdjustmentFilter}",
             $"{AdjustmentSelect} {AdjustmentFilter} ORDER BY a.adjustment_date DESC, a.stock_adjustment_id DESC",
             QueryParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -144,15 +144,15 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
         adjustment.Lines = (await connection.QueryAsync<StockLine>(new CommandDefinition($"""
             SELECT l.stock_adjustment_line_id AS Id, l.line_no AS LineNo, {StockLineSelect}
-            FROM inventory.stock_adjustment_line l
-            JOIN inventory.product p ON p.product_id = l.product_id
-            JOIN inventory.unit u ON u.unit_id = l.unit_id
-            JOIN inventory.unit bu ON bu.unit_id = p.base_unit_id
-            LEFT JOIN inventory.batch b ON b.batch_id = l.batch_id
+            FROM public.stock_adjustment_line l
+            JOIN public.product p ON p.product_id = l.product_id
+            JOIN public.unit u ON u.unit_id = l.unit_id
+            JOIN public.unit bu ON bu.unit_id = p.base_unit_id
+            LEFT JOIN public.batch b ON b.batch_id = l.batch_id
             WHERE l.stock_adjustment_id = @Id
             ORDER BY l.line_no
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
-        await AttachSerialsAsync(connection, "inventory.stock_adjustment_serial", "stock_adjustment_line_id",
+        await AttachSerialsAsync(connection, "public.stock_adjustment_serial", "stock_adjustment_line_id",
             adjustment.Lines, cancellationToken);
         return adjustment;
     }
@@ -190,7 +190,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         {
             var number = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.StockAdjustment, cancellationToken);
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO inventory.stock_adjustment (organization_id, adjustment_no, adjustment_date, warehouse_id, reason,
+                INSERT INTO public.stock_adjustment (organization_id, adjustment_no, adjustment_date, warehouse_id, reason,
                                                         status, remarks, created_at, created_by)
                 VALUES (@Org, @Number, @AdjustmentDate, @WarehouseId, @Reason, 'Draft', @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING stock_adjustment_id
@@ -200,14 +200,14 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         else
         {
             id = adjustment.Id;
-            await LockDraftAsync(connection, transaction, "inventory.stock_adjustment", "stock_adjustment_id", "adjustment_no",
+            await LockDraftAsync(connection, transaction, "public.stock_adjustment", "stock_adjustment_id", "adjustment_no",
                 "adjustment_date", "warehouse_id", organizationId, id, "adjustment", cancellationToken);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE inventory.stock_adjustment
+                UPDATE public.stock_adjustment
                 SET adjustment_date = @AdjustmentDate, warehouse_id = @WarehouseId, reason = @Reason, remarks = @Remarks,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE stock_adjustment_id = @Id;
-                DELETE FROM inventory.stock_adjustment_line WHERE stock_adjustment_id = @Id;
+                DELETE FROM public.stock_adjustment_line WHERE stock_adjustment_id = @Id;
                 """, new { header.AdjustmentDate, header.WarehouseId, header.Reason, header.Remarks, header.UserId, Id = id },
                 transaction, cancellationToken: cancellationToken));
         }
@@ -215,7 +215,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         foreach (var line in adjustment.Lines)
         {
             var lineId = await connection.QuerySingleAsync<long>(new CommandDefinition("""
-                INSERT INTO inventory.stock_adjustment_line (stock_adjustment_id, line_no, product_id, unit_id, conversion_factor,
+                INSERT INTO public.stock_adjustment_line (stock_adjustment_id, line_no, product_id, unit_id, conversion_factor,
                     quantity, batch_id, batch_no, manufacture_date, expiry_date, unit_cost, remarks)
                 VALUES (@DocumentId, @LineNo, @ProductId, @UnitId, @ConversionFactor, @Quantity, @BatchId, @BatchNo,
                         @ManufactureDate, @ExpiryDate, @UnitCost, @Remarks)
@@ -235,7 +235,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                     line.UnitCost,
                     line.Remarks
                 }, transaction, cancellationToken: cancellationToken));
-            await InsertSerialsAsync(connection, transaction, "inventory.stock_adjustment_serial", "stock_adjustment_line_id",
+            await InsertSerialsAsync(connection, transaction, "public.stock_adjustment_serial", "stock_adjustment_line_id",
                 lineId, line.SerialNos, cancellationToken);
         }
 
@@ -255,7 +255,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     }
 
     public async Task<DeleteOutcome> DeleteAdjustmentAsync(int organizationId, long id, CancellationToken cancellationToken = default)
-        => await DeleteDraftAsync("inventory.stock_adjustment", "stock_adjustment_id", organizationId, id, cancellationToken);
+        => await DeleteDraftAsync("public.stock_adjustment", "stock_adjustment_id", organizationId, id, cancellationToken);
 
     public async Task PostAdjustmentAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
     {
@@ -269,16 +269,16 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, long id, int userId,
         CancellationToken cancellationToken)
     {
-        var header = await LockDraftAsync(connection, transaction, "inventory.stock_adjustment", "stock_adjustment_id",
+        var header = await LockDraftAsync(connection, transaction, "public.stock_adjustment", "stock_adjustment_id",
             "adjustment_no", "adjustment_date", "warehouse_id", organizationId, id, "adjustment", cancellationToken);
         var reason = await connection.QuerySingleAsync<string>(new CommandDefinition(
-            "SELECT reason FROM inventory.stock_adjustment WHERE stock_adjustment_id = @Id", new { Id = id }, transaction,
+            "SELECT reason FROM public.stock_adjustment WHERE stock_adjustment_id = @Id", new { Id = id }, transaction,
             cancellationToken: cancellationToken));
         var lines = await PostingLinesAsync(connection, transaction, """
             SELECT l.stock_adjustment_line_id AS Id, l.product_id AS ProductId, p.tracking_type AS TrackingType,
                    l.base_quantity AS BaseQuantity, l.batch_id AS BatchId, l.batch_no AS BatchNo,
                    l.manufacture_date AS ManufactureDate, l.expiry_date AS ExpiryDate, l.unit_cost AS UnitCost
-            FROM inventory.stock_adjustment_line l JOIN inventory.product p ON p.product_id = l.product_id
+            FROM public.stock_adjustment_line l JOIN public.product p ON p.product_id = l.product_id
             WHERE l.stock_adjustment_id = @Id ORDER BY l.line_no
             """, id, cancellationToken);
         if (lines.Count == 0)
@@ -287,7 +287,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         var settings = await PostingSettingsReader.ReadAsync(connection, transaction, organizationId, cancellationToken);
         var ledger = new StockLedger(connection, transaction, organizationId, userId, header.DocumentDate,
             DocumentType.StockAdjustment, id, header.Number, settings.AllowNegativeStock);
-        var serials = await SerialsByLineAsync(connection, transaction, "inventory.stock_adjustment_serial",
+        var serials = await SerialsByLineAsync(connection, transaction, "public.stock_adjustment_serial",
             "stock_adjustment_line_id", lines, cancellationToken);
 
         var moves = new List<StockMove>();
@@ -304,7 +304,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                         batchId, header.WarehouseId, lineSerials, cancellationToken)
                     : await StockItems.TakeSerialsAsync(connection, transaction, userId, line.ProductId, header.WarehouseId,
                         lineSerials, "Scrapped", cancellationToken);
-                await LinkSerialsAsync(connection, transaction, "inventory.stock_adjustment_serial", "stock_adjustment_line_id",
+                await LinkSerialsAsync(connection, transaction, "public.stock_adjustment_serial", "stock_adjustment_line_id",
                     line.Id, lineSerials, serialIds, cancellationToken);
             }
 
@@ -315,7 +315,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
 
         var applied = await ledger.ApplyAsync(moves, cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.stock_adjustment
+            UPDATE public.stock_adjustment
             SET status = 'Posted', total_value = @TotalValue, posted_at = {SecurityDb.NowUtc}, posted_by = @UserId,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE stock_adjustment_id = @Id
@@ -324,7 +324,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         // Record the cost each line moved at (stock removed takes the average cost).
         for (var i = 0; i < lines.Count; i++)
             await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE inventory.stock_adjustment_line SET unit_cost = @UnitCost, batch_id = @BatchId WHERE stock_adjustment_line_id = @Id",
+                "UPDATE public.stock_adjustment_line SET unit_cost = @UnitCost, batch_id = @BatchId WHERE stock_adjustment_line_id = @Id",
                 new { Id = lines[i].Id, UnitCost = Math.Round(applied[i].UnitCost, 6), moves[i].BatchId }, transaction,
                 cancellationToken: cancellationToken));
     }
@@ -333,7 +333,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "inventory.stock_adjustment", "stock_adjustment_id",
+        var header = await LockAsync(connection, transaction, "public.stock_adjustment", "stock_adjustment_id",
             "adjustment_no", "adjustment_date", "warehouse_id", organizationId, id, cancellationToken)
             ?? throw new BusinessRuleException("The adjustment doesn't exist.");
         if (header.Status != DocumentStatus.Posted)
@@ -344,7 +344,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
             header.WarehouseId, cancellationToken);
         await new StockLedger(connection, transaction, organizationId, userId, DateOnly.FromDateTime(DateTime.UtcNow),
             DocumentType.StockAdjustment, id, header.Number, settings.AllowNegativeStock).ReverseAsync(null, cancellationToken);
-        await SetStatusAsync(connection, transaction, "inventory.stock_adjustment", "stock_adjustment_id", id,
+        await SetStatusAsync(connection, transaction, "public.stock_adjustment", "stock_adjustment_id", id,
             DocumentStatus.Cancelled, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -357,16 +357,16 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         SELECT t.stock_transfer_id AS Id, t.transfer_no AS TransferNo, t.transfer_date AS TransferDate,
                t.from_warehouse_id AS FromWarehouseId, fw.warehouse_name AS FromWarehouseName,
                t.to_warehouse_id AS ToWarehouseId, tw.warehouse_name AS ToWarehouseName, t.status AS Status,
-               coalesce((SELECT round(sum(l.base_quantity * l.unit_cost), 4) FROM inventory.stock_transfer_line l
+               coalesce((SELECT round(sum(l.base_quantity * l.unit_cost), 4) FROM public.stock_transfer_line l
                          WHERE l.stock_transfer_id = t.stock_transfer_id), 0) AS TotalValue,
-               (SELECT count(*) FROM inventory.stock_transfer_line l WHERE l.stock_transfer_id = t.stock_transfer_id)::int AS LineCount,
+               (SELECT count(*) FROM public.stock_transfer_line l WHERE l.stock_transfer_id = t.stock_transfer_id)::int AS LineCount,
                t.dispatched_at AT TIME ZONE 'utc' AS DispatchedAt, t.dispatched_by AS DispatchedBy,
                t.received_at AT TIME ZONE 'utc' AS ReceivedAt, t.received_by AS ReceivedBy, t.remarks AS Remarks,
                t.created_at AT TIME ZONE 'utc' AS CreatedAt, t.created_by AS CreatedBy,
                t.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.stock_transfer t
-        JOIN inventory.warehouse fw ON fw.warehouse_id = t.from_warehouse_id
-        JOIN inventory.warehouse tw ON tw.warehouse_id = t.to_warehouse_id
+        FROM public.stock_transfer t
+        JOIN public.warehouse fw ON fw.warehouse_id = t.from_warehouse_id
+        JOIN public.warehouse tw ON tw.warehouse_id = t.to_warehouse_id
         """;
 
     private const string TransferFilter = """
@@ -382,7 +382,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockTransfer>(connection,
-            $"SELECT count(*) FROM inventory.stock_transfer t {TransferFilter}",
+            $"SELECT count(*) FROM public.stock_transfer t {TransferFilter}",
             $"{TransferSelect} {TransferFilter} ORDER BY t.transfer_date DESC, t.stock_transfer_id DESC",
             QueryParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -404,15 +404,15 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                    l.base_quantity AS BaseQuantity, l.batch_id AS BatchId, b.batch_no AS BatchNo,
                    b.manufacture_date AS ManufactureDate, b.expiry_date AS ExpiryDate, l.unit_cost AS UnitCost,
                    l.received_base_quantity AS ReceivedBaseQuantity, l.remarks AS Remarks
-            FROM inventory.stock_transfer_line l
-            JOIN inventory.product p ON p.product_id = l.product_id
-            JOIN inventory.unit u ON u.unit_id = l.unit_id
-            JOIN inventory.unit bu ON bu.unit_id = p.base_unit_id
-            LEFT JOIN inventory.batch b ON b.batch_id = l.batch_id
+            FROM public.stock_transfer_line l
+            JOIN public.product p ON p.product_id = l.product_id
+            JOIN public.unit u ON u.unit_id = l.unit_id
+            JOIN public.unit bu ON bu.unit_id = p.base_unit_id
+            LEFT JOIN public.batch b ON b.batch_id = l.batch_id
             WHERE l.stock_transfer_id = @Id
             ORDER BY l.line_no
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
-        await AttachSerialsAsync(connection, "inventory.stock_transfer_serial", "stock_transfer_line_id", transfer.Lines, cancellationToken);
+        await AttachSerialsAsync(connection, "public.stock_transfer_serial", "stock_transfer_line_id", transfer.Lines, cancellationToken);
         return transfer;
     }
 
@@ -435,7 +435,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         {
             var number = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.StockTransfer, cancellationToken);
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO inventory.stock_transfer (organization_id, transfer_no, transfer_date, from_warehouse_id,
+                INSERT INTO public.stock_transfer (organization_id, transfer_no, transfer_date, from_warehouse_id,
                                                       to_warehouse_id, status, remarks, created_at, created_by)
                 VALUES (@Org, @Number, @TransferDate, @FromWarehouseId, @ToWarehouseId, 'Draft', @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING stock_transfer_id
@@ -445,14 +445,14 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         else
         {
             id = transfer.Id;
-            await LockDraftAsync(connection, transaction, "inventory.stock_transfer", "stock_transfer_id", "transfer_no",
+            await LockDraftAsync(connection, transaction, "public.stock_transfer", "stock_transfer_id", "transfer_no",
                 "transfer_date", "from_warehouse_id", organizationId, id, "transfer", cancellationToken);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE inventory.stock_transfer
+                UPDATE public.stock_transfer
                 SET transfer_date = @TransferDate, from_warehouse_id = @FromWarehouseId, to_warehouse_id = @ToWarehouseId,
                     remarks = @Remarks, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE stock_transfer_id = @Id;
-                DELETE FROM inventory.stock_transfer_line WHERE stock_transfer_id = @Id;
+                DELETE FROM public.stock_transfer_line WHERE stock_transfer_id = @Id;
                 """, new { header.TransferDate, header.FromWarehouseId, header.ToWarehouseId, header.Remarks, header.UserId, Id = id },
                 transaction, cancellationToken: cancellationToken));
         }
@@ -460,13 +460,13 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         foreach (var line in transfer.Lines)
         {
             var lineId = await connection.QuerySingleAsync<long>(new CommandDefinition("""
-                INSERT INTO inventory.stock_transfer_line (stock_transfer_id, line_no, product_id, unit_id, conversion_factor,
+                INSERT INTO public.stock_transfer_line (stock_transfer_id, line_no, product_id, unit_id, conversion_factor,
                                                            quantity, batch_id, remarks)
                 VALUES (@DocumentId, @LineNo, @ProductId, @UnitId, @ConversionFactor, @Quantity, @BatchId, @Remarks)
                 RETURNING stock_transfer_line_id
                 """, new { DocumentId = id, line.LineNo, line.ProductId, line.UnitId, line.ConversionFactor, line.Quantity, line.BatchId, line.Remarks },
                 transaction, cancellationToken: cancellationToken));
-            await InsertSerialsAsync(connection, transaction, "inventory.stock_transfer_serial", "stock_transfer_line_id",
+            await InsertSerialsAsync(connection, transaction, "public.stock_transfer_serial", "stock_transfer_line_id",
                 lineId, line.SerialNos, cancellationToken);
         }
 
@@ -475,18 +475,18 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     }
 
     public async Task<DeleteOutcome> DeleteTransferAsync(int organizationId, long id, CancellationToken cancellationToken = default)
-        => await DeleteDraftAsync("inventory.stock_transfer", "stock_transfer_id", organizationId, id, cancellationToken);
+        => await DeleteDraftAsync("public.stock_transfer", "stock_transfer_id", organizationId, id, cancellationToken);
 
     private async Task<(NpgsqlConnection Connection, NpgsqlTransaction Transaction, DocumentHeader Header, int ToWarehouseId)> LockTransferAsync(
         int organizationId, long id, CancellationToken cancellationToken)
     {
         var connection = await OpenAsync(cancellationToken);
         var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "inventory.stock_transfer", "stock_transfer_id", "transfer_no",
+        var header = await LockAsync(connection, transaction, "public.stock_transfer", "stock_transfer_id", "transfer_no",
             "transfer_date", "from_warehouse_id", organizationId, id, cancellationToken)
             ?? throw new BusinessRuleException("The transfer doesn't exist.");
         var to = await connection.QuerySingleAsync<int>(new CommandDefinition(
-            "SELECT to_warehouse_id FROM inventory.stock_transfer WHERE stock_transfer_id = @Id", new { Id = id }, transaction,
+            "SELECT to_warehouse_id FROM public.stock_transfer WHERE stock_transfer_id = @Id", new { Id = id }, transaction,
             cancellationToken: cancellationToken));
         return (connection, transaction, header, to);
     }
@@ -495,7 +495,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         SELECT l.stock_transfer_line_id AS Id, l.product_id AS ProductId, p.tracking_type AS TrackingType,
                l.base_quantity AS BaseQuantity, l.batch_id AS BatchId, l.unit_cost AS UnitCost,
                l.received_base_quantity AS ReceivedBaseQuantity
-        FROM inventory.stock_transfer_line l JOIN inventory.product p ON p.product_id = l.product_id
+        FROM public.stock_transfer_line l JOIN public.product p ON p.product_id = l.product_id
         WHERE l.stock_transfer_id = @Id ORDER BY l.line_no
         """;
 
@@ -512,7 +512,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                 throw new BusinessRuleException("Add at least one line before dispatching.");
 
             var settings = await PostingSettingsReader.ReadAsync(connection, transaction, organizationId, cancellationToken);
-            var serials = await SerialsByLineAsync(connection, transaction, "inventory.stock_transfer_serial",
+            var serials = await SerialsByLineAsync(connection, transaction, "public.stock_transfer_serial",
                 "stock_transfer_line_id", lines, cancellationToken);
             var moves = new List<StockMove>();
             foreach (var line in lines)
@@ -525,7 +525,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                     var lineSerials = serials[line.Id].ToList();
                     serialIds = await StockItems.TakeSerialsAsync(connection, transaction, userId, line.ProductId,
                         header.WarehouseId, lineSerials, "InTransit", cancellationToken);
-                    await LinkSerialsAsync(connection, transaction, "inventory.stock_transfer_serial", "stock_transfer_line_id",
+                    await LinkSerialsAsync(connection, transaction, "public.stock_transfer_serial", "stock_transfer_line_id",
                         line.Id, lineSerials, serialIds, cancellationToken);
                 }
                 moves.Add(new StockMove(header.WarehouseId, line.ProductId, line.BatchId, -line.BaseQuantity, "TransferOut",
@@ -536,11 +536,11 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                 DocumentType.StockTransfer, id, header.Number, settings.AllowNegativeStock).ApplyAsync(moves, cancellationToken);
             for (var i = 0; i < lines.Count; i++)
                 await connection.ExecuteAsync(new CommandDefinition(
-                    "UPDATE inventory.stock_transfer_line SET unit_cost = @UnitCost WHERE stock_transfer_line_id = @Id",
+                    "UPDATE public.stock_transfer_line SET unit_cost = @UnitCost WHERE stock_transfer_line_id = @Id",
                     new { Id = lines[i].Id, UnitCost = Math.Round(applied[i].UnitCost, 6) }, transaction,
                     cancellationToken: cancellationToken));
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE inventory.stock_transfer
+                UPDATE public.stock_transfer
                 SET status = 'InTransit', dispatched_at = {SecurityDb.NowUtc}, dispatched_by = @UserId,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE stock_transfer_id = @Id
@@ -563,7 +563,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                 throw new BusinessRuleException("One of the received lines isn't on this transfer.");
 
             var settings = await PostingSettingsReader.ReadAsync(connection, transaction, organizationId, cancellationToken);
-            var serials = await SerialsByLineAsync(connection, transaction, "inventory.stock_transfer_serial",
+            var serials = await SerialsByLineAsync(connection, transaction, "public.stock_transfer_serial",
                 "stock_transfer_line_id", lines, cancellationToken, resolvedIds: true);
             var moves = new List<StockMove>();
             foreach (var line in lines)
@@ -575,7 +575,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                     throw new BusinessRuleException("Serial-tracked lines are received in full.");
 
                 await connection.ExecuteAsync(new CommandDefinition(
-                    "UPDATE inventory.stock_transfer_line SET received_base_quantity = @Quantity WHERE stock_transfer_line_id = @Id",
+                    "UPDATE public.stock_transfer_line SET received_base_quantity = @Quantity WHERE stock_transfer_line_id = @Id",
                     new { Id = line.Id, Quantity = quantity }, transaction, cancellationToken: cancellationToken));
                 if (quantity == 0)
                     continue;
@@ -589,7 +589,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
             await new StockLedger(connection, transaction, organizationId, userId, DateOnly.FromDateTime(DateTime.UtcNow),
                 DocumentType.StockTransfer, id, header.Number, settings.AllowNegativeStock).ApplyAsync(moves, cancellationToken);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE inventory.stock_transfer
+                UPDATE public.stock_transfer
                 SET status = 'Received', received_at = {SecurityDb.NowUtc}, received_by = @UserId,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE stock_transfer_id = @Id
@@ -618,7 +618,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
             await ledger.ReverseAsync(["TransferIn"], cancellationToken);
             await ledger.ReverseAsync(["TransferOut"], cancellationToken);
             await StockItems.RestoreSerialsAsync(connection, transaction, userId, serialIds, header.WarehouseId, cancellationToken);
-            await SetStatusAsync(connection, transaction, "inventory.stock_transfer", "stock_transfer_id", id,
+            await SetStatusAsync(connection, transaction, "public.stock_transfer", "stock_transfer_id", id,
                 DocumentStatus.Cancelled, userId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -632,19 +632,19 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         SELECT c.stock_count_id AS Id, c.count_no AS CountNo, c.count_date AS CountDate, c.warehouse_id AS WarehouseId,
                w.warehouse_name AS WarehouseName, c.category_id AS CategoryId, cat.category_name AS CategoryName,
                c.status AS Status,
-               (SELECT count(*) FROM inventory.stock_count_line l WHERE l.stock_count_id = c.stock_count_id)::int AS LineCount,
-               (SELECT count(*) FROM inventory.stock_count_line l
+               (SELECT count(*) FROM public.stock_count_line l WHERE l.stock_count_id = c.stock_count_id)::int AS LineCount,
+               (SELECT count(*) FROM public.stock_count_line l
                 WHERE l.stock_count_id = c.stock_count_id AND l.counted_quantity IS NOT NULL)::int AS CountedLineCount,
-               coalesce((SELECT round(sum(l.difference_quantity * l.unit_cost), 4) FROM inventory.stock_count_line l
+               coalesce((SELECT round(sum(l.difference_quantity * l.unit_cost), 4) FROM public.stock_count_line l
                          WHERE l.stock_count_id = c.stock_count_id), 0) AS DifferenceValue,
                a.stock_adjustment_id AS StockAdjustmentId, a.adjustment_no AS StockAdjustmentNo,
                c.started_at AT TIME ZONE 'utc' AS StartedAt, c.posted_at AT TIME ZONE 'utc' AS PostedAt,
                c.posted_by AS PostedBy, c.remarks AS Remarks,
                c.created_at AT TIME ZONE 'utc' AS CreatedAt, c.created_by AS CreatedBy
-        FROM inventory.stock_count c
-        JOIN inventory.warehouse w ON w.warehouse_id = c.warehouse_id
-        LEFT JOIN inventory.category cat ON cat.category_id = c.category_id
-        LEFT JOIN inventory.stock_adjustment a ON a.stock_count_id = c.stock_count_id AND a.status = 'Posted'
+        FROM public.stock_count c
+        JOIN public.warehouse w ON w.warehouse_id = c.warehouse_id
+        LEFT JOIN public.category cat ON cat.category_id = c.category_id
+        LEFT JOIN public.stock_adjustment a ON a.stock_count_id = c.stock_count_id AND a.status = 'Posted'
         """;
 
     private const string CountFilter = """
@@ -660,7 +660,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockCount>(connection,
-            $"SELECT count(*) FROM inventory.stock_count c {CountFilter}",
+            $"SELECT count(*) FROM public.stock_count c {CountFilter}",
             $"{CountSelect} {CountFilter} ORDER BY c.count_date DESC, c.stock_count_id DESC",
             QueryParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -679,10 +679,10 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                    p.product_name AS ProductName, u.unit_code AS BaseUnitCode, l.batch_id AS BatchId, b.batch_no AS BatchNo,
                    b.expiry_date AS ExpiryDate, l.system_quantity AS SystemQuantity, l.counted_quantity AS CountedQuantity,
                    l.difference_quantity AS DifferenceQuantity, l.unit_cost AS UnitCost, l.remarks AS Remarks
-            FROM inventory.stock_count_line l
-            JOIN inventory.product p ON p.product_id = l.product_id
-            JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-            LEFT JOIN inventory.batch b ON b.batch_id = l.batch_id
+            FROM public.stock_count_line l
+            JOIN public.product p ON p.product_id = l.product_id
+            JOIN public.unit u ON u.unit_id = p.base_unit_id
+            LEFT JOIN public.batch b ON b.batch_id = l.batch_id
             WHERE l.stock_count_id = @Id
             ORDER BY p.product_name, b.expiry_date NULLS LAST, l.stock_count_line_id
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
@@ -697,7 +697,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var number = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.StockCount, cancellationToken);
         var id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-            INSERT INTO inventory.stock_count (organization_id, count_no, count_date, warehouse_id, category_id, status,
+            INSERT INTO public.stock_count (organization_id, count_no, count_date, warehouse_id, category_id, status,
                                                started_at, remarks, created_at, created_by)
             VALUES (@Org, @Number, @CountDate, @WarehouseId, @CategoryId, 'InProgress', {SecurityDb.NowUtc}, @Remarks,
                     {SecurityDb.NowUtc}, @UserId)
@@ -708,21 +708,21 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         // The expected quantities, frozen now. Serial-tracked products are counted by serial number
         // and adjusted on a stock adjustment instead, so they are left out.
         var lines = await connection.ExecuteAsync(new CommandDefinition("""
-            INSERT INTO inventory.stock_count_line (stock_count_id, product_id, batch_id, system_quantity, unit_cost)
+            INSERT INTO public.stock_count_line (stock_count_id, product_id, batch_id, system_quantity, unit_cost)
             SELECT @Id, b.product_id, b.batch_id, b.quantity, CASE WHEN b.average_cost > 0 THEN b.average_cost ELSE p.last_purchase_cost END
-            FROM inventory.stock_balance b
-            JOIN inventory.product p ON p.product_id = b.product_id
+            FROM public.stock_balance b
+            JOIN public.product p ON p.product_id = b.product_id
             WHERE b.organization_id = @Org AND b.warehouse_id = @WarehouseId AND b.quantity <> 0
               AND p.product_type = 'Stock' AND p.tracking_type <> 'Serial'
               AND (CAST(@CategoryIds AS int[]) IS NULL OR p.category_id = ANY(@CategoryIds));
 
-            INSERT INTO inventory.stock_count_line (stock_count_id, product_id, batch_id, system_quantity, unit_cost)
+            INSERT INTO public.stock_count_line (stock_count_id, product_id, batch_id, system_quantity, unit_cost)
             SELECT @Id, p.product_id, NULL, 0, p.last_purchase_cost
-            FROM inventory.product p
+            FROM public.product p
             WHERE @IncludeZero AND p.organization_id = @Org AND p.is_active AND p.product_type = 'Stock'
               AND p.tracking_type = 'None'
               AND (CAST(@CategoryIds AS int[]) IS NULL OR p.category_id = ANY(@CategoryIds))
-              AND NOT EXISTS (SELECT 1 FROM inventory.stock_balance b
+              AND NOT EXISTS (SELECT 1 FROM public.stock_balance b
                               WHERE b.product_id = p.product_id AND b.warehouse_id = @WarehouseId AND b.quantity <> 0);
             """, new
             {
@@ -743,20 +743,20 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "inventory.stock_count", "stock_count_id", "count_no", "count_date",
+        var header = await LockAsync(connection, transaction, "public.stock_count", "stock_count_id", "count_no", "count_date",
             "warehouse_id", organizationId, id, cancellationToken) ?? throw new BusinessRuleException("The stock count doesn't exist.");
         if (header.Status != "InProgress")
             throw new BusinessRuleException("Only a count in progress can be changed.");
 
         var updated = await connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE inventory.stock_count_line SET counted_quantity = @CountedQuantity, remarks = @Remarks
+            UPDATE public.stock_count_line SET counted_quantity = @CountedQuantity, remarks = @Remarks
             WHERE stock_count_line_id = @LineId AND stock_count_id = @Id
             """, request.Lines.Select(l => new { Id = id, l.LineId, l.CountedQuantity, l.Remarks }), transaction,
             cancellationToken: cancellationToken));
         if (updated != request.Lines.Count)
             throw new BusinessRuleException("One of the lines isn't on this count.");
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.stock_count SET remarks = @Remarks, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            UPDATE public.stock_count SET remarks = @Remarks, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE stock_count_id = @Id
             """, new { Id = id, request.Remarks, UserId = userId }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
@@ -766,7 +766,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "inventory.stock_count", "stock_count_id", "count_no", "count_date",
+        var header = await LockAsync(connection, transaction, "public.stock_count", "stock_count_id", "count_no", "count_date",
             "warehouse_id", organizationId, id, cancellationToken) ?? throw new BusinessRuleException("The stock count doesn't exist.");
         if (header.Status != "InProgress")
             throw new BusinessRuleException("Only a count in progress can be posted.");
@@ -774,7 +774,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         var differences = (await connection.QueryAsync<(long LineId, int ProductId, int BaseUnitId, long? BatchId, decimal Difference, decimal UnitCost)>(
             new CommandDefinition("""
                 SELECT l.stock_count_line_id, l.product_id, p.base_unit_id, l.batch_id, l.difference_quantity, l.unit_cost
-                FROM inventory.stock_count_line l JOIN inventory.product p ON p.product_id = l.product_id
+                FROM public.stock_count_line l JOIN public.product p ON p.product_id = l.product_id
                 WHERE l.stock_count_id = @Id AND l.counted_quantity IS NOT NULL AND l.difference_quantity <> 0
                 ORDER BY l.stock_count_line_id
                 """, new { Id = id }, transaction, cancellationToken: cancellationToken))).AsList();
@@ -783,7 +783,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         {
             var number = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.StockAdjustment, cancellationToken);
             var adjustmentId = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO inventory.stock_adjustment (organization_id, adjustment_no, adjustment_date, warehouse_id, reason,
+                INSERT INTO public.stock_adjustment (organization_id, adjustment_no, adjustment_date, warehouse_id, reason,
                                                         stock_count_id, status, remarks, created_at, created_by)
                 VALUES (@Org, @Number, @Date, @WarehouseId, 'CountDifference', @CountId, 'Draft', @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING stock_adjustment_id
@@ -798,7 +798,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
                     UserId = userId
                 }, transaction, cancellationToken: cancellationToken));
             await connection.ExecuteAsync(new CommandDefinition("""
-                INSERT INTO inventory.stock_adjustment_line (stock_adjustment_id, line_no, product_id, unit_id, conversion_factor,
+                INSERT INTO public.stock_adjustment_line (stock_adjustment_id, line_no, product_id, unit_id, conversion_factor,
                                                              quantity, batch_id, unit_cost)
                 VALUES (@AdjustmentId, @LineNo, @ProductId, @UnitId, 1, @Quantity, @BatchId, @UnitCost)
                 """, differences.Select((d, index) => new
@@ -815,7 +815,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         }
 
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.stock_count SET status = 'Posted', posted_at = {SecurityDb.NowUtc}, posted_by = @UserId,
+            UPDATE public.stock_count SET status = 'Posted', posted_at = {SecurityDb.NowUtc}, posted_by = @UserId,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE stock_count_id = @Id
             """, new { Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
@@ -826,13 +826,13 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "inventory.stock_count", "stock_count_id", "count_no", "count_date",
+        var header = await LockAsync(connection, transaction, "public.stock_count", "stock_count_id", "count_no", "count_date",
             "warehouse_id", organizationId, id, cancellationToken) ?? throw new BusinessRuleException("The stock count doesn't exist.");
         if (header.Status != "InProgress")
             throw new BusinessRuleException(header.Status == DocumentStatus.Posted
                 ? "A posted count can't be cancelled; cancel the stock adjustment it created instead."
                 : "This count is already cancelled.");
-        await SetStatusAsync(connection, transaction, "inventory.stock_count", "stock_count_id", id, DocumentStatus.Cancelled, userId, cancellationToken);
+        await SetStatusAsync(connection, transaction, "public.stock_count", "stock_count_id", id, DocumentStatus.Cancelled, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -912,7 +912,7 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         // TakeSerials/ReceiveSerials return ids in no particular order: match them back by serial number.
         await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE {table} t SET serial_number_id = s.serial_number_id
-            FROM inventory.serial_number s
+            FROM public.serial_number s
             WHERE t.{lineColumn} = @LineId AND s.serial_number_id = ANY(@Ids) AND s.serial_no = t.serial_no
             """, new { LineId = lineId, Ids = serialIds.ToArray() }, transaction, cancellationToken: cancellationToken));
         _ = serialNos;
@@ -939,8 +939,8 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
     {
         var moved = (await connection.QueryAsync<(long SerialId, bool Incoming)>(new CommandDefinition("""
             SELECT s.serial_number_id, m.quantity > 0
-            FROM inventory.stock_movement m
-            JOIN inventory.stock_movement_serial s ON s.stock_movement_id = m.stock_movement_id
+            FROM public.stock_movement m
+            JOIN public.stock_movement_serial s ON s.stock_movement_id = m.stock_movement_id
             WHERE m.organization_id = @Org AND m.source_document_type = @Type AND m.source_document_id = @Id
               AND m.reverses_stock_movement_id IS NULL
             """, new { Org = organizationId, Type = documentType, Id = documentId }, transaction,

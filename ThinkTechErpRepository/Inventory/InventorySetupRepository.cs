@@ -50,9 +50,9 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     private const string UnitSelect = """
         SELECT u.unit_id AS Id, u.unit_code AS Code, u.unit_name AS Name, u.unit_name_local AS NameLocal,
                u.unit_type AS UnitType, u.iso_code AS IsoCode, u.allow_decimal AS AllowDecimal, u.is_active AS IsActive,
-               (SELECT count(*) FROM inventory.product p WHERE p.base_unit_id = u.unit_id)::int AS ProductCount,
+               (SELECT count(*) FROM public.product p WHERE p.base_unit_id = u.unit_id)::int AS ProductCount,
                u.created_at AT TIME ZONE 'utc' AS CreatedAt, u.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.unit u
+        FROM public.unit u
         """;
 
     private const string UnitFilter = """
@@ -67,7 +67,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Unit>(connection,
-            $"SELECT count(*) FROM inventory.unit u {UnitFilter}",
+            $"SELECT count(*) FROM public.unit u {UnitFilter}",
             $"{UnitSelect} {UnitFilter} ORDER BY u.unit_code, u.unit_id",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
             limit, offset, cancellationToken);
@@ -85,7 +85,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO inventory.unit (organization_id, unit_code, unit_name, unit_name_local, unit_type, iso_code,
+            INSERT INTO public.unit (organization_id, unit_code, unit_name, unit_name_local, unit_type, iso_code,
                                         allow_decimal, is_active, created_at, created_by)
             VALUES (@Org, @Code, @Name, @NameLocal, @UnitType, @IsoCode, @AllowDecimal, @IsActive, {SecurityDb.NowUtc}, @UserId)
             RETURNING unit_id
@@ -98,7 +98,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", unitId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.unit
+            UPDATE public.unit
             SET unit_code = @Code, unit_name = @Name, unit_name_local = @NameLocal, unit_type = @UnitType,
                 iso_code = @IsoCode, allow_decimal = @AllowDecimal, is_active = @IsActive,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
@@ -110,7 +110,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM inventory.unit WHERE organization_id = @Org AND unit_id = @Id",
+            "DELETE FROM public.unit WHERE organization_id = @Org AND unit_id = @Id",
             new { Org = organizationId, Id = unitId }, cancellationToken: cancellationToken));
     }
 
@@ -120,11 +120,11 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     private const string CategoryTree = """
         WITH RECURSIVE tree AS (
             SELECT c.category_id, c.category_name::text AS path, 0 AS depth
-            FROM inventory.category c
+            FROM public.category c
             WHERE c.organization_id = @Org AND c.parent_category_id IS NULL
             UNION ALL
             SELECT c.category_id, tree.path || ' > ' || c.category_name, tree.depth + 1
-            FROM inventory.category c
+            FROM public.category c
             JOIN tree ON c.parent_category_id = tree.category_id
             WHERE tree.depth < 20
         )
@@ -134,10 +134,10 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         SELECT c.category_id AS Id, c.parent_category_id AS ParentCategoryId, parent.category_name AS ParentName,
                c.category_code AS Code, c.category_name AS Name, c.category_name_local AS NameLocal,
                coalesce(tree.path, c.category_name) AS Path, c.sort_order AS SortOrder, c.is_active AS IsActive,
-               (SELECT count(*) FROM inventory.product p WHERE p.category_id = c.category_id)::int AS ProductCount,
+               (SELECT count(*) FROM public.product p WHERE p.category_id = c.category_id)::int AS ProductCount,
                c.created_at AT TIME ZONE 'utc' AS CreatedAt, c.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.category c
-        LEFT JOIN inventory.category parent ON parent.category_id = c.parent_category_id
+        FROM public.category c
+        LEFT JOIN public.category parent ON parent.category_id = c.parent_category_id
         LEFT JOIN tree ON tree.category_id = c.category_id
         """;
 
@@ -155,7 +155,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Category>(connection,
-            $"SELECT count(*) FROM inventory.category c {CategoryFilter}",
+            $"SELECT count(*) FROM public.category c {CategoryFilter}",
             $"{CategoryTree} {CategorySelect} {CategoryFilter} ORDER BY Path, c.sort_order, c.category_id",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, ParentId = parentId },
             limit, offset, cancellationToken);
@@ -174,9 +174,9 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<int>(new CommandDefinition("""
             WITH RECURSIVE below AS (
-                SELECT category_id, 0 AS depth FROM inventory.category WHERE organization_id = @Org AND category_id = @Id
+                SELECT category_id, 0 AS depth FROM public.category WHERE organization_id = @Org AND category_id = @Id
                 UNION ALL
-                SELECT c.category_id, below.depth + 1 FROM inventory.category c
+                SELECT c.category_id, below.depth + 1 FROM public.category c
                 JOIN below ON c.parent_category_id = below.category_id WHERE below.depth < 20
             )
             SELECT category_id FROM below
@@ -187,7 +187,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO inventory.category (organization_id, parent_category_id, category_code, category_name,
+            INSERT INTO public.category (organization_id, parent_category_id, category_code, category_name,
                                             category_name_local, sort_order, is_active, created_at, created_by)
             VALUES (@Org, @ParentCategoryId, @Code, @Name, @NameLocal, @SortOrder, @IsActive, {SecurityDb.NowUtc}, @UserId)
             RETURNING category_id
@@ -200,7 +200,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", categoryId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.category
+            UPDATE public.category
             SET parent_category_id = @ParentCategoryId, category_code = @Code, category_name = @Name,
                 category_name_local = @NameLocal, sort_order = @SortOrder, is_active = @IsActive,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
@@ -212,7 +212,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM inventory.category WHERE organization_id = @Org AND category_id = @Id",
+            "DELETE FROM public.category WHERE organization_id = @Org AND category_id = @Id",
             new { Org = organizationId, Id = categoryId }, cancellationToken: cancellationToken));
     }
 
@@ -220,9 +220,9 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
 
     private const string BrandSelect = """
         SELECT b.brand_id AS Id, b.brand_name AS Name, b.brand_name_local AS NameLocal, b.is_active AS IsActive,
-               (SELECT count(*) FROM inventory.product p WHERE p.brand_id = b.brand_id)::int AS ProductCount,
+               (SELECT count(*) FROM public.product p WHERE p.brand_id = b.brand_id)::int AS ProductCount,
                b.created_at AT TIME ZONE 'utc' AS CreatedAt, b.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.brand b
+        FROM public.brand b
         """;
 
     private const string BrandFilter = """
@@ -235,7 +235,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Brand>(connection,
-            $"SELECT count(*) FROM inventory.brand b {BrandFilter}",
+            $"SELECT count(*) FROM public.brand b {BrandFilter}",
             $"{BrandSelect} {BrandFilter} ORDER BY b.brand_name, b.brand_id",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
             limit, offset, cancellationToken);
@@ -253,7 +253,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO inventory.brand (organization_id, brand_name, brand_name_local, is_active, created_at, created_by)
+            INSERT INTO public.brand (organization_id, brand_name, brand_name_local, is_active, created_at, created_by)
             VALUES (@Org, @Name, @NameLocal, @IsActive, {SecurityDb.NowUtc}, @UserId)
             RETURNING brand_id
             """, Params(organizationId, request, userId), cancellationToken: cancellationToken));
@@ -265,7 +265,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", brandId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.brand
+            UPDATE public.brand
             SET brand_name = @Name, brand_name_local = @NameLocal, is_active = @IsActive,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE organization_id = @Org AND brand_id = @Id
@@ -276,7 +276,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM inventory.brand WHERE organization_id = @Org AND brand_id = @Id",
+            "DELETE FROM public.brand WHERE organization_id = @Org AND brand_id = @Id",
             new { Org = organizationId, Id = brandId }, cancellationToken: cancellationToken));
     }
 
@@ -287,11 +287,11 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
                w.warehouse_name_local AS NameLocal, w.warehouse_type AS WarehouseType, w.address AS Address,
                w.phone AS Phone, w.is_active AS IsActive,
                coalesce(s.default_warehouse_id = w.warehouse_id, false) AS IsDefault,
-               coalesce((SELECT round(sum(b.quantity * b.average_cost), 4) FROM inventory.stock_balance b
+               coalesce((SELECT round(sum(b.quantity * b.average_cost), 4) FROM public.stock_balance b
                          WHERE b.warehouse_id = w.warehouse_id), 0) AS StockValue,
                w.created_at AT TIME ZONE 'utc' AS CreatedAt, w.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.warehouse w
-        LEFT JOIN inventory.inventory_setting s ON s.organization_id = w.organization_id
+        FROM public.warehouse w
+        LEFT JOIN public.inventory_setting s ON s.organization_id = w.organization_id
         """;
 
     private const string WarehouseFilter = """
@@ -305,7 +305,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Warehouse>(connection,
-            $"SELECT count(*) FROM inventory.warehouse w {WarehouseFilter}",
+            $"SELECT count(*) FROM public.warehouse w {WarehouseFilter}",
             $"{WarehouseSelect} {WarehouseFilter} ORDER BY w.warehouse_name, w.warehouse_id",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
             limit, offset, cancellationToken);
@@ -323,7 +323,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO inventory.warehouse (organization_id, warehouse_code, warehouse_name, warehouse_name_local,
+            INSERT INTO public.warehouse (organization_id, warehouse_code, warehouse_name, warehouse_name_local,
                                              warehouse_type, address, phone, is_active, created_at, created_by)
             VALUES (@Org, @Code, @Name, @NameLocal, @WarehouseType, @Address, @Phone, @IsActive, {SecurityDb.NowUtc}, @UserId)
             RETURNING warehouse_id
@@ -336,7 +336,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", warehouseId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.warehouse
+            UPDATE public.warehouse
             SET warehouse_code = @Code, warehouse_name = @Name, warehouse_name_local = @NameLocal,
                 warehouse_type = @WarehouseType, address = @Address, phone = @Phone, is_active = @IsActive,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
@@ -349,10 +349,10 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         await using var connection = connectionFactory.CreateConnection();
         // Empty balance rows (quantity 0, never moved) would block the delete; anything with movements stays.
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition("""
-            DELETE FROM inventory.stock_balance b
+            DELETE FROM public.stock_balance b
             WHERE b.warehouse_id = @Id AND b.quantity = 0 AND b.reserved_quantity = 0
-              AND NOT EXISTS (SELECT 1 FROM inventory.stock_movement m WHERE m.warehouse_id = @Id);
-            DELETE FROM inventory.warehouse WHERE organization_id = @Org AND warehouse_id = @Id;
+              AND NOT EXISTS (SELECT 1 FROM public.stock_movement m WHERE m.warehouse_id = @Id);
+            DELETE FROM public.warehouse WHERE organization_id = @Org AND warehouse_id = @Id;
             """, new { Org = organizationId, Id = warehouseId }, cancellationToken: cancellationToken));
     }
 
@@ -368,9 +368,9 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
                    s.require_approval AS RequireApproval, s.expiry_alert_days AS ExpiryAlertDays,
                    s.default_warehouse_id AS DefaultWarehouseId, w.warehouse_name AS DefaultWarehouseName,
                    coalesce(s.updated_at, s.created_at) AT TIME ZONE 'utc' AS UpdatedAt
-            FROM inventory.inventory_setting s
+            FROM public.inventory_setting s
             LEFT JOIN public.lookup_data d ON d.lookup_data_id = s.base_currency_lookup_data_id
-            LEFT JOIN inventory.warehouse w ON w.warehouse_id = s.default_warehouse_id
+            LEFT JOIN public.warehouse w ON w.warehouse_id = s.default_warehouse_id
             WHERE s.organization_id = @Org
             """, new { Org = organizationId }, cancellationToken: cancellationToken))
             ?? await DefaultSettingAsync(connection, cancellationToken);
@@ -398,7 +398,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
     {
         await using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(new CommandDefinition($"""
-            INSERT INTO inventory.inventory_setting (organization_id, base_currency_lookup_data_id, fiscal_year_start_month,
+            INSERT INTO public.inventory_setting (organization_id, base_currency_lookup_data_id, fiscal_year_start_month,
                 prices_include_tax, allow_negative_stock, require_approval, expiry_alert_days, default_warehouse_id,
                 created_at, created_by)
             VALUES (@Org, @BaseCurrencyLookupDataId, @FiscalYearStartMonth, @PricesIncludeTax, @AllowNegativeStock,

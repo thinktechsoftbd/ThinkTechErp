@@ -39,9 +39,9 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
         var ledger = await connection.QuerySingleOrDefaultAsync<CustomerLedger>(new CommandDefinition("""
             SELECT c.supplier_id AS CustomerId, c.supplier_code AS CustomerCode, c.supplier_name AS CustomerName,
                    c.mobile AS Mobile,
-                   coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM sales.customer_ledger l
+                   coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM public.customer_ledger l
                              WHERE l.customer_id = c.supplier_id AND (l.entry_date IS NULL OR l.entry_date < @From)), 0) AS OpeningBalance
-            FROM purchase.supplier c
+            FROM public.supplier c
             WHERE c.organization_id = @Org AND c.supplier_id = @CustomerId AND c.is_customer
             """, new { Org = organizationId, CustomerId = customerId, From = from }, cancellationToken: cancellationToken));
         if (ledger is null)
@@ -50,7 +50,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
         var entries = (await connection.QueryAsync<CustomerLedgerEntry>(new CommandDefinition("""
             SELECT l.entry_date AS EntryDate, l.entry_type AS EntryType, l.document_id AS DocumentId,
                    l.document_no AS DocumentNo, l.debit_amount AS DebitAmount, l.credit_amount AS CreditAmount
-            FROM sales.customer_ledger l
+            FROM public.customer_ledger l
             WHERE l.customer_id = @CustomerId AND l.entry_date BETWEEN @From AND @To
             ORDER BY l.entry_date, l.document_id, l.entry_type
             """, new { CustomerId = customerId, From = from, To = to }, cancellationToken: cancellationToken))).AsList();
@@ -89,13 +89,13 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                 SELECT i.customer_id, (i.total_amount - i.settled_amount) * i.exchange_rate AS due,
                        coalesce(i.due_date, i.invoice_date) AS due_date,
                        @AsOf - coalesce(i.due_date, i.invoice_date) AS overdue_days
-                FROM sales.sales_invoice i
+                FROM public.sales_invoice i
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.payment_status <> 'Paid' AND i.customer_id IS NOT NULL
             ),
             report AS (
                 SELECT c.supplier_id AS CustomerId, c.supplier_code AS CustomerCode, c.supplier_name AS CustomerName,
                        c.mobile AS Mobile, c.customer_credit_limit AS CreditLimit,
-                       coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM sales.customer_ledger l
+                       coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM public.customer_ledger l
                                  WHERE l.customer_id = c.supplier_id), 0) AS Balance,
                        (SELECT count(*) FROM open_invoice o WHERE o.customer_id = c.supplier_id)::int AS OpenInvoiceCount,
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days <= 0), 0) AS NotDue,
@@ -104,7 +104,7 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days BETWEEN 61 AND 90), 0) AS Days61To90,
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.customer_id = c.supplier_id AND o.overdue_days > 90), 0) AS Over90,
                        (SELECT min(o.due_date) FROM open_invoice o WHERE o.customer_id = c.supplier_id) AS OldestDueDate
-                FROM purchase.supplier c
+                FROM public.supplier c
                 WHERE c.organization_id = @Org AND c.is_customer
                   AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
                        OR c.mobile ILIKE @Pattern)
@@ -143,12 +143,12 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                        round(i.paid_amount * i.exchange_rate, 4) AS PaidAmount,
                        round(i.settled_amount * i.exchange_rate, 4) AS SettledAmount,
                        round((i.total_amount - i.settled_amount) * i.exchange_rate, 4) AS DueAmount,
-                       coalesce((SELECT round(sum(l.unit_cost * l.base_quantity), 4) FROM sales.sales_invoice_line l
+                       coalesce((SELECT round(sum(l.unit_cost * l.base_quantity), 4) FROM public.sales_invoice_line l
                                  WHERE l.sales_invoice_id = i.sales_invoice_id), 0) AS CostAmount,
                        i.payment_status AS PaymentStatus
-                FROM sales.sales_invoice i
-                LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id
-                JOIN inventory.warehouse w ON w.warehouse_id = i.warehouse_id
+                FROM public.sales_invoice i
+                LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id
+                JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
                 JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.invoice_date BETWEEN @From AND @To
                   AND (CAST(@CustomerId AS int) IS NULL OR i.customer_id = @CustomerId)
@@ -181,10 +181,10 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
             -- Posted returns in the period: they take back sales (net of tax) and, for goods back in stock, the cost.
             SELECT coalesce(round(sum(r.total_amount * r.exchange_rate), 4), 0),
                    coalesce(round(sum(r.tax_amount * r.exchange_rate), 4), 0),
-                   coalesce(round(sum((SELECT sum(l.unit_cost * l.base_quantity) FROM sales.sales_return_line l
+                   coalesce(round(sum((SELECT sum(l.unit_cost * l.base_quantity) FROM public.sales_return_line l
                                        WHERE l.sales_return_id = r.sales_return_id AND l.is_restockable)), 4), 0)
-            FROM sales.sales_return r
-            LEFT JOIN sales.sales_invoice i ON i.sales_invoice_id = r.sales_invoice_id
+            FROM public.sales_return r
+            LEFT JOIN public.sales_invoice i ON i.sales_invoice_id = r.sales_invoice_id
             WHERE r.organization_id = @Org AND r.status = 'Posted' AND r.return_date BETWEEN @From AND @To
               AND (CAST(@CustomerId AS int) IS NULL OR r.customer_id = @CustomerId)
               AND (CAST(@WarehouseId AS int) IS NULL OR r.warehouse_id = @WarehouseId)
@@ -229,8 +229,8 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                 SELECT l.product_id, l.base_quantity AS quantity, (l.line_total - l.tax_amount) * i.exchange_rate AS net,
                        l.tax_amount * i.exchange_rate AS tax, l.unit_cost * l.base_quantity AS cost,
                        i.sales_invoice_id AS invoice_id, i.invoice_date AS sale_date
-                FROM sales.sales_invoice_line l
-                JOIN sales.sales_invoice i ON i.sales_invoice_id = l.sales_invoice_id
+                FROM public.sales_invoice_line l
+                JOIN public.sales_invoice i ON i.sales_invoice_id = l.sales_invoice_id
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.invoice_date BETWEEN @From AND @To
                   AND (CAST(@CustomerId AS int) IS NULL OR i.customer_id = @CustomerId)
                   AND (CAST(@WarehouseId AS int) IS NULL OR i.warehouse_id = @WarehouseId)
@@ -238,8 +238,8 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                 SELECT l.product_id, -l.base_quantity, -(l.line_total - l.tax_amount) * r.exchange_rate,
                        -l.tax_amount * r.exchange_rate, CASE WHEN l.is_restockable THEN -l.unit_cost * l.base_quantity ELSE 0 END,
                        NULL, NULL
-                FROM sales.sales_return_line l
-                JOIN sales.sales_return r ON r.sales_return_id = l.sales_return_id
+                FROM public.sales_return_line l
+                JOIN public.sales_return r ON r.sales_return_id = l.sales_return_id
                 WHERE r.organization_id = @Org AND r.status = 'Posted' AND r.return_date BETWEEN @From AND @To
                   AND (CAST(@CustomerId AS int) IS NULL OR r.customer_id = @CustomerId)
                   AND (CAST(@WarehouseId AS int) IS NULL OR r.warehouse_id = @WarehouseId)
@@ -253,9 +253,9 @@ public sealed class SalesReportRepository(IDbConnectionFactory connectionFactory
                        round(sum(m.cost), 4) AS CostAmount,
                        count(DISTINCT m.invoice_id)::int AS InvoiceCount, max(m.sale_date) AS LastSaleDate
                 FROM moved m
-                JOIN inventory.product p ON p.product_id = m.product_id
-                JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-                LEFT JOIN inventory.category c ON c.category_id = p.category_id
+                JOIN public.product p ON p.product_id = m.product_id
+                JOIN public.unit u ON u.unit_id = p.base_unit_id
+                LEFT JOIN public.category c ON c.category_id = p.category_id
                 WHERE (CAST(@CategoryIds AS int[]) IS NULL OR p.category_id = ANY(@CategoryIds))
                   AND (CAST(@Pattern AS text) IS NULL OR p.product_code ILIKE @Pattern OR p.product_name ILIKE @Pattern)
                 GROUP BY p.product_id, p.product_code, p.product_name, c.category_name, u.unit_code

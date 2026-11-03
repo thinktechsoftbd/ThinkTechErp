@@ -36,7 +36,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
         return (await connection.QueryAsync<LedgerHeadOption>(new CommandDefinition("""
             SELECT h.acc_sub_class_id AS Id, coalesce(h.sub_code, '') AS Code, coalesce(h.sub_name, '') AS Name,
                    coalesce(h.nature, '') AS Nature, concat_ws('/', h.map_name, h.main_name, h.class_name, h.parent_name) AS Path
-            FROM accounting.ledger_head h
+            FROM public.ledger_head h
             WHERE (CAST(@Ids AS int[]) IS NULL OR h.acc_sub_class_id = ANY(@Ids))
               AND (CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern)
             ORDER BY (h.sub_code ILIKE @Prefix) DESC, h.sub_code
@@ -54,7 +54,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
         string? search, int limit, int offset, CancellationToken cancellationToken = default)
     {
         const string filter = """
-            FROM accounting.ledger_head h
+            FROM public.ledger_head h
             WHERE CAST(@Pattern AS text) IS NULL OR h.sub_code ILIKE @Pattern OR h.sub_name ILIKE @Pattern
             """;
         await using var connection = connectionFactory.CreateConnection();
@@ -87,7 +87,7 @@ public sealed class LedgerLookupRepository(IDbConnectionFactory connectionFactor
         return (await connection.QueryAsync<PartyOption>(new CommandDefinition($"""
             SELECT p.supplier_id AS Id, p.supplier_code AS Code, p.supplier_name AS Name, p.mobile AS Mobile,
                    p.is_supplier AS IsSupplier, p.is_customer AS IsCustomer, p.is_active AS IsActive
-            FROM purchase.supplier p
+            FROM public.supplier p
             WHERE p.organization_id = @Org {side}
               AND (CAST(@Ids AS int[]) IS NULL OR p.supplier_id = ANY(@Ids))
               AND (CAST(@Pattern AS text) IS NULL OR p.supplier_code ILIKE @Pattern OR p.supplier_name ILIKE @Pattern

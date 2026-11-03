@@ -26,7 +26,7 @@ public interface ISalesSetupRepository
 public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory) : ISalesSetupRepository
 {
     private const string CustomerBalance = """
-        coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM sales.customer_ledger l
+        coalesce((SELECT sum(l.debit_amount - l.credit_amount) FROM public.customer_ledger l
                   WHERE l.customer_id = c.supplier_id), 0)
         """;
 
@@ -41,11 +41,11 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
                c.customer_opening_balance AS OpeningBalance, c.customer_opening_balance_date AS OpeningBalanceDate,
                c.remarks AS Remarks, c.is_active AS IsActive, c.is_supplier AS IsSupplier, {CustomerBalance} AS Balance,
                c.created_at AT TIME ZONE 'utc' AS CreatedAt, c.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM purchase.supplier c
+        FROM public.supplier c
         LEFT JOIN public.lookup_data g ON g.lookup_data_id = c.customer_group_lookup_data_id
         """;
 
-    // Suppliers and customers share purchase.supplier; the sales screens see the customer side.
+    // Suppliers and customers share public.supplier; the sales screens see the customer side.
     private const string CustomerFilter = """
         WHERE c.organization_id = @Org AND c.is_customer
           AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
@@ -60,7 +60,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Customer>(connection,
-            $"SELECT count(*) FROM purchase.supplier c {CustomerFilter}",
+            $"SELECT count(*) FROM public.supplier c {CustomerFilter}",
             $"{CustomerSelect} {CustomerFilter} ORDER BY c.supplier_name, c.supplier_id",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, GroupId = groupId },
             limit, offset, cancellationToken);
@@ -85,7 +85,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
                    c.customer_payment_terms_days AS PaymentTermsDays, c.customer_credit_limit AS CreditLimit,
                    {CustomerBalance} AS Balance,
                    c.customer_credit_limit - {CustomerBalance} AS AvailableCredit, c.is_active AS IsActive
-            FROM purchase.supplier c
+            FROM public.supplier c
             WHERE c.organization_id = @Org AND c.is_customer
               AND (CAST(@Ids AS int[]) IS NULL OR c.supplier_id = ANY(@Ids))
               AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
@@ -116,14 +116,14 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
             {
                 code = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.Customer, cancellationToken);
             } while (++attempts < 50 && await connection.QuerySingleAsync<bool>(new CommandDefinition("""
-                SELECT EXISTS (SELECT 1 FROM purchase.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code))
+                SELECT EXISTS (SELECT 1 FROM public.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code))
                 """, new { Org = organizationId, Code = code }, transaction, cancellationToken: cancellationToken)));
             request.Code = code;
         }
 
         var parameters = Params(organizationId, request, userId);
         var id = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO purchase.supplier (
+            INSERT INTO public.supplier (
                 organization_id, supplier_code, supplier_name, supplier_name_local, customer_group_lookup_data_id,
                 contact_person, mobile, phone, email, address_line1, address_line2, city, state, postal_code, country_code,
                 national_id_no, tax_registration_no, customer_payment_terms_days, customer_credit_limit,
@@ -147,7 +147,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
         var parameters = Params(organizationId, request, userId);
         parameters.Add("Id", customerId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE purchase.supplier
+            UPDATE public.supplier
             SET supplier_code = coalesce(@Code, supplier_code), supplier_name = @Name, supplier_name_local = @NameLocal,
                 customer_group_lookup_data_id = @CustomerGroupLookupDataId, contact_person = @ContactPerson,
                 mobile = @Mobile, phone = @Phone, email = @Email, address_line1 = @AddressLine1,
@@ -167,12 +167,12 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
         var parameters = new { Org = organizationId, Id = customerId };
         // A party that is also a supplier stays for the purchase side; it only stops being a customer.
         if (await connection.ExecuteAsync(new CommandDefinition("""
-                UPDATE purchase.supplier SET is_customer = FALSE
+                UPDATE public.supplier SET is_customer = FALSE
                 WHERE organization_id = @Org AND supplier_id = @Id AND is_customer AND is_supplier
                 """, parameters, cancellationToken: cancellationToken)) > 0)
             return DeleteOutcome.Deleted;
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM purchase.supplier WHERE organization_id = @Org AND supplier_id = @Id AND is_customer",
+            "DELETE FROM public.supplier WHERE organization_id = @Org AND supplier_id = @Id AND is_customer",
             parameters, cancellationToken: cancellationToken));
     }
 
@@ -180,7 +180,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
-            SELECT EXISTS (SELECT 1 FROM purchase.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code)
+            SELECT EXISTS (SELECT 1 FROM public.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code)
                            AND (CAST(@ExcludeId AS int) IS NULL OR supplier_id <> @ExcludeId))
             """, new { Org = organizationId, Code = code, ExcludeId = excludeId }, cancellationToken: cancellationToken));
     }

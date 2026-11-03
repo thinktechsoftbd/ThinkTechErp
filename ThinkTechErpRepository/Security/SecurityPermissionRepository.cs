@@ -11,7 +11,7 @@ public sealed class SecurityPermissionRepository(IDbConnectionFactory connection
                code AS Code,
                name AS Name,
                description AS Description
-        FROM security."Permission"
+        FROM public."Permission"
         """;
 
     public async Task<IReadOnlyList<SecurityPermission>> GetPermissionsAsync(CancellationToken cancellationToken = default)
@@ -34,7 +34,7 @@ public sealed class SecurityPermissionRepository(IDbConnectionFactory connection
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            INSERT INTO security."Permission" (code, name, description)
+            INSERT INTO public."Permission" (code, name, description)
             VALUES (@Code, @Name, @Description)
             RETURNING id
             """, request, cancellationToken: cancellationToken));
@@ -45,7 +45,7 @@ public sealed class SecurityPermissionRepository(IDbConnectionFactory connection
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE security."Permission"
+            UPDATE public."Permission"
             SET code = @Code, name = @Name, description = @Description
             WHERE id = @PermissionId
             """, new { PermissionId = permissionId, request.Code, request.Name, request.Description },
@@ -57,16 +57,16 @@ public sealed class SecurityPermissionRepository(IDbConnectionFactory connection
         // A permission still granted to a role or user is kept: deleting it would silently revoke access.
         await using var connection = connectionFactory.CreateConnection();
         var deleted = await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."Permission"
+            DELETE FROM public."Permission"
             WHERE id = @PermissionId
-              AND NOT EXISTS (SELECT 1 FROM security."RolePermission" WHERE "permissionId" = @PermissionId)
-              AND NOT EXISTS (SELECT 1 FROM security."UserPermission" WHERE "permissionId" = @PermissionId)
+              AND NOT EXISTS (SELECT 1 FROM public."RolePermission" WHERE "permissionId" = @PermissionId)
+              AND NOT EXISTS (SELECT 1 FROM public."UserPermission" WHERE "permissionId" = @PermissionId)
             """, new { PermissionId = permissionId }, cancellationToken: cancellationToken));
         if (deleted > 0)
             return DeleteOutcome.Deleted;
 
         var exists = await connection.QuerySingleAsync<bool>(new CommandDefinition(
-            """SELECT EXISTS (SELECT 1 FROM security."Permission" WHERE id = @PermissionId)""",
+            """SELECT EXISTS (SELECT 1 FROM public."Permission" WHERE id = @PermissionId)""",
             new { PermissionId = permissionId }, cancellationToken: cancellationToken));
         return exists ? DeleteOutcome.InUse : DeleteOutcome.NotFound;
     }

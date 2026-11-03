@@ -11,8 +11,8 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
         SELECT r.id AS Id,
                r.name AS Name,
                r.description AS Description,
-               (SELECT count(*) FROM security."UserRole" ur WHERE ur."roleId" = r.id)::int AS UserCount
-        FROM security."Role" r
+               (SELECT count(*) FROM public."UserRole" ur WHERE ur."roleId" = r.id)::int AS UserCount
+        FROM public."Role" r
         """;
 
     private const string RolePermissionSelect = """
@@ -21,8 +21,8 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
                p.code AS Code,
                p.name AS Name,
                p.description AS Description
-        FROM security."RolePermission" rp
-        JOIN security."Permission" p ON p.id = rp."permissionId"
+        FROM public."RolePermission" rp
+        JOIN public."Permission" p ON p.id = rp."permissionId"
         """;
 
     public async Task<IReadOnlyList<SecurityRole>> GetRolesAsync(CancellationToken cancellationToken = default)
@@ -56,7 +56,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
             SELECT EXISTS (
-                SELECT 1 FROM security."Role"
+                SELECT 1 FROM public."Role"
                 WHERE lower(name) = lower(@Name)
                   AND (CAST(@ExcludeRoleId AS integer) IS NULL OR id <> @ExcludeRoleId))
             """, new { Name = name, ExcludeRoleId = excludeRoleId }, cancellationToken: cancellationToken));
@@ -68,7 +68,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var roleId = await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            INSERT INTO security."Role" (name, description)
+            INSERT INTO public."Role" (name, description)
             VALUES (@Name, @Description)
             RETURNING id
             """, new { request.Name, request.Description }, transaction, cancellationToken: cancellationToken));
@@ -83,7 +83,7 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var updated = await connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE security."Role"
+            UPDATE public."Role"
             SET name = @Name, description = @Description
             WHERE id = @RoleId
             """, new { RoleId = roleId, request.Name, request.Description }, transaction,
@@ -103,15 +103,15 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
         // A role still assigned to users is kept: deleting it would silently strip their access.
         await using var connection = connectionFactory.CreateConnection();
         var deleted = await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."Role"
+            DELETE FROM public."Role"
             WHERE id = @RoleId
-              AND NOT EXISTS (SELECT 1 FROM security."UserRole" WHERE "roleId" = @RoleId)
+              AND NOT EXISTS (SELECT 1 FROM public."UserRole" WHERE "roleId" = @RoleId)
             """, new { RoleId = roleId }, cancellationToken: cancellationToken));
         if (deleted > 0)
             return DeleteOutcome.Deleted;
 
         var exists = await connection.QuerySingleAsync<bool>(new CommandDefinition(
-            """SELECT EXISTS (SELECT 1 FROM security."Role" WHERE id = @RoleId)""",
+            """SELECT EXISTS (SELECT 1 FROM public."Role" WHERE id = @RoleId)""",
             new { RoleId = roleId }, cancellationToken: cancellationToken));
         return exists ? DeleteOutcome.InUse : DeleteOutcome.NotFound;
     }
@@ -120,8 +120,8 @@ public sealed class SecurityRoleRepository(IDbConnectionFactory connectionFactor
         NpgsqlConnection connection, NpgsqlTransaction transaction, int roleId, int[] permissionIds,
         CancellationToken cancellationToken)
         => connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM security."RolePermission" WHERE "roleId" = @RoleId;
-            INSERT INTO security."RolePermission" ("roleId", "permissionId")
+            DELETE FROM public."RolePermission" WHERE "roleId" = @RoleId;
+            INSERT INTO public."RolePermission" ("roleId", "permissionId")
             SELECT DISTINCT @RoleId, permission_id
             FROM unnest(CAST(@PermissionIds AS integer[])) AS t(permission_id);
             """, new { RoleId = roleId, PermissionIds = permissionIds }, transaction,

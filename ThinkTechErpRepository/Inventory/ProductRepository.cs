@@ -81,12 +81,12 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
                p.last_purchase_cost AS LastPurchaseCost, p.sale_price AS SalePrice, p.mrp AS Mrp,
                p.reorder_level AS ReorderLevel, p.reorder_quantity AS ReorderQuantity, p.attributes::text AS Attributes,
                p.image_url AS ImageUrl, p.is_active AS IsActive,
-               coalesce((SELECT sum(b.quantity) FROM inventory.stock_balance b WHERE b.product_id = p.product_id), 0) AS StockQuantity,
+               coalesce((SELECT sum(b.quantity) FROM public.stock_balance b WHERE b.product_id = p.product_id), 0) AS StockQuantity,
                p.created_at AT TIME ZONE 'utc' AS CreatedAt, p.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM inventory.product p
-        JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-        LEFT JOIN inventory.category c ON c.category_id = p.category_id
-        LEFT JOIN inventory.brand br ON br.brand_id = p.brand_id
+        FROM public.product p
+        JOIN public.unit u ON u.unit_id = p.base_unit_id
+        LEFT JOIN public.category c ON c.category_id = p.category_id
+        LEFT JOIN public.brand br ON br.brand_id = p.brand_id
         LEFT JOIN public.tax_group tg ON tg.tax_group_id = p.purchase_tax_group_id
         """;
 
@@ -94,7 +94,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         WHERE p.organization_id = @Org
           AND (CAST(@Pattern AS text) IS NULL OR p.product_code ILIKE @Pattern OR p.product_name ILIKE @Pattern
                OR p.product_name_local ILIKE @Pattern OR p.generic_name ILIKE @Pattern
-               OR EXISTS (SELECT 1 FROM inventory.product_barcode pb WHERE pb.product_id = p.product_id AND pb.barcode = @Search))
+               OR EXISTS (SELECT 1 FROM public.product_barcode pb WHERE pb.product_id = p.product_id AND pb.barcode = @Search))
           AND (CAST(@IsActive AS boolean) IS NULL OR p.is_active = @IsActive)
           AND (CAST(@CategoryId AS int) IS NULL OR p.category_id = @CategoryId)
           AND (CAST(@BrandId AS int) IS NULL OR p.brand_id = @BrandId)
@@ -105,7 +105,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Product>(connection,
-            $"SELECT count(*) FROM inventory.product p {ProductFilter}",
+            $"SELECT count(*) FROM public.product p {ProductFilter}",
             $"{ProductSelect} {ProductFilter} ORDER BY p.product_name, p.product_id",
             new
             {
@@ -131,7 +131,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         product.Units = (await UnitsAsync(connection, [productId], cancellationToken))[productId].ToList();
         product.Barcodes = (await connection.QueryAsync<ProductBarcode>(new CommandDefinition("""
             SELECT pb.unit_id AS UnitId, u.unit_code AS UnitCode, pb.barcode AS Barcode
-            FROM inventory.product_barcode pb LEFT JOIN inventory.unit u ON u.unit_id = pb.unit_id
+            FROM public.product_barcode pb LEFT JOIN public.unit u ON u.unit_id = pb.unit_id
             WHERE pb.product_id = @Id ORDER BY pb.product_barcode_id
             """, new { Id = productId }, cancellationToken: cancellationToken))).AsList();
         return product;
@@ -144,8 +144,8 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
             SELECT pu.product_id AS ProductId, pu.unit_id AS UnitId, u.unit_code AS UnitCode, u.unit_name AS UnitName,
                    pu.conversion_factor AS ConversionFactor, pu.sale_price AS SalePrice,
                    pu.is_purchase_default AS IsPurchaseDefault, pu.is_sale_default AS IsSaleDefault
-            FROM inventory.product_unit pu
-            JOIN inventory.unit u ON u.unit_id = pu.unit_id
+            FROM public.product_unit pu
+            JOIN public.unit u ON u.unit_id = pu.unit_id
             WHERE pu.product_id = ANY(@Ids)
             ORDER BY pu.product_id, pu.conversion_factor, u.unit_code
             """, new { Ids = productIds.ToArray() }, cancellationToken: cancellationToken),
@@ -167,13 +167,13 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
             {
                 code = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.Product, cancellationToken);
             } while (++attempts < 50 && await connection.QuerySingleAsync<bool>(new CommandDefinition("""
-                SELECT EXISTS (SELECT 1 FROM inventory.product WHERE organization_id = @Org AND lower(product_code) = lower(@Code))
+                SELECT EXISTS (SELECT 1 FROM public.product WHERE organization_id = @Org AND lower(product_code) = lower(@Code))
                 """, new { Org = organizationId, Code = code }, transaction, cancellationToken: cancellationToken)));
             request.Code = code;
         }
 
         var productId = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO inventory.product (
+            INSERT INTO public.product (
                 organization_id, product_code, product_name, product_name_local, product_type, category_id, brand_id,
                 base_unit_id, tracking_type, has_expiry, shelf_life_days, generic_name, registration_no, hs_code,
                 country_of_origin, purchase_tax_group_id, sale_tax_group_id, sale_price, mrp, reorder_level,
@@ -198,7 +198,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         var parameters = ProductParams(organizationId, request, userId);
         parameters.Add("Id", productId);
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE inventory.product
+            UPDATE public.product
             SET product_code = COALESCE(@Code, product_code), product_name = @Name, product_name_local = @NameLocal, product_type = @ProductType,
                 category_id = @CategoryId, brand_id = @BrandId, base_unit_id = @BaseUnitId, tracking_type = @TrackingType,
                 has_expiry = @HasExpiry, shelf_life_days = @ShelfLifeDays, generic_name = @GenericName,
@@ -213,8 +213,8 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
             return false;
 
         await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM inventory.product_unit WHERE product_id = @Id;
-            DELETE FROM inventory.product_barcode WHERE product_id = @Id;
+            DELETE FROM public.product_unit WHERE product_id = @Id;
+            DELETE FROM public.product_barcode WHERE product_id = @Id;
             """, new { Id = productId }, transaction, cancellationToken: cancellationToken));
         await WriteUnitsAndBarcodesAsync(connection, transaction, organizationId, productId, request, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -249,7 +249,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
             UserId = userId
         }));
         await connection.ExecuteAsync(new CommandDefinition($"""
-            INSERT INTO inventory.product_unit (product_id, unit_id, conversion_factor, sale_price, is_purchase_default,
+            INSERT INTO public.product_unit (product_id, unit_id, conversion_factor, sale_price, is_purchase_default,
                                                 is_sale_default, created_at, created_by)
             VALUES (@ProductId, @UnitId, @ConversionFactor, @SalePrice, @IsPurchaseDefault, @IsSaleDefault,
                     {SecurityDb.NowUtc}, @UserId)
@@ -257,7 +257,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
 
         if (request.Barcodes.Count > 0)
             await connection.ExecuteAsync(new CommandDefinition($"""
-                INSERT INTO inventory.product_barcode (organization_id, product_id, unit_id, barcode, created_at, created_by)
+                INSERT INTO public.product_barcode (organization_id, product_id, unit_id, barcode, created_at, created_by)
                 VALUES (@Org, @ProductId, @UnitId, @Barcode, {SecurityDb.NowUtc}, @UserId)
                 """, request.Barcodes.Select(b => new
                 {
@@ -276,12 +276,12 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         // Empty balance rows of a product that never moved don't count as use.
         await connection.ExecuteAsync(new CommandDefinition("""
-            DELETE FROM inventory.stock_balance b
+            DELETE FROM public.stock_balance b
             WHERE b.product_id = @Id AND b.quantity = 0 AND b.reserved_quantity = 0
-              AND NOT EXISTS (SELECT 1 FROM inventory.stock_movement m WHERE m.product_id = @Id)
+              AND NOT EXISTS (SELECT 1 FROM public.stock_movement m WHERE m.product_id = @Id)
             """, new { Id = productId }, transaction, cancellationToken: cancellationToken));
         var outcome = await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM inventory.product WHERE organization_id = @Org AND product_id = @Id",
+            "DELETE FROM public.product WHERE organization_id = @Org AND product_id = @Id",
             new { Org = organizationId, Id = productId }, transaction, cancellationToken: cancellationToken));
         if (outcome == DeleteOutcome.Deleted)
             await transaction.CommitAsync(cancellationToken);
@@ -292,7 +292,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
-            "SELECT EXISTS (SELECT 1 FROM inventory.stock_movement WHERE product_id = @Id)",
+            "SELECT EXISTS (SELECT 1 FROM public.stock_movement WHERE product_id = @Id)",
             new { Id = productId }, cancellationToken: cancellationToken));
     }
 
@@ -302,15 +302,15 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
                p.base_unit_id AS BaseUnitId, u.unit_code AS BaseUnitCode, u.allow_decimal AS AllowDecimal,
                p.purchase_tax_group_id AS PurchaseTaxGroupId, p.sale_tax_group_id AS SaleTaxGroupId,
                p.last_purchase_cost AS LastPurchaseCost, p.sale_price AS SalePrice, p.mrp AS Mrp,
-               coalesce((SELECT sum(b.quantity) FROM inventory.stock_balance b
+               coalesce((SELECT sum(b.quantity) FROM public.stock_balance b
                          WHERE b.product_id = p.product_id
                            AND (CAST(@WarehouseId AS int) IS NULL OR b.warehouse_id = @WarehouseId)), 0) AS StockQuantity,
-               (SELECT pb.barcode FROM inventory.product_barcode pb
+               (SELECT pb.barcode FROM public.product_barcode pb
                 WHERE pb.product_id = p.product_id AND pb.barcode = @Search LIMIT 1) AS MatchedBarcode,
-               (SELECT pb.unit_id FROM inventory.product_barcode pb
+               (SELECT pb.unit_id FROM public.product_barcode pb
                 WHERE pb.product_id = p.product_id AND pb.barcode = @Search LIMIT 1) AS MatchedUnitId
-        FROM inventory.product p
-        JOIN inventory.unit u ON u.unit_id = p.base_unit_id
+        FROM public.product p
+        JOIN public.unit u ON u.unit_id = p.base_unit_id
         """;
 
     public async Task<IReadOnlyList<ProductLookupItem>> SearchAsync(
@@ -323,9 +323,9 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
               AND (NOT @StockOnly OR p.product_type = 'Stock')
               AND (CAST(@Pattern AS text) IS NULL OR p.product_code ILIKE @Pattern OR p.product_name ILIKE @Pattern
                    OR p.product_name_local ILIKE @Pattern OR p.generic_name ILIKE @Pattern
-                   OR EXISTS (SELECT 1 FROM inventory.product_barcode pb WHERE pb.product_id = p.product_id AND pb.barcode = @Search))
+                   OR EXISTS (SELECT 1 FROM public.product_barcode pb WHERE pb.product_id = p.product_id AND pb.barcode = @Search))
             ORDER BY (lower(p.product_code) = lower(coalesce(@Search, ''))) DESC,
-                     (EXISTS (SELECT 1 FROM inventory.product_barcode pb WHERE pb.product_id = p.product_id AND pb.barcode = @Search)) DESC,
+                     (EXISTS (SELECT 1 FROM public.product_barcode pb WHERE pb.product_id = p.product_id AND pb.barcode = @Search)) DESC,
                      p.product_name
             LIMIT @Limit
             """, new
@@ -373,8 +373,8 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         return (await connection.QueryAsync<BatchStockItem>(new CommandDefinition("""
             SELECT b.batch_id AS BatchId, b.batch_no AS BatchNo, b.manufacture_date AS ManufactureDate,
                    b.expiry_date AS ExpiryDate, sb.quantity AS Quantity, sb.average_cost AS AverageCost
-            FROM inventory.stock_balance sb
-            JOIN inventory.batch b ON b.batch_id = sb.batch_id
+            FROM public.stock_balance sb
+            JOIN public.batch b ON b.batch_id = sb.batch_id
             WHERE sb.organization_id = @Org AND sb.product_id = @ProductId AND sb.warehouse_id = @WarehouseId
               AND sb.quantity > 0
             ORDER BY b.expiry_date NULLS LAST, b.batch_id
@@ -388,7 +388,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<SerialStockItem>(new CommandDefinition("""
             SELECT serial_number_id AS SerialNumberId, serial_no AS SerialNo, batch_id AS BatchId
-            FROM inventory.serial_number
+            FROM public.serial_number
             WHERE organization_id = @Org AND product_id = @ProductId AND warehouse_id = @WarehouseId AND status = 'InStock'
             ORDER BY serial_no
             """, new { Org = organizationId, ProductId = productId, WarehouseId = warehouseId },

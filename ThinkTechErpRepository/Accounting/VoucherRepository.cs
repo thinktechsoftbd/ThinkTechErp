@@ -22,7 +22,7 @@ public interface IVoucherRepository
     /// <summary>Flags a draft deleted (is_deleted); a posted or cancelled voucher answers InUse.</summary>
     Task<DeleteOutcome> DeleteVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task PostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
-    /// <summary>Makes a posted voucher a draft again; the ledgers (accounting.ledger_entry) only read posted ones.</summary>
+    /// <summary>Makes a posted voucher a draft again; the ledgers (public.ledger_entry) only read posted ones.</summary>
     Task UnpostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task CancelVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
 }
@@ -36,8 +36,8 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                v.voucher_date AS VoucherDate, v.payment_method_id AS PaymentMethodId, pm.lookup_data_name AS PaymentMethod,
                v.cheque_no AS ChequeNo, v.cheque_date AS ChequeDate, v.pay_type AS PayType, v.narration AS Narration,
                (SELECT string_agg(DISTINCT p.supplier_name, ', ')
-                FROM accounting.voucher_line pl
-                JOIN purchase.supplier p ON p.supplier_id = pl.party_id
+                FROM public.voucher_line pl
+                JOIN public.supplier p ON p.supplier_id = pl.party_id
                 WHERE pl.voucher_id = v.voucher_id) AS PartyNames,
                v.total_amount AS TotalAmount, v.status AS Status,
                v.posted_at AT TIME ZONE 'utc' AS PostedAt, v.posted_by AS PostedBy,
@@ -47,7 +47,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         """;
 
     private const string VoucherFrom = """
-        FROM accounting.voucher v
+        FROM public.voucher v
         JOIN public.lookup_data vt ON vt.lookup_data_id = v.voucher_type_id
         LEFT JOIN public.lookup_data pm ON pm.lookup_data_id = v.payment_method_id
         """;
@@ -56,17 +56,17 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         WHERE v.organization_id = @Org AND NOT v.is_deleted
           AND (CAST(@Pattern AS text) IS NULL OR v.voucher_ref_no ILIKE @Pattern OR v.cheque_no ILIKE @Pattern
                OR v.narration ILIKE @Pattern
-               OR EXISTS (SELECT 1 FROM accounting.voucher_line sl
-                          JOIN purchase.supplier sp ON sp.supplier_id = sl.party_id
+               OR EXISTS (SELECT 1 FROM public.voucher_line sl
+                          JOIN public.supplier sp ON sp.supplier_id = sl.party_id
                           WHERE sl.voucher_id = v.voucher_id AND sp.supplier_name ILIKE @Pattern))
           AND (CAST(@VoucherTypeId AS bigint) IS NULL OR v.voucher_type_id = @VoucherTypeId)
           AND (CAST(@BillTypeIds AS bigint[]) IS NULL
                OR (v.voucher_type_id = ANY(@BillTypeIds)
-                   AND EXISTS (SELECT 1 FROM accounting.voucher_line bl
+                   AND EXISTS (SELECT 1 FROM public.voucher_line bl
                                WHERE bl.voucher_id = v.voucher_id AND bl.party_id IS NOT NULL)))
           AND (CAST(@Status AS text) IS NULL OR v.status = @Status)
           AND (CAST(@PartyId AS int) IS NULL
-               OR EXISTS (SELECT 1 FROM accounting.voucher_line ql WHERE ql.voucher_id = v.voucher_id AND ql.party_id = @PartyId))
+               OR EXISTS (SELECT 1 FROM public.voucher_line ql WHERE ql.voucher_id = v.voucher_id AND ql.party_id = @PartyId))
           AND (CAST(@From AS date) IS NULL OR v.voucher_date >= @From)
           AND (CAST(@To AS date) IS NULL OR v.voucher_date <= @To)
         """;
@@ -116,10 +116,10 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                    l.local_exchange_rate AS LocalExchangeRate, l.line_narration AS LineNarration,
                    l.created_at AT TIME ZONE 'utc' AS CreatedAt, l.created_by AS CreatedBy,
                    l.updated_at AT TIME ZONE 'utc' AS UpdatedAt, l.updated_by AS UpdatedBy
-            FROM accounting.voucher_line l
-            JOIN accounting.acc_sub_class a ON a.acc_sub_class_id = l.acc_sub_class_id
-            LEFT JOIN accounting.ledger_head lh ON lh.acc_sub_class_id = l.acc_sub_class_id
-            LEFT JOIN purchase.supplier p ON p.supplier_id = l.party_id
+            FROM public.voucher_line l
+            JOIN public.acc_sub_class a ON a.acc_sub_class_id = l.acc_sub_class_id
+            LEFT JOIN public.ledger_head lh ON lh.acc_sub_class_id = l.acc_sub_class_id
+            LEFT JOIN public.supplier p ON p.supplier_id = l.party_id
             LEFT JOIN public.lookup_data cur ON cur.lookup_data_id = l.lk_currency_id
             WHERE l.voucher_id = @Id
             ORDER BY l.line_no
@@ -154,7 +154,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         if (voucher.Id == 0)
         {
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO accounting.voucher (
+                INSERT INTO public.voucher (
                     organization_id, voucher_ref_no, voucher_type_id, voucher_date, payment_method_id, cheque_no,
                     cheque_date, pay_type, narration, total_amount, status, created_at, created_by)
                 VALUES (
@@ -169,14 +169,14 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
             id = voucher.Id;
             await LockDraftAsync(connection, transaction, organizationId, id, cancellationToken);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE accounting.voucher
+                UPDATE public.voucher
                 SET voucher_type_id = @VoucherTypeId, voucher_date = @VoucherDate, payment_method_id = @PaymentMethodId,
                     cheque_no = @ChequeNo, cheque_date = @ChequeDate, pay_type = @PayType, narration = @Narration,
                     total_amount = @TotalAmount, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE organization_id = @Org AND voucher_id = @Id
                 """, parameters, transaction, cancellationToken: cancellationToken));
             savedLineIds = (await connection.QueryAsync<long>(new CommandDefinition(
-                "SELECT voucher_line_id FROM accounting.voucher_line WHERE voucher_id = @Id",
+                "SELECT voucher_line_id FROM public.voucher_line WHERE voucher_id = @Id",
                 new { Id = id }, transaction, cancellationToken: cancellationToken))).ToHashSet();
         }
 
@@ -189,12 +189,12 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
 
         // ux_voucher_line is deferred, so renumbered lines can swap numbers before the commit.
         await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM accounting.voucher_line WHERE voucher_id = @Id AND NOT (voucher_line_id = ANY(@KeptIds))",
+            "DELETE FROM public.voucher_line WHERE voucher_id = @Id AND NOT (voucher_line_id = ANY(@KeptIds))",
             new { Id = id, KeptIds = claimed.ToArray() }, transaction, cancellationToken: cancellationToken));
 
         // Only lines that changed get the updated stamp.
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE accounting.voucher_line l
+            UPDATE public.voucher_line l
             SET line_no = x.line_no, acc_sub_class_id = x.acc_sub_class_id, party_id = x.party_id,
                 debit_amount = x.debit_amount, credit_amount = x.credit_amount, lk_currency_id = x.lk_currency_id,
                 local_exchange_rate = x.local_exchange_rate, line_narration = x.line_narration,
@@ -210,7 +210,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
             """, LineParameters(id, userId, kept), transaction, cancellationToken: cancellationToken));
 
         await connection.ExecuteAsync(new CommandDefinition($"""
-            INSERT INTO accounting.voucher_line (voucher_id, line_no, acc_sub_class_id, party_id, debit_amount,
+            INSERT INTO public.voucher_line (voucher_id, line_no, acc_sub_class_id, party_id, debit_amount,
                                                  credit_amount, lk_currency_id, local_exchange_rate, line_narration,
                                                  created_at, created_by)
             SELECT @Id, x.line_no, x.acc_sub_class_id, x.party_id, x.debit_amount, x.credit_amount, x.lk_currency_id,
@@ -244,7 +244,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
     private static async Task<string> LockAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, long id, CancellationToken cancellationToken)
         => await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition("""
-               SELECT status FROM accounting.voucher
+               SELECT status FROM public.voucher
                WHERE organization_id = @Org AND voucher_id = @Id AND NOT is_deleted
                FOR UPDATE
                """, new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken))
@@ -266,7 +266,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
     {
         var (lines, debit, credit) = await connection.QuerySingleAsync<(int, decimal, decimal)>(new CommandDefinition("""
             SELECT count(*)::int, coalesce(sum(debit_amount), 0), coalesce(sum(credit_amount), 0)
-            FROM accounting.voucher_line WHERE voucher_id = @Id
+            FROM public.voucher_line WHERE voucher_id = @Id
             """, new { Id = id }, transaction, cancellationToken: cancellationToken));
         if (lines < 2 || debit == 0)
             throw new BusinessRuleException("A voucher needs at least one debit and one credit line.");
@@ -274,7 +274,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
             throw new BusinessRuleException($"Debits ({debit:N2}) and credits ({credit:N2}) must be equal to post the voucher.");
 
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE accounting.voucher
+            UPDATE public.voucher
             SET status = 'Posted', total_amount = @Total, posted_at = {SecurityDb.NowUtc}, posted_by = @UserId
             WHERE organization_id = @Org AND voucher_id = @Id
             """, new { Org = organizationId, Id = id, Total = debit, UserId = userId }, transaction,
@@ -287,12 +287,12 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
         // The outer SELECT sees the row as it was before the UPDATE.
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition($"""
             WITH deleted AS (
-                UPDATE accounting.voucher
+                UPDATE public.voucher
                 SET is_deleted = TRUE, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE organization_id = @Org AND voucher_id = @Id AND status = 'Draft' AND NOT is_deleted
                 RETURNING status)
             SELECT coalesce((SELECT status FROM deleted),
-                            (SELECT status FROM accounting.voucher
+                            (SELECT status FROM public.voucher
                              WHERE organization_id = @Org AND voucher_id = @Id AND NOT is_deleted))
             """, new { Org = organizationId, Id = id, UserId = userId }, cancellationToken: cancellationToken));
         return status switch
@@ -323,7 +323,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                 : "A cancelled voucher can't be unposted.");
 
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE accounting.voucher
+            UPDATE public.voucher
             SET status = 'Draft', posted_at = NULL, posted_by = NULL, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE organization_id = @Org AND voucher_id = @Id
             """, new { Org = organizationId, Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
@@ -341,7 +341,7 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                 : "This voucher is already cancelled.");
 
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE accounting.voucher
+            UPDATE public.voucher
             SET status = 'Cancelled', cancelled_at = {SecurityDb.NowUtc}, cancelled_by = @UserId
             WHERE organization_id = @Org AND voucher_id = @Id
             """, new { Org = organizationId, Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));

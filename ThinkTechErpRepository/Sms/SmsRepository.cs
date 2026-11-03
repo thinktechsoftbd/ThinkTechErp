@@ -63,10 +63,10 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                coalesce(pur.purchased, 0) AS PurchasedSms, coalesce(alc.allocated, 0) AS AllocatedSms,
                coalesce(pur.purchased, 0) - coalesce(alc.allocated, 0) AS AvailableSms,
                p.created_at AT TIME ZONE 'utc' AS CreatedAt, p.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM sms.sms_provider p
-        LEFT JOIN (SELECT sms_provider_id, sum(sms_quantity)::bigint AS purchased FROM sms.sms_purchase GROUP BY sms_provider_id) pur
+        FROM public.sms_provider p
+        LEFT JOIN (SELECT sms_provider_id, sum(sms_quantity)::bigint AS purchased FROM public.sms_purchase GROUP BY sms_provider_id) pur
                ON pur.sms_provider_id = p.sms_provider_id
-        LEFT JOIN (SELECT sms_provider_id, sum(allocated_sms)::bigint AS allocated FROM sms.sms_allocation GROUP BY sms_provider_id) alc
+        LEFT JOIN (SELECT sms_provider_id, sum(allocated_sms)::bigint AS allocated FROM public.sms_allocation GROUP BY sms_provider_id) alc
                ON alc.sms_provider_id = p.sms_provider_id
         """;
 
@@ -91,7 +91,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO sms.sms_provider (provider_name, provider_code, api_base_url, api_username, api_password, api_key,
+            INSERT INTO public.sms_provider (provider_name, provider_code, api_base_url, api_username, api_password, api_key,
                                           is_active, created_at, created_by)
             VALUES (@Name, @Code, @ApiBaseUrl, @ApiUsername, @ApiPassword, @ApiKey, @IsActive, {SecurityDb.NowUtc}, @UserId)
             RETURNING sms_provider_id
@@ -114,7 +114,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         await using var connection = connectionFactory.CreateConnection();
         // A secret not sent keeps its stored value; one sent empty is removed.
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE sms.sms_provider
+            UPDATE public.sms_provider
             SET provider_name = @Name, provider_code = @Code, api_base_url = @ApiBaseUrl, api_username = @ApiUsername,
                 api_password = CASE WHEN @ClearPassword THEN NULL ELSE coalesce(@ApiPassword, api_password) END,
                 api_key = CASE WHEN @ClearKey THEN NULL ELSE coalesce(@ApiKey, api_key) END,
@@ -140,7 +140,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM sms.sms_provider WHERE sms_provider_id = @Id", new { Id = id }, cancellationToken: cancellationToken));
+            "DELETE FROM public.sms_provider WHERE sms_provider_id = @Id", new { Id = id }, cancellationToken: cancellationToken));
     }
 
     /// <summary>Locks the providers (in id order) and returns what each one has bought and allocated.</summary>
@@ -149,14 +149,14 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         var ids = providerIds.Distinct().OrderBy(id => id).ToArray();
         await connection.ExecuteAsync(new CommandDefinition(
-            "SELECT 1 FROM sms.sms_provider WHERE sms_provider_id = ANY(@Ids) ORDER BY sms_provider_id FOR UPDATE",
+            "SELECT 1 FROM public.sms_provider WHERE sms_provider_id = ANY(@Ids) ORDER BY sms_provider_id FOR UPDATE",
             new { Ids = ids }, transaction, cancellationToken: cancellationToken));
         var rows = await connection.QueryAsync<(int Id, long Purchased, long Allocated, bool IsActive, string Name)>(new CommandDefinition("""
             SELECT p.sms_provider_id,
-                   coalesce((SELECT sum(sms_quantity) FROM sms.sms_purchase WHERE sms_provider_id = p.sms_provider_id), 0)::bigint,
-                   coalesce((SELECT sum(allocated_sms) FROM sms.sms_allocation WHERE sms_provider_id = p.sms_provider_id), 0)::bigint,
+                   coalesce((SELECT sum(sms_quantity) FROM public.sms_purchase WHERE sms_provider_id = p.sms_provider_id), 0)::bigint,
+                   coalesce((SELECT sum(allocated_sms) FROM public.sms_allocation WHERE sms_provider_id = p.sms_provider_id), 0)::bigint,
                    p.is_active, p.provider_name
-            FROM sms.sms_provider p WHERE p.sms_provider_id = ANY(@Ids)
+            FROM public.sms_provider p WHERE p.sms_provider_id = ANY(@Ids)
             """, new { Ids = ids }, transaction, cancellationToken: cancellationToken));
         var result = rows.ToDictionary(r => r.Id, r => (r.Purchased, r.Allocated, r.IsActive, r.Name));
         if (result.Count != ids.Length)
@@ -175,7 +175,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     }
 
     private const string PurchaseRefSql =
-        "SELECT sms_provider_id AS ProviderId, sms_quantity AS Quantity FROM sms.sms_purchase WHERE sms_purchase_id = @Id";
+        "SELECT sms_provider_id AS ProviderId, sms_quantity AS Quantity FROM public.sms_purchase WHERE sms_purchase_id = @Id";
 
     private const string PurchaseSelect = """
         SELECT s.sms_purchase_id AS Id, s.object_id AS ObjectId, s.sms_provider_id AS ProviderId,
@@ -185,8 +185,8 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                s.total_amount AS TotalAmount, s.local_exchange_rate AS LocalExchangeRate,
                s.local_total_amount AS LocalTotalAmount, s.remarks AS Remarks,
                s.created_at AT TIME ZONE 'utc' AS CreatedAt, s.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM sms.sms_purchase s
-        JOIN sms.sms_provider p ON p.sms_provider_id = s.sms_provider_id
+        FROM public.sms_purchase s
+        JOIN public.sms_provider p ON p.sms_provider_id = s.sms_provider_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = s.currency_id
         """;
 
@@ -211,7 +211,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SmsPurchase>(connection,
-            $"SELECT count(*) FROM sms.sms_purchase s JOIN sms.sms_provider p ON p.sms_provider_id = s.sms_provider_id {PurchaseFilter}",
+            $"SELECT count(*) FROM public.sms_purchase s JOIN public.sms_provider p ON p.sms_provider_id = s.sms_provider_id {PurchaseFilter}",
             $"{PurchaseSelect} {PurchaseFilter} ORDER BY s.purchase_date DESC, s.sms_purchase_id DESC",
             ListParams(query), query.Limit, query.Offset, cancellationToken);
     }
@@ -248,7 +248,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         {
             await LockProvidersAsync(connection, transaction, [purchase.ProviderId], cancellationToken);
             var newId = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO sms.sms_purchase (sms_provider_id, purchase_date, invoice_number, reference_number, sms_quantity,
+                INSERT INTO public.sms_purchase (sms_provider_id, purchase_date, invoice_number, reference_number, sms_quantity,
                                               currency_id, unit_price, total_amount, local_exchange_rate, local_total_amount,
                                               remarks, created_at, created_by)
                 VALUES (@ProviderId, @PurchaseDate, @InvoiceNumber, @ReferenceNumber, @SmsQuantity, @CurrencyId, @UnitPrice,
@@ -271,7 +271,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                 $"{oldProvider.Name} has {oldProvider.Allocated:N0} SMS allocated; this change would leave only {remaining:N0} bought.");
 
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE sms.sms_purchase
+            UPDATE public.sms_purchase
             SET sms_provider_id = @ProviderId, purchase_date = @PurchaseDate, invoice_number = @InvoiceNumber,
                 reference_number = @ReferenceNumber, sms_quantity = @SmsQuantity, currency_id = @CurrencyId,
                 unit_price = @UnitPrice, total_amount = @TotalAmount, local_exchange_rate = @LocalExchangeRate,
@@ -294,7 +294,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         if (provider.Purchased - old.Quantity < provider.Allocated)
             return DeleteOutcome.InUse;
         await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM sms.sms_purchase WHERE sms_purchase_id = @Id", new { Id = id }, transaction, cancellationToken: cancellationToken));
+            "DELETE FROM public.sms_purchase WHERE sms_purchase_id = @Id", new { Id = id }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
         return DeleteOutcome.Deleted;
     }
@@ -309,9 +309,9 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                o.organization_id AS OrganizationId, o.organization_name_en AS OrganizationName,
                o.organization_code AS OrganizationCode, a.allocated_sms AS AllocatedSms, a.allocation_date AS AllocationDate,
                a.remarks AS Remarks, a.created_at AT TIME ZONE 'utc' AS CreatedAt, a.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM sms.sms_allocation a
-        JOIN sms.sms_provider p ON p.sms_provider_id = a.sms_provider_id
-        JOIN security.organization o ON o.object_id = a.organization_id
+        FROM public.sms_allocation a
+        JOIN public.sms_provider p ON p.sms_provider_id = a.sms_provider_id
+        JOIN public.organization o ON o.object_id = a.organization_id
         """;
 
     private const string AllocationFilter = """
@@ -327,9 +327,9 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SmsAllocation>(connection, $"""
-            SELECT count(*) FROM sms.sms_allocation a
-            JOIN sms.sms_provider p ON p.sms_provider_id = a.sms_provider_id
-            JOIN security.organization o ON o.object_id = a.organization_id
+            SELECT count(*) FROM public.sms_allocation a
+            JOIN public.sms_provider p ON p.sms_provider_id = a.sms_provider_id
+            JOIN public.organization o ON o.object_id = a.organization_id
             {AllocationFilter}
             """,
             $"{AllocationSelect} {AllocationFilter} ORDER BY a.allocation_date DESC, a.sms_allocation_id DESC",
@@ -352,7 +352,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
 
     private const string AllocationRefSql = """
         SELECT sms_provider_id AS ProviderId, organization_id AS OrganizationId, allocated_sms AS Quantity
-        FROM sms.sms_allocation WHERE sms_allocation_id = @Id
+        FROM public.sms_allocation WHERE sms_allocation_id = @Id
         """;
 
     private sealed class LockedOrganization
@@ -381,8 +381,8 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         var rows = (await connection.QueryAsync<LockedOrganization>(new CommandDefinition("""
             SELECT o.object_id AS ObjectId, o.organization_name_en AS Name, o.is_active AS IsActive,
                    o.is_finalized AS IsFinalized, o.sms_usage AS Usage,
-                   coalesce((SELECT sum(a.allocated_sms) FROM sms.sms_allocation a WHERE a.organization_id = o.object_id), 0)::bigint AS Allocated
-            FROM security.organization o
+                   coalesce((SELECT sum(a.allocated_sms) FROM public.sms_allocation a WHERE a.organization_id = o.object_id), 0)::bigint AS Allocated
+            FROM public.organization o
             WHERE o.object_id = ANY(@Ids)
             ORDER BY o.object_id
             FOR UPDATE OF o
@@ -449,7 +449,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         long savedId;
         if (id is null)
             savedId = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO sms.sms_allocation (sms_provider_id, organization_id, allocated_sms, allocation_date, remarks,
+                INSERT INTO public.sms_allocation (sms_provider_id, organization_id, allocated_sms, allocation_date, remarks,
                                                 created_at, created_by)
                 VALUES (@ProviderId, @OrganizationId, @AllocatedSms, @AllocationDate, @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING sms_allocation_id
@@ -457,7 +457,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         else
         {
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE sms.sms_allocation
+                UPDATE public.sms_allocation
                 SET sms_provider_id = @ProviderId, organization_id = @OrganizationId, allocated_sms = @AllocatedSms,
                     allocation_date = @AllocationDate, remarks = @Remarks, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE sms_allocation_id = @Id
@@ -483,7 +483,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         if (organization.Allocated - old.Quantity < organization.Usage)
             return DeleteOutcome.InUse;
         await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM sms.sms_allocation WHERE sms_allocation_id = @Id", new { Id = id }, transaction, cancellationToken: cancellationToken));
+            "DELETE FROM public.sms_allocation WHERE sms_allocation_id = @Id", new { Id = id }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
         return DeleteOutcome.Deleted;
     }
@@ -498,10 +498,10 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
                coalesce(a.allocated, 0) AS AllocatedSms, o.sms_usage AS SmsUsage,
                coalesce(a.allocated, 0) - o.sms_usage AS AvailableSms,
                coalesce(a.allocation_count, 0) AS AllocationCount, a.last_allocation_date AS LastAllocationDate
-        FROM security.organization o
+        FROM public.organization o
         LEFT JOIN (SELECT organization_id, sum(allocated_sms)::bigint AS allocated, count(*)::int AS allocation_count,
                           max(allocation_date) AS last_allocation_date
-                   FROM sms.sms_allocation GROUP BY organization_id) a ON a.organization_id = o.object_id
+                   FROM public.sms_allocation GROUP BY organization_id) a ON a.organization_id = o.object_id
         """;
 
     private const string BalanceFilter = """
@@ -514,8 +514,8 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SmsOrganizationBalance>(connection, $"""
-            SELECT count(*) FROM security.organization o
-            LEFT JOIN (SELECT organization_id, sum(allocated_sms)::bigint AS allocated FROM sms.sms_allocation GROUP BY organization_id) a
+            SELECT count(*) FROM public.organization o
+            LEFT JOIN (SELECT organization_id, sum(allocated_sms)::bigint AS allocated FROM public.sms_allocation GROUP BY organization_id) a
                    ON a.organization_id = o.object_id
             {BalanceFilter}
             """,
@@ -559,7 +559,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var organization = (await LockOrganizationsAsync(connection, transaction, [objectId], cancellationToken))[objectId];
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE security.organization SET sms_usage = @Usage WHERE object_id = @ObjectId",
+            "UPDATE public.organization SET sms_usage = @Usage WHERE object_id = @ObjectId",
             new { ObjectId = objectId, Usage = newUsage(organization) }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
     }
@@ -568,7 +568,7 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
-            "SELECT EXISTS (SELECT 1 FROM security.organization WHERE object_id = @ObjectId AND created_by = @UserId)",
+            "SELECT EXISTS (SELECT 1 FROM public.organization WHERE object_id = @ObjectId AND created_by = @UserId)",
             new { ObjectId = objectId, UserId = userId }, cancellationToken: cancellationToken));
     }
 
@@ -583,9 +583,9 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
             $"{ProviderSelect} ORDER BY p.is_active DESC, p.provider_name", cancellationToken: cancellationToken))).AsList();
         var totals = await connection.QuerySingleAsync<(long Used, int Organizations, decimal Spend)>(new CommandDefinition("""
             SELECT coalesce(sum(o.sms_usage), 0)::bigint,
-                   (SELECT count(DISTINCT organization_id) FROM sms.sms_allocation)::int,
-                   coalesce((SELECT sum(local_total_amount) FROM sms.sms_purchase), 0)
-            FROM security.organization o
+                   (SELECT count(DISTINCT organization_id) FROM public.sms_allocation)::int,
+                   coalesce((SELECT sum(local_total_amount) FROM public.sms_purchase), 0)
+            FROM public.organization o
             """, cancellationToken: cancellationToken));
         var lowest = (await connection.QueryAsync<SmsOrganizationBalance>(new CommandDefinition($"""
             {BalanceRows}

@@ -11,7 +11,7 @@ using ThinkTechErpRepository.Security;
 namespace ThinkTechErpRepository.Accounting;
 
 /// <summary>
-/// The classic chart of accounts in the accounting.acc_* tables, shared by every organization. Codes follow
+/// The classic chart of accounts in the acc_* tables, shared by every organization. Codes follow
 /// MediDesk: a main class is its account class's code plus two digits (101 → 10101), a map class takes the next
 /// four digits under its main class (0001), and a sub class is its main code plus four digits (102040001).
 /// </summary>
@@ -33,11 +33,11 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
 
     private static readonly Dictionary<string, Level> Levels = new(StringComparer.Ordinal)
     {
-        [AccountClassKind.Main] = new("accounting.acc_main_class", "acc_main_class_id", "main_code", "main_name",
-            "accounting.acc_map_class", "acc_main_class_id"),
-        [AccountClassKind.Map] = new("accounting.acc_map_class", "acc_map_class_id", "map_code", "map_name",
-            "accounting.acc_sub_class", "acc_map_class_id"),
-        [AccountClassKind.Sub] = new("accounting.acc_sub_class", "acc_sub_class_id", "sub_code", "sub_name")
+        [AccountClassKind.Main] = new("public.acc_main_class", "acc_main_class_id", "main_code", "main_name",
+            "public.acc_map_class", "acc_main_class_id"),
+        [AccountClassKind.Map] = new("public.acc_map_class", "acc_map_class_id", "map_code", "map_name",
+            "public.acc_sub_class", "acc_map_class_id"),
+        [AccountClassKind.Sub] = new("public.acc_sub_class", "acc_sub_class_id", "sub_code", "sub_name")
     };
 
     private sealed class Row
@@ -62,15 +62,15 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         using var results = await connection.QueryMultipleAsync(new CommandDefinition("""
             SELECT acc_ac_parent_class_id AS Id, 0 AS ParentId, parent_code AS Code, name AS Name
-            FROM accounting.acc_ac_parent_class ORDER BY parent_code, acc_ac_parent_class_id;
+            FROM public.acc_ac_parent_class ORDER BY parent_code, acc_ac_parent_class_id;
             SELECT acc_ac_class_id AS Id, acc_ac_parent_class_id AS ParentId, ac_code AS Code, class_name AS Name
-            FROM accounting.acc_ac_class ORDER BY ac_code, acc_ac_class_id;
+            FROM public.acc_ac_class ORDER BY ac_code, acc_ac_class_id;
             SELECT acc_main_class_id AS Id, acc_ac_class_id AS ParentId, main_code AS Code, main_name AS Name
-            FROM accounting.acc_main_class ORDER BY mc_display_order NULLS LAST, main_code, acc_main_class_id;
+            FROM public.acc_main_class ORDER BY mc_display_order NULLS LAST, main_code, acc_main_class_id;
             SELECT acc_map_class_id AS Id, acc_main_class_id AS ParentId, map_code AS Code, map_name AS Name
-            FROM accounting.acc_map_class ORDER BY map_code, acc_map_class_id;
+            FROM public.acc_map_class ORDER BY map_code, acc_map_class_id;
             SELECT acc_sub_class_id AS Id, acc_map_class_id AS ParentId, sub_code AS Code, sub_name AS Name
-            FROM accounting.acc_sub_class ORDER BY sub_code, acc_sub_class_id;
+            FROM public.acc_sub_class ORDER BY sub_code, acc_sub_class_id;
             """, cancellationToken: cancellationToken));
 
         var parentRows = await results.ReadAsync<Row>();
@@ -131,17 +131,17 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
     {
         // Locking the parent serializes concurrent adds under it, so two can't take the same code.
         var parent = await connection.QuerySingleOrDefaultAsync<ParentCodes>(new CommandDefinition("""
-            SELECT ac_code AS AcCode FROM accounting.acc_ac_class WHERE acc_ac_class_id = @Id FOR UPDATE
+            SELECT ac_code AS AcCode FROM public.acc_ac_class WHERE acc_ac_class_id = @Id FOR UPDATE
             """, new { Id = acClassId }, transaction, cancellationToken: cancellationToken));
         if (parent is null)
             return null;
 
         var prefix = parent.AcCode?.Trim() ?? string.Empty;
         var code = prefix + await NextAsync(connection, transaction,
-            "SELECT main_code FROM accounting.acc_main_class WHERE acc_ac_class_id = @Id", new { Id = acClassId },
+            "SELECT main_code FROM public.acc_main_class WHERE acc_ac_class_id = @Id", new { Id = acClassId },
             prefix, 2, AccountClassKind.Main, cancellationToken);
         var id = await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            INSERT INTO accounting.acc_main_class (ac_code, main_code, main_name, acc_ac_class_id)
+            INSERT INTO public.acc_main_class (ac_code, main_code, main_name, acc_ac_class_id)
             VALUES (@AcCode, @Code, @Name, @ParentId)
             RETURNING acc_main_class_id
             """, new { parent.AcCode, Code = code, Name = name, ParentId = acClassId }, transaction,
@@ -154,17 +154,17 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
     {
         var parent = await connection.QuerySingleOrDefaultAsync<ParentCodes>(new CommandDefinition("""
             SELECT ac_code AS AcCode, main_code AS MainCode
-            FROM accounting.acc_main_class WHERE acc_main_class_id = @Id FOR UPDATE
+            FROM public.acc_main_class WHERE acc_main_class_id = @Id FOR UPDATE
             """, new { Id = mainClassId }, transaction, cancellationToken: cancellationToken));
         if (parent is null)
             return null;
 
         // Map codes are numbered per main class, without its code in front: 0001, 0002, ...
         var code = await NextAsync(connection, transaction,
-            "SELECT map_code FROM accounting.acc_map_class WHERE acc_main_class_id = @Id", new { Id = mainClassId },
+            "SELECT map_code FROM public.acc_map_class WHERE acc_main_class_id = @Id", new { Id = mainClassId },
             string.Empty, 4, AccountClassKind.Map, cancellationToken);
         var id = await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            INSERT INTO accounting.acc_map_class (map_code, map_name, prnt_code, ac_code, main_code, acc_main_class_id)
+            INSERT INTO public.acc_map_class (map_code, map_name, prnt_code, ac_code, main_code, acc_main_class_id)
             VALUES (@Code, @Name, NULL, @AcCode, @MainCode, @ParentId)
             RETURNING acc_map_class_id
             """, new { Code = code, Name = name, parent.AcCode, parent.MainCode, ParentId = mainClassId }, transaction,
@@ -177,26 +177,26 @@ public sealed class AccountClassRepository(IDbConnectionFactory connectionFactor
     {
         var parent = await connection.QuerySingleOrDefaultAsync<ParentCodes>(new CommandDefinition("""
             SELECT ac_code AS AcCode, main_code AS MainCode, map_code AS MapCode, acc_main_class_id AS MainId
-            FROM accounting.acc_map_class WHERE acc_map_class_id = @Id FOR UPDATE
+            FROM public.acc_map_class WHERE acc_map_class_id = @Id FOR UPDATE
             """, new { Id = mapClassId }, transaction, cancellationToken: cancellationToken));
         if (parent is null)
             return null;
 
         // Sub codes are numbered across the whole main class, so its other map classes must wait too.
         await connection.ExecuteAsync(new CommandDefinition(
-            "SELECT 1 FROM accounting.acc_main_class WHERE acc_main_class_id = @Id FOR UPDATE",
+            "SELECT 1 FROM public.acc_main_class WHERE acc_main_class_id = @Id FOR UPDATE",
             new { Id = parent.MainId }, transaction, cancellationToken: cancellationToken));
 
         var prefix = parent.MainCode?.Trim() ?? string.Empty;
         var code = prefix + await NextAsync(connection, transaction,
-            "SELECT sub_code FROM accounting.acc_sub_class WHERE main_code IS NOT DISTINCT FROM @MainCode",
+            "SELECT sub_code FROM public.acc_sub_class WHERE main_code IS NOT DISTINCT FROM @MainCode",
             new { parent.MainCode }, prefix, 4, AccountClassKind.Sub, cancellationToken);
         // sl: the sub class's serial within its map class.
         var serial = await NextAsync(connection, transaction,
-            "SELECT sl FROM accounting.acc_sub_class WHERE acc_map_class_id = @Id", new { Id = mapClassId },
+            "SELECT sl FROM public.acc_sub_class WHERE acc_map_class_id = @Id", new { Id = mapClassId },
             string.Empty, 3, AccountClassKind.Sub, cancellationToken);
         var id = await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            INSERT INTO accounting.acc_sub_class (ac_code, main_code, sub_code, sub_name, sl, map_code, acc_map_class_id)
+            INSERT INTO public.acc_sub_class (ac_code, main_code, sub_code, sub_name, sl, map_code, acc_map_class_id)
             VALUES (@AcCode, @MainCode, @Code, @Name, @Serial, @MapCode, @ParentId)
             RETURNING acc_sub_class_id
             """, new { parent.AcCode, parent.MainCode, Code = code, Name = name, Serial = serial, parent.MapCode, ParentId = mapClassId },

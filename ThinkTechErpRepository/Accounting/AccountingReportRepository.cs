@@ -19,7 +19,7 @@ public interface IAccountingReportRepository
         int organizationId, int accountId, int partyId, DateOnly asOf, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Ledger heads are the acc_* sub classes, placed in the chart by the accounting.ledger_head view.</summary>
+/// <summary>Ledger heads are the acc_* sub classes, placed in the chart by the public.ledger_head view.</summary>
 public sealed class AccountingReportRepository(IDbConnectionFactory connectionFactory) : IAccountingReportRepository
 {
     private const string PartyFilter = "AND (CAST(@PartyId AS int) IS NULL OR e.party_id = @PartyId)";
@@ -33,11 +33,11 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
             SELECT h.acc_sub_class_id AS AccountId, coalesce(h.sub_code, '') AS AccountCode,
                    coalesce(h.sub_name, '') AS AccountName, coalesce(h.nature, '') AS Nature, p.supplier_id AS PartyId,
                    p.supplier_code AS PartyCode, p.supplier_name AS PartyName,
-                   coalesce((SELECT sum(e.debit_amount - e.credit_amount) FROM accounting.ledger_entry e
+                   coalesce((SELECT sum(e.debit_amount - e.credit_amount) FROM public.ledger_entry e
                              WHERE e.organization_id = @Org AND e.acc_sub_class_id = h.acc_sub_class_id AND e.voucher_date < @From
                              {PartyFilter}), 0) AS OpeningBalance
-            FROM accounting.ledger_head h
-            LEFT JOIN purchase.supplier p ON p.organization_id = @Org AND p.supplier_id = @PartyId
+            FROM public.ledger_head h
+            LEFT JOIN public.supplier p ON p.organization_id = @Org AND p.supplier_id = @PartyId
             WHERE h.acc_sub_class_id = @AccountId
             """, parameters, cancellationToken: cancellationToken));
         if (ledger is null)
@@ -48,13 +48,13 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
                    e.voucher_date AS VoucherDate, e.cheque_no AS ChequeNo,
                    coalesce(e.line_narration, e.narration) AS Narration, p.supplier_name AS PartyName,
                    (SELECT string_agg(DISTINCT o.sub_name, ', ')
-                    FROM accounting.voucher_line ol
-                    JOIN accounting.acc_sub_class o ON o.acc_sub_class_id = ol.acc_sub_class_id
+                    FROM public.voucher_line ol
+                    JOIN public.acc_sub_class o ON o.acc_sub_class_id = ol.acc_sub_class_id
                     WHERE ol.voucher_id = e.voucher_id AND ol.voucher_line_id <> e.voucher_line_id
                       AND ((e.debit_amount > 0 AND ol.credit_amount > 0) OR (e.credit_amount > 0 AND ol.debit_amount > 0))) AS Particulars,
                    e.debit_amount AS DebitAmount, e.credit_amount AS CreditAmount
-            FROM accounting.ledger_entry e
-            LEFT JOIN purchase.supplier p ON p.supplier_id = e.party_id
+            FROM public.ledger_entry e
+            LEFT JOIN public.supplier p ON p.supplier_id = e.party_id
             WHERE e.organization_id = @Org AND e.acc_sub_class_id = @AccountId AND e.voucher_date BETWEEN @From AND @To
             {PartyFilter}
             ORDER BY e.voucher_date, e.voucher_id, e.line_no
@@ -94,13 +94,13 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
                    coalesce(b.opening, 0) AS OpeningBalance, coalesce(b.debit, 0) AS PeriodDebit,
                    coalesce(b.credit, 0) AS PeriodCredit,
                    coalesce(b.opening, 0) + coalesce(b.debit, 0) - coalesce(b.credit, 0) AS ClosingBalance
-            FROM accounting.ledger_head h
+            FROM public.ledger_head h
             LEFT JOIN (
                 SELECT acc_sub_class_id,
                        sum(debit_amount - credit_amount) FILTER (WHERE voucher_date < @From) AS opening,
                        sum(debit_amount) FILTER (WHERE voucher_date >= @From) AS debit,
                        sum(credit_amount) FILTER (WHERE voucher_date >= @From) AS credit
-                FROM accounting.ledger_entry
+                FROM public.ledger_entry
                 WHERE organization_id = @Org AND voucher_date <= @To
                 GROUP BY acc_sub_class_id) b ON b.acc_sub_class_id = h.acc_sub_class_id
             WHERE @IncludeZero OR coalesce(b.opening, 0) <> 0 OR coalesce(b.debit, 0) <> 0 OR coalesce(b.credit, 0) <> 0
@@ -114,8 +114,8 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<decimal>(new CommandDefinition("""
             SELECT coalesce(sum(e.credit_amount - e.debit_amount), 0)
-            FROM accounting.ledger_entry e
-            JOIN accounting.ledger_head h ON h.acc_sub_class_id = e.acc_sub_class_id
+            FROM public.ledger_entry e
+            JOIN public.ledger_head h ON h.acc_sub_class_id = e.acc_sub_class_id
             WHERE e.organization_id = @Org AND e.voucher_date <= @AsOf AND h.nature IN ('Income', 'Expense')
             """, new { Org = organizationId, AsOf = asOf }, cancellationToken: cancellationToken));
     }
@@ -126,7 +126,7 @@ public sealed class AccountingReportRepository(IDbConnectionFactory connectionFa
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<decimal>(new CommandDefinition($"""
             SELECT coalesce(sum(e.debit_amount - e.credit_amount), 0)
-            FROM accounting.ledger_entry e
+            FROM public.ledger_entry e
             WHERE e.organization_id = @Org AND e.acc_sub_class_id = @AccountId AND e.voucher_date <= @AsOf
             {PartyFilter}
             """, new { Org = organizationId, AccountId = accountId, PartyId = partyId, AsOf = asOf },

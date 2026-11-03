@@ -6,7 +6,7 @@ using ThinkTechErpService.Common;
 
 namespace ThinkTechErpService.Accounting;
 
-/// <summary>The chart of accounts tree on the accounting.acc_* tables (one chart for every organization).</summary>
+/// <summary>The chart of accounts tree on the acc_* tables (one chart for every organization).</summary>
 public interface IAccountClassService
 {
     Task<IReadOnlyList<AccountClassNode>> GetTreeAsync(CancellationToken cancellationToken = default);

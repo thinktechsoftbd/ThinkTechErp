@@ -38,7 +38,7 @@ public sealed class OwnershipRepository(IDbConnectionFactory connectionFactory) 
             return true;
         await using var connection = connectionFactory.CreateConnection();
         var found = await connection.QuerySingleAsync<int>(new CommandDefinition("""
-            SELECT count(*)::int FROM inventory.batch b
+            SELECT count(*)::int FROM public.batch b
             JOIN unnest(@BatchIds, @ProductIds) AS x(batch_id, product_id) ON x.batch_id = b.batch_id AND x.product_id = b.product_id
             WHERE b.organization_id = @Org
             """, new

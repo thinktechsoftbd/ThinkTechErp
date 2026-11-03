@@ -37,9 +37,9 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
         await using var connection = connectionFactory.CreateConnection();
         var ledger = await connection.QuerySingleOrDefaultAsync<SupplierLedger>(new CommandDefinition("""
             SELECT s.supplier_id AS SupplierId, s.supplier_code AS SupplierCode, s.supplier_name AS SupplierName,
-                   coalesce((SELECT sum(l.credit_amount - l.debit_amount) FROM purchase.supplier_ledger l
+                   coalesce((SELECT sum(l.credit_amount - l.debit_amount) FROM public.supplier_ledger l
                              WHERE l.supplier_id = s.supplier_id AND (l.entry_date IS NULL OR l.entry_date < @From)), 0) AS OpeningBalance
-            FROM purchase.supplier s
+            FROM public.supplier s
             WHERE s.organization_id = @Org AND s.supplier_id = @SupplierId
             """, new { Org = organizationId, SupplierId = supplierId, From = from }, cancellationToken: cancellationToken));
         if (ledger is null)
@@ -48,7 +48,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
         var entries = (await connection.QueryAsync<SupplierLedgerEntry>(new CommandDefinition("""
             SELECT l.entry_date AS EntryDate, l.entry_type AS EntryType, l.document_id AS DocumentId,
                    l.document_no AS DocumentNo, l.debit_amount AS DebitAmount, l.credit_amount AS CreditAmount
-            FROM purchase.supplier_ledger l
+            FROM public.supplier_ledger l
             WHERE l.supplier_id = @SupplierId AND l.entry_date BETWEEN @From AND @To
             ORDER BY l.entry_date, l.document_id, l.entry_type
             """, new { SupplierId = supplierId, From = from, To = to }, cancellationToken: cancellationToken))).AsList();
@@ -87,13 +87,13 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
                 SELECT i.supplier_id, (i.total_amount - i.settled_amount) * i.exchange_rate AS due,
                        coalesce(i.due_date, i.invoice_date) AS due_date,
                        @AsOf - coalesce(i.due_date, i.invoice_date) AS overdue_days
-                FROM purchase.purchase_invoice i
+                FROM public.purchase_invoice i
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.payment_status <> 'Paid' AND i.supplier_id IS NOT NULL
             ),
             report AS (
                 SELECT s.supplier_id AS SupplierId, s.supplier_code AS SupplierCode, s.supplier_name AS SupplierName,
                        s.mobile AS Mobile,
-                       coalesce((SELECT sum(l.credit_amount - l.debit_amount) FROM purchase.supplier_ledger l
+                       coalesce((SELECT sum(l.credit_amount - l.debit_amount) FROM public.supplier_ledger l
                                  WHERE l.supplier_id = s.supplier_id), 0) AS Balance,
                        (SELECT count(*) FROM open_invoice o WHERE o.supplier_id = s.supplier_id)::int AS OpenInvoiceCount,
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.supplier_id = s.supplier_id AND o.overdue_days <= 0), 0) AS NotDue,
@@ -102,7 +102,7 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.supplier_id = s.supplier_id AND o.overdue_days BETWEEN 61 AND 90), 0) AS Days61To90,
                        coalesce((SELECT round(sum(o.due), 4) FROM open_invoice o WHERE o.supplier_id = s.supplier_id AND o.overdue_days > 90), 0) AS Over90,
                        (SELECT min(o.due_date) FROM open_invoice o WHERE o.supplier_id = s.supplier_id) AS OldestDueDate
-                FROM purchase.supplier s
+                FROM public.supplier s
                 WHERE s.organization_id = @Org AND s.is_supplier
                   AND (CAST(@Pattern AS text) IS NULL OR s.supplier_code ILIKE @Pattern OR s.supplier_name ILIKE @Pattern
                        OR s.mobile ILIKE @Pattern)
@@ -128,8 +128,8 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
     public async Task<ReportPage<PurchaseRegisterRow>> GetRegisterAsync(int organizationId, PurchaseReportQuery query, CancellationToken cancellationToken = default)
     {
         const string filter = """
-            FROM purchase.purchase_invoice i
-            LEFT JOIN purchase.supplier s ON s.supplier_id = i.supplier_id
+            FROM public.purchase_invoice i
+            LEFT JOIN public.supplier s ON s.supplier_id = i.supplier_id
             JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
             WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.invoice_date BETWEEN @From AND @To
               AND (CAST(@SupplierId AS int) IS NULL OR i.supplier_id = @SupplierId)
@@ -195,11 +195,11 @@ public sealed class PurchaseReportRepository(IDbConnectionFactory connectionFact
                             THEN round(sum((l.quantity * l.unit_price - l.discount_amount) * i.exchange_rate) / sum(l.base_quantity), 6)
                             ELSE 0 END AS AveragePrice,
                        count(DISTINCT i.purchase_invoice_id)::int AS InvoiceCount, max(i.invoice_date) AS LastPurchaseDate
-                FROM purchase.purchase_invoice_line l
-                JOIN purchase.purchase_invoice i ON i.purchase_invoice_id = l.purchase_invoice_id
-                JOIN inventory.product p ON p.product_id = l.product_id
-                JOIN inventory.unit u ON u.unit_id = p.base_unit_id
-                LEFT JOIN inventory.category c ON c.category_id = p.category_id
+                FROM public.purchase_invoice_line l
+                JOIN public.purchase_invoice i ON i.purchase_invoice_id = l.purchase_invoice_id
+                JOIN public.product p ON p.product_id = l.product_id
+                JOIN public.unit u ON u.unit_id = p.base_unit_id
+                LEFT JOIN public.category c ON c.category_id = p.category_id
                 WHERE i.organization_id = @Org AND i.status = 'Posted' AND i.invoice_date BETWEEN @From AND @To
                   AND (CAST(@SupplierId AS int) IS NULL OR i.supplier_id = @SupplierId)
                   AND (CAST(@CategoryIds AS int[]) IS NULL OR p.category_id = ANY(@CategoryIds))

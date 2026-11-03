@@ -24,14 +24,14 @@ public sealed partial class PurchaseDocumentRepository
                r.currency_lookup_data_id AS CurrencyLookupDataId, cur.lookup_data_name AS Currency, r.exchange_rate AS ExchangeRate,
                r.subtotal_amount AS SubtotalAmount, r.discount_amount AS DiscountAmount, r.tax_amount AS TaxAmount,
                r.total_amount AS TotalAmount, r.status AS Status,
-               (SELECT count(*) FROM purchase.purchase_return_line l WHERE l.purchase_return_id = r.purchase_return_id)::int AS LineCount,
+               (SELECT count(*) FROM public.purchase_return_line l WHERE l.purchase_return_id = r.purchase_return_id)::int AS LineCount,
                r.posted_at AT TIME ZONE 'utc' AS PostedAt, r.posted_by AS PostedBy, r.remarks AS Remarks,
                r.created_at AT TIME ZONE 'utc' AS CreatedAt, r.created_by AS CreatedBy, r.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM purchase.purchase_return r
-        LEFT JOIN purchase.supplier s ON s.supplier_id = r.supplier_id
-        JOIN inventory.warehouse w ON w.warehouse_id = r.warehouse_id
-        LEFT JOIN purchase.goods_receipt g ON g.goods_receipt_id = r.goods_receipt_id
-        LEFT JOIN purchase.purchase_invoice i ON i.purchase_invoice_id = r.purchase_invoice_id
+        FROM public.purchase_return r
+        LEFT JOIN public.supplier s ON s.supplier_id = r.supplier_id
+        JOIN public.warehouse w ON w.warehouse_id = r.warehouse_id
+        LEFT JOIN public.goods_receipt g ON g.goods_receipt_id = r.goods_receipt_id
+        LEFT JOIN public.purchase_invoice i ON i.purchase_invoice_id = r.purchase_invoice_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = r.currency_lookup_data_id
         """;
 
@@ -49,7 +49,7 @@ public sealed partial class PurchaseDocumentRepository
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseReturn>(connection,
-            $"SELECT count(*) FROM purchase.purchase_return r LEFT JOIN purchase.supplier s ON s.supplier_id = r.supplier_id {ReturnFilter}",
+            $"SELECT count(*) FROM public.purchase_return r LEFT JOIN public.supplier s ON s.supplier_id = r.supplier_id {ReturnFilter}",
             $"{ReturnSelect} {ReturnFilter} ORDER BY r.return_date DESC, r.purchase_return_id DESC",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -71,14 +71,14 @@ public sealed partial class PurchaseDocumentRepository
                    tg.tax_group_name AS TaxGroupName, l.tax_amount AS TaxAmount, l.line_total AS LineTotal,
                    l.goods_receipt_line_id AS GoodsReceiptLineId, l.purchase_invoice_line_id AS PurchaseInvoiceLineId,
                    l.remarks AS Remarks
-            FROM purchase.purchase_return_line l
+            FROM public.purchase_return_line l
             {ProductJoins}
             LEFT JOIN public.tax_group tg ON tg.tax_group_id = l.tax_group_id
-            LEFT JOIN inventory.batch b ON b.batch_id = l.batch_id
+            LEFT JOIN public.batch b ON b.batch_id = l.batch_id
             WHERE l.purchase_return_id = @Id
             ORDER BY l.line_no
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
-        await AttachSerialNosAsync(connection, "purchase.purchase_return_serial", "purchase_return_line_id", purchaseReturn.Lines,
+        await AttachSerialNosAsync(connection, "public.purchase_return_serial", "purchase_return_line_id", purchaseReturn.Lines,
             cancellationToken, viaSerialNumber: true);
         return purchaseReturn;
     }
@@ -118,7 +118,7 @@ public sealed partial class PurchaseDocumentRepository
         {
             parameters.Add("Number", await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.PurchaseReturn, cancellationToken));
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO purchase.purchase_return (
+                INSERT INTO public.purchase_return (
                     organization_id, return_no, return_date, supplier_id, supplier_name, warehouse_id, goods_receipt_id,
                     purchase_invoice_id, reason, settlement_type, refund_method, refund_provider, refund_reference_no,
                     currency_lookup_data_id, exchange_rate, subtotal_amount, discount_amount, tax_amount, total_amount,
@@ -134,12 +134,12 @@ public sealed partial class PurchaseDocumentRepository
         else
         {
             id = purchaseReturn.Id;
-            var header = await LockAsync(connection, transaction, "purchase.purchase_return", "purchase_return_id", "return_no",
+            var header = await LockAsync(connection, transaction, "public.purchase_return", "purchase_return_id", "return_no",
                 "return_date", "warehouse_id", organizationId, id, "purchase return", cancellationToken);
             RequireStatus(header, DocumentStatus.Draft, "Only a draft purchase return can be changed.");
             parameters.Add("Id", id);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE purchase.purchase_return
+                UPDATE public.purchase_return
                 SET return_date = @ReturnDate, supplier_id = @SupplierId, supplier_name = @SupplierName,
                     warehouse_id = @WarehouseId, goods_receipt_id = @GoodsReceiptId, purchase_invoice_id = @PurchaseInvoiceId,
                     reason = @Reason, settlement_type = @SettlementType, refund_method = @RefundMethod,
@@ -148,14 +148,14 @@ public sealed partial class PurchaseDocumentRepository
                     subtotal_amount = @SubtotalAmount, discount_amount = @DiscountAmount, tax_amount = @TaxAmount,
                     total_amount = @TotalAmount, remarks = @Remarks, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE purchase_return_id = @Id;
-                DELETE FROM purchase.purchase_return_line WHERE purchase_return_id = @Id;
+                DELETE FROM public.purchase_return_line WHERE purchase_return_id = @Id;
                 """, parameters, transaction, cancellationToken: cancellationToken));
         }
 
         foreach (var line in purchaseReturn.Lines)
         {
             var lineId = await connection.QuerySingleAsync<long>(new CommandDefinition("""
-                INSERT INTO purchase.purchase_return_line (
+                INSERT INTO public.purchase_return_line (
                     purchase_return_id, line_no, goods_receipt_line_id, purchase_invoice_line_id, product_id, unit_id,
                     conversion_factor, quantity, batch_id, unit_price, discount_amount, tax_group_id, tax_amount, line_total, remarks)
                 VALUES (@DocumentId, @LineNo, @GoodsReceiptLineId, @PurchaseInvoiceLineId, @ProductId, @UnitId,
@@ -181,7 +181,7 @@ public sealed partial class PurchaseDocumentRepository
                 }, transaction, cancellationToken: cancellationToken));
             if (serialIdsByLine.TryGetValue(line.LineNo, out var serialIds) && serialIds.Count > 0)
                 await connection.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO purchase.purchase_return_serial (purchase_return_line_id, serial_number_id) SELECT @LineId, unnest(@Ids)",
+                    "INSERT INTO public.purchase_return_serial (purchase_return_line_id, serial_number_id) SELECT @LineId, unnest(@Ids)",
                     new { LineId = lineId, Ids = serialIds.ToArray() }, transaction, cancellationToken: cancellationToken));
         }
 
@@ -190,7 +190,7 @@ public sealed partial class PurchaseDocumentRepository
     }
 
     public Task<DeleteOutcome> DeleteReturnAsync(int organizationId, long id, CancellationToken cancellationToken = default)
-        => DeleteDraftAsync("purchase.purchase_return", "purchase_return_id", organizationId, id, cancellationToken);
+        => DeleteDraftAsync("public.purchase_return", "purchase_return_id", organizationId, id, cancellationToken);
 
     private sealed class ReturnLine
     {
@@ -208,7 +208,7 @@ public sealed partial class PurchaseDocumentRepository
         SELECT l.purchase_return_line_id AS Id, l.product_id AS ProductId, p.product_type AS ProductType,
                p.tracking_type AS TrackingType, l.base_quantity AS BaseQuantity, l.batch_id AS BatchId,
                l.goods_receipt_line_id AS GoodsReceiptLineId, l.purchase_invoice_line_id AS PurchaseInvoiceLineId
-        FROM purchase.purchase_return_line l JOIN inventory.product p ON p.product_id = l.product_id
+        FROM public.purchase_return_line l JOIN public.product p ON p.product_id = l.product_id
         WHERE l.purchase_return_id = @Id ORDER BY l.line_no
         """;
 
@@ -220,8 +220,8 @@ public sealed partial class PurchaseDocumentRepository
         {
             foreach (var (table, key, sourceId) in new[]
                      {
-                         ("purchase.goods_receipt_line", "goods_receipt_line_id", line.GoodsReceiptLineId),
-                         ("purchase.purchase_invoice_line", "purchase_invoice_line_id", line.PurchaseInvoiceLineId)
+                         ("public.goods_receipt_line", "goods_receipt_line_id", line.GoodsReceiptLineId),
+                         ("public.purchase_invoice_line", "purchase_invoice_line_id", line.PurchaseInvoiceLineId)
                      })
             {
                 if (sourceId is null)
@@ -242,7 +242,7 @@ public sealed partial class PurchaseDocumentRepository
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "purchase.purchase_return", "purchase_return_id", "return_no",
+        var header = await LockAsync(connection, transaction, "public.purchase_return", "purchase_return_id", "return_no",
             "return_date", "warehouse_id", organizationId, id, "purchase return", cancellationToken);
         RequireStatus(header, DocumentStatus.Draft, "Only a draft purchase return can be posted.");
         var warehouseId = header.WarehouseId!.Value;
@@ -252,7 +252,7 @@ public sealed partial class PurchaseDocumentRepository
             throw new BusinessRuleException("Add at least one line before posting.");
 
         var serials = (await connection.QueryAsync<(long LineId, long SerialId)>(new CommandDefinition(
-            "SELECT purchase_return_line_id, serial_number_id FROM purchase.purchase_return_serial WHERE purchase_return_line_id = ANY(@Ids)",
+            "SELECT purchase_return_line_id, serial_number_id FROM public.purchase_return_serial WHERE purchase_return_line_id = ANY(@Ids)",
             new { Ids = lines.Select(l => l.Id).ToArray() }, transaction, cancellationToken: cancellationToken)))
             .ToLookup(s => s.LineId, s => s.SerialId);
 
@@ -267,7 +267,7 @@ public sealed partial class PurchaseDocumentRepository
                 if (serialIds.Count != line.BaseQuantity)
                     throw new BusinessRuleException("Choose one serial number per item returned.");
                 var taken = await connection.ExecuteAsync(new CommandDefinition($"""
-                    UPDATE inventory.serial_number SET status = 'ReturnedToSupplier', warehouse_id = NULL,
+                    UPDATE public.serial_number SET status = 'ReturnedToSupplier', warehouse_id = NULL,
                         updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                     WHERE serial_number_id = ANY(@Ids) AND status = 'InStock' AND warehouse_id = @WarehouseId
                     """, new { Ids = serialIds.ToArray(), WarehouseId = warehouseId, UserId = userId }, transaction,
@@ -289,12 +289,12 @@ public sealed partial class PurchaseDocumentRepository
         var settlement = await connection.QuerySingleAsync<(string SettlementType, long? InvoiceId, decimal Total, long CurrencyId)>(
             new CommandDefinition("""
                 SELECT settlement_type, purchase_invoice_id, total_amount, currency_lookup_data_id
-                FROM purchase.purchase_return WHERE purchase_return_id = @Id
+                FROM public.purchase_return WHERE purchase_return_id = @Id
                 """, new { Id = id }, transaction, cancellationToken: cancellationToken));
         if (settlement is { SettlementType: "AdjustDue", InvoiceId: not null })
         {
             var due = await connection.QuerySingleOrDefaultAsync<decimal?>(new CommandDefinition("""
-                SELECT total_amount - settled_amount FROM purchase.purchase_invoice
+                SELECT total_amount - settled_amount FROM public.purchase_invoice
                 WHERE purchase_invoice_id = @InvoiceId AND status = 'Posted' AND currency_lookup_data_id = @CurrencyId
                 FOR UPDATE
                 """, new { settlement.InvoiceId, settlement.CurrencyId }, transaction, cancellationToken: cancellationToken));
@@ -302,7 +302,7 @@ public sealed partial class PurchaseDocumentRepository
             if (amount > 0)
             {
                 await connection.ExecuteAsync(new CommandDefinition($"""
-                    INSERT INTO purchase.invoice_allocation (organization_id, purchase_invoice_id, purchase_return_id,
+                    INSERT INTO public.purchase_invoice_allocation (organization_id, purchase_invoice_id, purchase_return_id,
                                                              allocation_date, amount, created_at, created_by)
                     VALUES (@Org, @InvoiceId, @ReturnId, @Date, @Amount, {SecurityDb.NowUtc}, @UserId)
                     """, new { Org = organizationId, settlement.InvoiceId, ReturnId = id, Date = header.DocumentDate, Amount = amount, UserId = userId },
@@ -311,7 +311,7 @@ public sealed partial class PurchaseDocumentRepository
             }
         }
 
-        await SetStatusAsync(connection, transaction, "purchase.purchase_return", "purchase_return_id", id,
+        await SetStatusAsync(connection, transaction, "public.purchase_return", "purchase_return_id", id,
             DocumentStatus.Posted, userId, cancellationToken, posted: true);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -320,14 +320,14 @@ public sealed partial class PurchaseDocumentRepository
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "purchase.purchase_return", "purchase_return_id", "return_no",
+        var header = await LockAsync(connection, transaction, "public.purchase_return", "purchase_return_id", "return_no",
             "return_date", "warehouse_id", organizationId, id, "purchase return", cancellationToken);
         RequireStatus(header, DocumentStatus.Posted, header.Status == DocumentStatus.Draft
             ? "Delete a draft purchase return instead of cancelling it."
             : "This purchase return is already cancelled.");
 
         var invoices = (await connection.QueryAsync<long>(new CommandDefinition(
-            "DELETE FROM purchase.invoice_allocation WHERE purchase_return_id = @Id RETURNING purchase_invoice_id",
+            "DELETE FROM public.purchase_invoice_allocation WHERE purchase_return_id = @Id RETURNING purchase_invoice_id",
             new { Id = id }, transaction, cancellationToken: cancellationToken))).AsList();
         await RecomputeSettlementAsync(connection, transaction, invoices, cancellationToken);
 
@@ -340,7 +340,7 @@ public sealed partial class PurchaseDocumentRepository
         var lines = (await connection.QueryAsync<ReturnLine>(new CommandDefinition(ReturnPostingLines, new { Id = id },
             transaction, cancellationToken: cancellationToken))).AsList();
         await AddReturnedAsync(connection, transaction, lines, -1, cancellationToken);
-        await SetStatusAsync(connection, transaction, "purchase.purchase_return", "purchase_return_id", id,
+        await SetStatusAsync(connection, transaction, "public.purchase_return", "purchase_return_id", id,
             DocumentStatus.Cancelled, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -350,7 +350,7 @@ public sealed partial class PurchaseDocumentRepository
     {
         await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<(string SerialNo, long Id)>(new CommandDefinition("""
-            SELECT serial_no, serial_number_id FROM inventory.serial_number
+            SELECT serial_no, serial_number_id FROM public.serial_number
             WHERE organization_id = @Org AND product_id = @ProductId AND warehouse_id = @WarehouseId AND status = 'InStock'
               AND serial_no = ANY(@SerialNos)
             """, new { Org = organizationId, ProductId = productId, WarehouseId = warehouseId, SerialNos = serialNos.ToArray() },
@@ -371,8 +371,8 @@ public sealed partial class PurchaseDocumentRepository
                p.amount + p.tax_deducted_amount - p.allocated_amount AS UnallocatedAmount, p.status AS Status,
                p.posted_at AT TIME ZONE 'utc' AS PostedAt, p.posted_by AS PostedBy, p.remarks AS Remarks,
                p.created_at AT TIME ZONE 'utc' AS CreatedAt, p.created_by AS CreatedBy, p.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM purchase.supplier_payment p
-        JOIN purchase.supplier s ON s.supplier_id = p.supplier_id
+        FROM public.supplier_payment p
+        JOIN public.supplier s ON s.supplier_id = p.supplier_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = p.currency_lookup_data_id
         """;
 
@@ -390,7 +390,7 @@ public sealed partial class PurchaseDocumentRepository
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SupplierPayment>(connection,
-            $"SELECT count(*) FROM purchase.supplier_payment p JOIN purchase.supplier s ON s.supplier_id = p.supplier_id {PaymentFilter}",
+            $"SELECT count(*) FROM public.supplier_payment p JOIN public.supplier s ON s.supplier_id = p.supplier_id {PaymentFilter}",
             $"{PaymentSelect} {PaymentFilter} ORDER BY p.payment_date DESC, p.supplier_payment_id DESC",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -406,7 +406,7 @@ public sealed partial class PurchaseDocumentRepository
         payment.Allocations = (await connection.QueryAsync<PaymentAllocationItem>(new CommandDefinition("""
             SELECT a.purchase_invoice_id AS PurchaseInvoiceId, i.invoice_no AS InvoiceNo, i.invoice_date AS InvoiceDate,
                    i.total_amount AS InvoiceTotal, a.amount AS Amount
-            FROM purchase.invoice_allocation a JOIN purchase.purchase_invoice i ON i.purchase_invoice_id = a.purchase_invoice_id
+            FROM public.purchase_invoice_allocation a JOIN public.purchase_invoice i ON i.purchase_invoice_id = a.purchase_invoice_id
             WHERE a.supplier_payment_id = @Id ORDER BY i.invoice_date, i.purchase_invoice_id
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
         return payment;
@@ -421,7 +421,7 @@ public sealed partial class PurchaseDocumentRepository
         foreach (var allocation in payment.Allocations)
         {
             var due = await connection.QuerySingleOrDefaultAsync<decimal?>(new CommandDefinition("""
-                SELECT total_amount - settled_amount FROM purchase.purchase_invoice
+                SELECT total_amount - settled_amount FROM public.purchase_invoice
                 WHERE organization_id = @Org AND purchase_invoice_id = @Id AND supplier_id = @SupplierId
                   AND status = 'Posted' AND currency_lookup_data_id = @CurrencyId
                 FOR UPDATE
@@ -435,7 +435,7 @@ public sealed partial class PurchaseDocumentRepository
 
         var number = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.SupplierPayment, cancellationToken);
         var id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-            INSERT INTO purchase.supplier_payment (
+            INSERT INTO public.supplier_payment (
                 organization_id, payment_no, payment_date, supplier_id, payment_type, payment_method, payment_provider,
                 reference_no, cheque_date, cheque_status, currency_lookup_data_id, exchange_rate, amount, tax_deducted_amount,
                 allocated_amount, status, posted_at, posted_by, remarks, created_at, created_by)
@@ -468,7 +468,7 @@ public sealed partial class PurchaseDocumentRepository
         if (payment.Allocations.Count > 0)
         {
             await connection.ExecuteAsync(new CommandDefinition($"""
-                INSERT INTO purchase.invoice_allocation (organization_id, purchase_invoice_id, supplier_payment_id, allocation_date,
+                INSERT INTO public.purchase_invoice_allocation (organization_id, purchase_invoice_id, supplier_payment_id, allocation_date,
                                                          amount, created_at, created_by)
                 VALUES (@Org, @InvoiceId, @PaymentId, @Date, @Amount, {SecurityDb.NowUtc}, @UserId)
                 """, payment.Allocations.Select(a => new
@@ -492,10 +492,10 @@ public sealed partial class PurchaseDocumentRepository
     {
         var connection = await OpenAsync(cancellationToken);
         var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var header = await LockAsync(connection, transaction, "purchase.supplier_payment", "supplier_payment_id", "payment_no",
+        var header = await LockAsync(connection, transaction, "public.supplier_payment", "supplier_payment_id", "payment_no",
             "payment_date", "NULL::int", organizationId, id, "payment", cancellationToken);
         var (method, chequeStatus) = await connection.QuerySingleAsync<(string, string?)>(new CommandDefinition(
-            "SELECT payment_method, cheque_status FROM purchase.supplier_payment WHERE supplier_payment_id = @Id",
+            "SELECT payment_method, cheque_status FROM public.supplier_payment WHERE supplier_payment_id = @Id",
             new { Id = id }, transaction, cancellationToken: cancellationToken));
         return (connection, transaction, header, method, chequeStatus);
     }
@@ -505,11 +505,11 @@ public sealed partial class PurchaseDocumentRepository
         NpgsqlConnection connection, NpgsqlTransaction transaction, long id, int userId, CancellationToken cancellationToken)
     {
         var invoices = (await connection.QueryAsync<long>(new CommandDefinition(
-            "DELETE FROM purchase.invoice_allocation WHERE supplier_payment_id = @Id RETURNING purchase_invoice_id",
+            "DELETE FROM public.purchase_invoice_allocation WHERE supplier_payment_id = @Id RETURNING purchase_invoice_id",
             new { Id = id }, transaction, cancellationToken: cancellationToken))).AsList();
         await RecomputeSettlementAsync(connection, transaction, invoices, cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE purchase.supplier_payment SET allocated_amount = 0, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            UPDATE public.supplier_payment SET allocated_amount = 0, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE supplier_payment_id = @Id
             """, new { Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
     }
@@ -522,7 +522,7 @@ public sealed partial class PurchaseDocumentRepository
         {
             RequireStatus(header, DocumentStatus.Posted, "This payment is already cancelled.");
             await UnallocatePaymentAsync(connection, transaction, id, userId, cancellationToken);
-            await SetStatusAsync(connection, transaction, "purchase.supplier_payment", "supplier_payment_id", id,
+            await SetStatusAsync(connection, transaction, "public.supplier_payment", "supplier_payment_id", id,
                 DocumentStatus.Cancelled, userId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -543,7 +543,7 @@ public sealed partial class PurchaseDocumentRepository
             if (chequeStatus == "Bounced")
                 await UnallocatePaymentAsync(connection, transaction, id, userId, cancellationToken);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE purchase.supplier_payment SET cheque_status = @Status, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+                UPDATE public.supplier_payment SET cheque_status = @Status, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE supplier_payment_id = @Id
                 """, new { Id = id, Status = chequeStatus, UserId = userId }, transaction, cancellationToken: cancellationToken));
             await transaction.CommitAsync(cancellationToken);

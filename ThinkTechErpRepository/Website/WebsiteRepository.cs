@@ -7,7 +7,7 @@ namespace ThinkTechErpRepository.Website;
 
 public sealed class WebsiteRepository(IDbConnectionFactory connectionFactory) : IWebsiteRepository
 {
-    private const string Schema = "website";
+    private const string Schema = "public";
     private static readonly HashSet<string> SupportedTables = new(StringComparer.Ordinal)
     {
         "testimonials", "case_studies", "faqs", "industries", "inquiries",

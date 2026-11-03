@@ -9,7 +9,7 @@ using ThinkTechErpService.Accounting;
 namespace ThinkTechErpAPI.Areas.Accounting.Controller;
 
 /// <summary>
-/// Sub classes of the chart of accounts (accounting.acc_sub_class): the ledger heads vouchers post to.
+/// Sub classes of the chart of accounts (public.acc_sub_class): the ledger heads vouchers post to.
 /// The chart itself is kept under api/accounting/account-classes.
 /// </summary>
 [Route("api/accounting/ledger-heads")]

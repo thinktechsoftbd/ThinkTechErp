@@ -81,13 +81,13 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     private static Task RecomputeSettlementAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, IEnumerable<long> invoiceIds, CancellationToken cancellationToken)
         => connection.ExecuteAsync(new CommandDefinition("""
-            UPDATE sales.sales_invoice i
+            UPDATE public.sales_invoice i
             SET settled_amount = least(i.total_amount, i.paid_amount + coalesce(
-                    (SELECT sum(a.amount) FROM sales.invoice_allocation a WHERE a.sales_invoice_id = i.sales_invoice_id), 0)),
+                    (SELECT sum(a.amount) FROM public.sales_invoice_allocation a WHERE a.sales_invoice_id = i.sales_invoice_id), 0)),
                 payment_status = CASE
-                    WHEN i.paid_amount + coalesce((SELECT sum(a.amount) FROM sales.invoice_allocation a
+                    WHEN i.paid_amount + coalesce((SELECT sum(a.amount) FROM public.sales_invoice_allocation a
                                                    WHERE a.sales_invoice_id = i.sales_invoice_id), 0) >= i.total_amount THEN 'Paid'
-                    WHEN i.paid_amount + coalesce((SELECT sum(a.amount) FROM sales.invoice_allocation a
+                    WHEN i.paid_amount + coalesce((SELECT sum(a.amount) FROM public.sales_invoice_allocation a
                                                    WHERE a.sales_invoice_id = i.sales_invoice_id), 0) > 0 THEN 'PartiallyPaid'
                     ELSE 'Unpaid' END
             WHERE i.sales_invoice_id = ANY(@Ids)
@@ -110,15 +110,15 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                i.payment_method AS PaymentMethod, i.payment_provider AS PaymentProvider,
                i.payment_reference_no AS PaymentReferenceNo, i.settled_amount AS SettledAmount,
                i.total_amount - i.settled_amount AS DueAmount,
-               coalesce((SELECT round(sum(l.unit_cost * l.base_quantity), 4) FROM sales.sales_invoice_line l
+               coalesce((SELECT round(sum(l.unit_cost * l.base_quantity), 4) FROM public.sales_invoice_line l
                          WHERE l.sales_invoice_id = i.sales_invoice_id), 0) AS CostAmount,
                i.status AS Status, i.payment_status AS PaymentStatus,
-               (SELECT count(*) FROM sales.sales_invoice_line l WHERE l.sales_invoice_id = i.sales_invoice_id)::int AS LineCount,
+               (SELECT count(*) FROM public.sales_invoice_line l WHERE l.sales_invoice_id = i.sales_invoice_id)::int AS LineCount,
                i.posted_at AT TIME ZONE 'utc' AS PostedAt, i.posted_by AS PostedBy, i.remarks AS Remarks,
                i.created_at AT TIME ZONE 'utc' AS CreatedAt, i.created_by AS CreatedBy, i.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM sales.sales_invoice i
-        LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id
-        JOIN inventory.warehouse w ON w.warehouse_id = i.warehouse_id
+        FROM public.sales_invoice i
+        LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id
+        JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
         """;
 
@@ -139,7 +139,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SalesInvoice>(connection,
-            $"SELECT count(*) FROM sales.sales_invoice i LEFT JOIN purchase.supplier c ON c.supplier_id = i.customer_id {InvoiceFilter}",
+            $"SELECT count(*) FROM public.sales_invoice i LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id {InvoiceFilter}",
             $"{InvoiceSelect} {InvoiceFilter} ORDER BY i.invoice_date DESC, i.sales_invoice_id DESC",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -163,12 +163,12 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                    l.discount_percent AS DiscountPercent, l.discount_amount AS DiscountAmount, l.tax_group_id AS TaxGroupId,
                    tg.tax_group_name AS TaxGroupName, l.tax_amount AS TaxAmount, l.line_total AS LineTotal,
                    l.unit_cost AS UnitCost, l.returned_quantity AS ReturnedQuantity, l.remarks AS Remarks
-            FROM sales.sales_invoice_line l
-            JOIN inventory.product p ON p.product_id = l.product_id
-            JOIN inventory.unit u ON u.unit_id = l.unit_id
-            JOIN inventory.unit bu ON bu.unit_id = p.base_unit_id
+            FROM public.sales_invoice_line l
+            JOIN public.product p ON p.product_id = l.product_id
+            JOIN public.unit u ON u.unit_id = l.unit_id
+            JOIN public.unit bu ON bu.unit_id = p.base_unit_id
             LEFT JOIN public.tax_group tg ON tg.tax_group_id = l.tax_group_id
-            LEFT JOIN inventory.batch b ON b.batch_id = l.batch_id
+            LEFT JOIN public.batch b ON b.batch_id = l.batch_id
             WHERE l.sales_invoice_id = @Id
             ORDER BY l.line_no
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
@@ -176,13 +176,13 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
         var serials = (await connection.QueryAsync<(long LineId, string SerialNo)>(new CommandDefinition("""
             SELECT t.sales_invoice_line_id, s.serial_no
-            FROM sales.sales_invoice_serial t JOIN inventory.serial_number s ON s.serial_number_id = t.serial_number_id
+            FROM public.sales_invoice_serial t JOIN public.serial_number s ON s.serial_number_id = t.serial_number_id
             WHERE t.sales_invoice_line_id = ANY(@Ids) ORDER BY s.serial_no
             """, new { Ids = lineIds }, cancellationToken: cancellationToken))).ToLookup(s => s.LineId, s => s.SerialNo);
         var taxes = (await connection.QueryAsync<long, LineTaxItem, (long, LineTaxItem)>(new CommandDefinition("""
             SELECT t.sales_invoice_line_id AS LineId, t.tax_rate_id AS TaxRateId, r.tax_code AS TaxCode,
                    t.taxable_amount AS TaxableAmount, t.tax_amount AS TaxAmount, r.is_recoverable AS IsRecoverable
-            FROM sales.sales_invoice_line_tax t JOIN public.tax_rate r ON r.tax_rate_id = t.tax_rate_id
+            FROM public.sales_invoice_line_tax t JOIN public.tax_rate r ON r.tax_rate_id = t.tax_rate_id
             WHERE t.sales_invoice_line_id = ANY(@Ids)
             """, new { Ids = lineIds }, cancellationToken: cancellationToken),
             (lineId, tax) => (lineId, tax), splitOn: "TaxRateId")).ToLookup(t => t.Item1, t => t.Item2);
@@ -197,9 +197,9 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                    CASE WHEN a.customer_receipt_id IS NOT NULL THEN 'Receipt' ELSE 'Return' END AS SourceType,
                    coalesce(a.customer_receipt_id, a.sales_return_id) AS SourceId,
                    coalesce(r.receipt_no, sr.return_no) AS SourceNo
-            FROM sales.invoice_allocation a
-            LEFT JOIN sales.customer_receipt r ON r.customer_receipt_id = a.customer_receipt_id
-            LEFT JOIN sales.sales_return sr ON sr.sales_return_id = a.sales_return_id
+            FROM public.sales_invoice_allocation a
+            LEFT JOIN public.customer_receipt r ON r.customer_receipt_id = a.customer_receipt_id
+            LEFT JOIN public.sales_return sr ON sr.sales_return_id = a.sales_return_id
             WHERE a.sales_invoice_id = @Id
             ORDER BY a.allocation_date, a.invoice_allocation_id
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
@@ -226,7 +226,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             SELECT sales_invoice_id AS Id, invoice_no AS Number, invoice_date AS DocumentDate, status AS Status,
                    warehouse_id AS WarehouseId, customer_id AS CustomerId, total_amount AS TotalAmount,
                    paid_amount AS PaidAmount, exchange_rate AS ExchangeRate
-            FROM sales.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id
+            FROM public.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id
             FOR UPDATE
             """, new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken))
            ?? throw new BusinessRuleException("The invoice doesn't exist.");
@@ -270,7 +270,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         {
             parameters.Add("Number", await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.SalesInvoice, cancellationToken));
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-                INSERT INTO sales.sales_invoice (
+                INSERT INTO public.sales_invoice (
                     organization_id, invoice_no, invoice_date, sale_type, due_date, customer_id, customer_name,
                     customer_mobile, warehouse_id, currency_lookup_data_id, exchange_rate, subtotal_amount,
                     discount_amount, extra_discount_amount, tax_amount, charge_amount, round_off_amount, total_amount,
@@ -293,7 +293,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                 throw new BusinessRuleException("Only a draft invoice can be changed.");
             parameters.Add("Id", id);
             await connection.ExecuteAsync(new CommandDefinition($"""
-                UPDATE sales.sales_invoice
+                UPDATE public.sales_invoice
                 SET invoice_date = @InvoiceDate, sale_type = @SaleType, due_date = @DueDate, customer_id = @CustomerId,
                     customer_name = @CustomerName, customer_mobile = @CustomerMobile, warehouse_id = @WarehouseId,
                     currency_lookup_data_id = @CurrencyLookupDataId, exchange_rate = @ExchangeRate,
@@ -304,14 +304,14 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                     payment_reference_no = @PaymentReferenceNo, settled_amount = @SettledAmount, remarks = @Remarks,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE sales_invoice_id = @Id;
-                DELETE FROM sales.sales_invoice_line WHERE sales_invoice_id = @Id;
+                DELETE FROM public.sales_invoice_line WHERE sales_invoice_id = @Id;
                 """, parameters, transaction, cancellationToken: cancellationToken));
         }
 
         foreach (var line in invoice.Lines)
         {
             var lineId = await connection.QuerySingleAsync<long>(new CommandDefinition("""
-                INSERT INTO sales.sales_invoice_line (
+                INSERT INTO public.sales_invoice_line (
                     sales_invoice_id, line_no, product_id, description, unit_id, conversion_factor, quantity, batch_id,
                     unit_price, discount_percent, discount_amount, tax_group_id, tax_amount, line_total, remarks)
                 VALUES (
@@ -339,11 +339,11 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
             if (serialIdsByLine.TryGetValue(line.LineNo, out var serialIds) && serialIds.Count > 0)
                 await connection.ExecuteAsync(new CommandDefinition(
-                    "INSERT INTO sales.sales_invoice_serial (sales_invoice_line_id, serial_number_id) SELECT @LineId, unnest(@Ids)",
+                    "INSERT INTO public.sales_invoice_serial (sales_invoice_line_id, serial_number_id) SELECT @LineId, unnest(@Ids)",
                     new { LineId = lineId, Ids = serialIds.ToArray() }, transaction, cancellationToken: cancellationToken));
             if (line.Taxes.Count > 0)
                 await connection.ExecuteAsync(new CommandDefinition("""
-                    INSERT INTO sales.sales_invoice_line_tax (sales_invoice_line_id, tax_rate_id, taxable_amount, tax_amount)
+                    INSERT INTO public.sales_invoice_line_tax (sales_invoice_line_id, tax_rate_id, taxable_amount, tax_amount)
                     VALUES (@LineId, @TaxRateId, @TaxableAmount, @TaxAmount)
                     """, line.Taxes.Select(t => new { LineId = lineId, t.TaxRateId, t.TaxableAmount, t.TaxAmount }),
                     transaction, cancellationToken: cancellationToken));
@@ -357,14 +357,14 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     {
         await using var connection = connectionFactory.CreateConnection();
         var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
-            "SELECT status FROM sales.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id",
+            "SELECT status FROM public.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
         if (status is null)
             return DeleteOutcome.NotFound;
         if (status != DocumentStatus.Draft)
             return DeleteOutcome.InUse;
         return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
-            "DELETE FROM sales.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id AND status = 'Draft'",
+            "DELETE FROM public.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id AND status = 'Draft'",
             new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
     }
 
@@ -402,7 +402,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                    p.product_code || ' ' || p.product_name AS Label, p.product_type AS ProductType,
                    p.tracking_type AS TrackingType, l.base_quantity AS BaseQuantity, l.batch_id AS BatchId,
                    p.last_purchase_cost AS LastPurchaseCost
-            FROM sales.sales_invoice_line l JOIN inventory.product p ON p.product_id = l.product_id
+            FROM public.sales_invoice_line l JOIN public.product p ON p.product_id = l.product_id
             WHERE l.sales_invoice_id = @Id ORDER BY l.line_no
             """, new { Id = id }, transaction, cancellationToken: cancellationToken))).AsList();
         if (lines.Count == 0)
@@ -412,7 +412,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
         var settings = await PostingSettingsReader.ReadAsync(connection, transaction, organizationId, cancellationToken);
         var serials = (await connection.QueryAsync<(long LineId, long SerialId)>(new CommandDefinition(
-            "SELECT sales_invoice_line_id, serial_number_id FROM sales.sales_invoice_serial WHERE sales_invoice_line_id = ANY(@Ids)",
+            "SELECT sales_invoice_line_id, serial_number_id FROM public.sales_invoice_serial WHERE sales_invoice_line_id = ANY(@Ids)",
             new { Ids = lines.Select(l => l.Id).ToArray() }, transaction, cancellationToken: cancellationToken)))
             .ToLookup(s => s.LineId, s => s.SerialId);
 
@@ -427,7 +427,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                 line.BatchId = await PickBatchAsync(connection, transaction, header, line, label, picked, settings.AllowNegativeStock, cancellationToken);
                 picked[(line.ProductId, line.BatchId.Value)] = picked.GetValueOrDefault((line.ProductId, line.BatchId.Value)) + line.BaseQuantity;
                 await connection.ExecuteAsync(new CommandDefinition(
-                    "UPDATE sales.sales_invoice_line SET batch_id = @BatchId WHERE sales_invoice_line_id = @Id",
+                    "UPDATE public.sales_invoice_line SET batch_id = @BatchId WHERE sales_invoice_line_id = @Id",
                     new { line.Id, line.BatchId }, transaction, cancellationToken: cancellationToken));
             }
 
@@ -437,7 +437,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                 if (serialIds.Count != line.BaseQuantity)
                     throw new BusinessRuleException($"{label}: choose one serial number per item sold.");
                 var taken = await connection.ExecuteAsync(new CommandDefinition($"""
-                    UPDATE inventory.serial_number SET status = 'Sold', warehouse_id = NULL,
+                    UPDATE public.serial_number SET status = 'Sold', warehouse_id = NULL,
                         updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                     WHERE serial_number_id = ANY(@Ids) AND status = 'InStock' AND warehouse_id = @WarehouseId
                     """, new { Ids = serialIds.ToArray(), header.WarehouseId, UserId = userId }, transaction,
@@ -459,10 +459,10 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             .Concat(lines.Where(l => l.ProductType != "Stock")
                 .Select(l => new { l.Id, Cost = l.ProductType == "NonStock" ? l.LastPurchaseCost : 0m }));
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE sales.sales_invoice_line SET unit_cost = round(@Cost, 6) WHERE sales_invoice_line_id = @Id",
+            "UPDATE public.sales_invoice_line SET unit_cost = round(@Cost, 6) WHERE sales_invoice_line_id = @Id",
             costs, transaction, cancellationToken: cancellationToken));
 
-        await SetStatusAsync(connection, transaction, "sales.sales_invoice", "sales_invoice_id", id, DocumentStatus.Posted,
+        await SetStatusAsync(connection, transaction, "public.sales_invoice", "sales_invoice_id", id, DocumentStatus.Posted,
             userId, cancellationToken, posted: true);
         await RecomputeSettlementAsync(connection, transaction, [id], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -480,7 +480,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         var unpaid = Math.Round((header.TotalAmount - header.PaidAmount) * header.ExchangeRate, 4, MidpointRounding.AwayFromZero);
         // The draft may name a party that has since stopped being a customer (it stays on as a supplier).
         var (name, limit) = await connection.QuerySingleOrDefaultAsync<(string?, decimal?)>(new CommandDefinition(
-            "SELECT supplier_name, customer_credit_limit FROM purchase.supplier WHERE supplier_id = @Id AND is_customer FOR UPDATE",
+            "SELECT supplier_name, customer_credit_limit FROM public.supplier WHERE supplier_id = @Id AND is_customer FOR UPDATE",
             new { Id = header.CustomerId }, transaction, cancellationToken: cancellationToken));
         if (name is null)
             throw new BusinessRuleException("The customer is no longer on file. Choose another customer for this sale.");
@@ -490,7 +490,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             throw new BusinessRuleException($"{name} buys on cash only (credit limit 0). Take the full payment, or raise the limit.");
 
         var balance = await connection.QuerySingleAsync<decimal>(new CommandDefinition(
-            "SELECT coalesce(sum(debit_amount - credit_amount), 0) FROM sales.customer_ledger WHERE customer_id = @Id",
+            "SELECT coalesce(sum(debit_amount - credit_amount), 0) FROM public.customer_ledger WHERE customer_id = @Id",
             new { Id = header.CustomerId }, transaction, cancellationToken: cancellationToken));
         if (balance + unpaid > limit.Value + 0.0001m)
             throw new BusinessRuleException(
@@ -509,8 +509,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         var candidates = (await connection.QueryAsync<BatchCandidate>(new CommandDefinition("""
             SELECT b.batch_id AS BatchId, b.batch_no AS BatchNo, b.expiry_date AS ExpiryDate,
                    coalesce(sb.quantity, 0) AS Quantity
-            FROM inventory.batch b
-            LEFT JOIN inventory.stock_balance sb
+            FROM public.batch b
+            LEFT JOIN public.stock_balance sb
                    ON sb.batch_id = b.batch_id AND sb.warehouse_id = @WarehouseId AND sb.product_id = b.product_id
             WHERE b.product_id = @ProductId AND (CAST(@BatchId AS bigint) IS NULL OR b.batch_id = @BatchId)
               AND (CAST(@BatchId AS bigint) IS NOT NULL OR sb.quantity > 0)
@@ -548,8 +548,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                 : "This invoice is already cancelled.");
 
         var blockers = await connection.QuerySingleAsync<(int Allocations, int Returns)>(new CommandDefinition("""
-            SELECT (SELECT count(*) FROM sales.invoice_allocation WHERE sales_invoice_id = @Id)::int,
-                   (SELECT count(*) FROM sales.sales_return WHERE sales_invoice_id = @Id AND status = 'Posted')::int
+            SELECT (SELECT count(*) FROM public.sales_invoice_allocation WHERE sales_invoice_id = @Id)::int,
+                   (SELECT count(*) FROM public.sales_return WHERE sales_invoice_id = @Id AND status = 'Posted')::int
             """, new { Id = id }, transaction, cancellationToken: cancellationToken));
         if (blockers.Allocations > 0)
             throw new BusinessRuleException("Customer receipts settle this invoice. Cancel them first.");
@@ -561,7 +561,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         var settings = await PostingSettingsReader.ReadAsync(connection, transaction, organizationId, cancellationToken);
         await new StockLedger(connection, transaction, organizationId, userId, DateOnly.FromDateTime(DateTime.UtcNow),
             DocumentType.SalesInvoice, id, header.Number, settings.AllowNegativeStock).ReverseAsync(null, cancellationToken);
-        await SetStatusAsync(connection, transaction, "sales.sales_invoice", "sales_invoice_id", id, DocumentStatus.Cancelled,
+        await SetStatusAsync(connection, transaction, "public.sales_invoice", "sales_invoice_id", id, DocumentStatus.Cancelled,
             userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -573,7 +573,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             SELECT sales_invoice_id AS Id, invoice_no AS InvoiceNo, invoice_date AS InvoiceDate, due_date AS DueDate,
                    currency_lookup_data_id AS CurrencyLookupDataId, total_amount AS TotalAmount,
                    settled_amount AS SettledAmount, total_amount - settled_amount AS DueAmount
-            FROM sales.sales_invoice
+            FROM public.sales_invoice
             WHERE organization_id = @Org AND customer_id = @CustomerId AND status = 'Posted' AND payment_status <> 'Paid'
             ORDER BY coalesce(due_date, invoice_date), invoice_date, sales_invoice_id
             """, new { Org = organizationId, CustomerId = customerId }, cancellationToken: cancellationToken))).AsList();
@@ -584,7 +584,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     {
         await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<(string SerialNo, long Id)>(new CommandDefinition("""
-            SELECT serial_no, serial_number_id FROM inventory.serial_number
+            SELECT serial_no, serial_number_id FROM public.serial_number
             WHERE organization_id = @Org AND product_id = @ProductId AND warehouse_id = @WarehouseId AND status = 'InStock'
               AND serial_no = ANY(@SerialNos)
             """, new { Org = organizationId, ProductId = productId, WarehouseId = warehouseId, SerialNos = serialNos.ToArray() },
@@ -606,8 +606,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                r.amount + r.tax_deducted_amount - r.allocated_amount AS UnallocatedAmount, r.status AS Status,
                r.posted_at AT TIME ZONE 'utc' AS PostedAt, r.posted_by AS PostedBy, r.remarks AS Remarks,
                r.created_at AT TIME ZONE 'utc' AS CreatedAt, r.created_by AS CreatedBy, r.updated_at AT TIME ZONE 'utc' AS UpdatedAt
-        FROM sales.customer_receipt r
-        JOIN purchase.supplier c ON c.supplier_id = r.customer_id
+        FROM public.customer_receipt r
+        JOIN public.supplier c ON c.supplier_id = r.customer_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = r.currency_lookup_data_id
         """;
 
@@ -625,7 +625,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
     {
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<CustomerReceipt>(connection,
-            $"SELECT count(*) FROM sales.customer_receipt r JOIN purchase.supplier c ON c.supplier_id = r.customer_id {ReceiptFilter}",
+            $"SELECT count(*) FROM public.customer_receipt r JOIN public.supplier c ON c.supplier_id = r.customer_id {ReceiptFilter}",
             $"{ReceiptSelect} {ReceiptFilter} ORDER BY r.receipt_date DESC, r.customer_receipt_id DESC",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
@@ -641,7 +641,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         receipt.Allocations = (await connection.QueryAsync<ReceiptAllocationItem>(new CommandDefinition("""
             SELECT a.sales_invoice_id AS SalesInvoiceId, i.invoice_no AS InvoiceNo, i.invoice_date AS InvoiceDate,
                    i.total_amount AS InvoiceTotal, a.amount AS Amount
-            FROM sales.invoice_allocation a JOIN sales.sales_invoice i ON i.sales_invoice_id = a.sales_invoice_id
+            FROM public.sales_invoice_allocation a JOIN public.sales_invoice i ON i.sales_invoice_id = a.sales_invoice_id
             WHERE a.customer_receipt_id = @Id ORDER BY i.invoice_date, i.sales_invoice_id
             """, new { Id = id }, cancellationToken: cancellationToken))).AsList();
         return receipt;
@@ -656,7 +656,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         foreach (var allocation in receipt.Allocations)
         {
             var due = await connection.QuerySingleOrDefaultAsync<decimal?>(new CommandDefinition("""
-                SELECT total_amount - settled_amount FROM sales.sales_invoice
+                SELECT total_amount - settled_amount FROM public.sales_invoice
                 WHERE organization_id = @Org AND sales_invoice_id = @Id AND customer_id = @CustomerId
                   AND status = 'Posted' AND currency_lookup_data_id = @CurrencyId
                 FOR UPDATE
@@ -670,7 +670,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
 
         var number = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.CustomerReceipt, cancellationToken);
         var id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
-            INSERT INTO sales.customer_receipt (
+            INSERT INTO public.customer_receipt (
                 organization_id, receipt_no, receipt_date, customer_id, receipt_type, payment_method, payment_provider,
                 reference_no, cheque_date, cheque_status, currency_lookup_data_id, exchange_rate, amount, tax_deducted_amount,
                 allocated_amount, status, posted_at, posted_by, remarks, created_at, created_by)
@@ -703,7 +703,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         if (receipt.Allocations.Count > 0)
         {
             await connection.ExecuteAsync(new CommandDefinition($"""
-                INSERT INTO sales.invoice_allocation (organization_id, sales_invoice_id, customer_receipt_id, allocation_date,
+                INSERT INTO public.sales_invoice_allocation (organization_id, sales_invoice_id, customer_receipt_id, allocation_date,
                                                       amount, created_at, created_by)
                 VALUES (@Org, @InvoiceId, @ReceiptId, @Date, @Amount, {SecurityDb.NowUtc}, @UserId)
                 """, receipt.Allocations.Select(a => new
@@ -733,7 +733,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, long id, CancellationToken cancellationToken)
         => await connection.QuerySingleOrDefaultAsync<ReceiptHeader>(new CommandDefinition("""
             SELECT status AS Status, payment_method AS PaymentMethod, cheque_status AS ChequeStatus
-            FROM sales.customer_receipt WHERE organization_id = @Org AND customer_receipt_id = @Id
+            FROM public.customer_receipt WHERE organization_id = @Org AND customer_receipt_id = @Id
             FOR UPDATE
             """, new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken))
            ?? throw new BusinessRuleException("The receipt doesn't exist.");
@@ -743,11 +743,11 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         NpgsqlConnection connection, NpgsqlTransaction transaction, long id, int userId, CancellationToken cancellationToken)
     {
         var invoices = (await connection.QueryAsync<long>(new CommandDefinition(
-            "DELETE FROM sales.invoice_allocation WHERE customer_receipt_id = @Id RETURNING sales_invoice_id",
+            "DELETE FROM public.sales_invoice_allocation WHERE customer_receipt_id = @Id RETURNING sales_invoice_id",
             new { Id = id }, transaction, cancellationToken: cancellationToken))).AsList();
         await RecomputeSettlementAsync(connection, transaction, invoices, cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE sales.customer_receipt SET allocated_amount = 0, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            UPDATE public.customer_receipt SET allocated_amount = 0, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE customer_receipt_id = @Id
             """, new { Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
     }
@@ -760,7 +760,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         if (header.Status != DocumentStatus.Posted)
             throw new BusinessRuleException("This receipt is already cancelled.");
         await UnallocateReceiptAsync(connection, transaction, id, userId, cancellationToken);
-        await SetStatusAsync(connection, transaction, "sales.customer_receipt", "customer_receipt_id", id,
+        await SetStatusAsync(connection, transaction, "public.customer_receipt", "customer_receipt_id", id,
             DocumentStatus.Cancelled, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -781,7 +781,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         if (chequeStatus == "Bounced")
             await UnallocateReceiptAsync(connection, transaction, id, userId, cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE sales.customer_receipt SET cheque_status = @Status, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            UPDATE public.customer_receipt SET cheque_status = @Status, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE customer_receipt_id = @Id
             """, new { Id = id, Status = chequeStatus, UserId = userId }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);

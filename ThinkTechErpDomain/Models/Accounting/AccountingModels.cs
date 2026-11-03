@@ -35,7 +35,7 @@ public static class AccountNature
     public static bool IsBalanceSheet(string nature) => nature is Asset or Liability or Equity;
 }
 
-/// <summary>The side of purchase.supplier a party picker lists: suppliers, customers, or both when not given.</summary>
+/// <summary>The side of public.supplier a party picker lists: suppliers, customers, or both when not given.</summary>
 public static class PartyType
 {
     public const string Supplier = "Supplier";
@@ -85,7 +85,7 @@ public static class ChequePayType
 
 // ---- Lookups
 
-/// <summary>A sub class (accounting.acc_sub_class) for the voucher and report pickers.</summary>
+/// <summary>A sub class (public.acc_sub_class) for the voucher and report pickers.</summary>
 public sealed class LedgerHeadOption
 {
     public int Id { get; set; }
@@ -96,7 +96,7 @@ public sealed class LedgerHeadOption
     public string? Path { get; set; }
 }
 
-/// <summary>A supplier or customer (both live in purchase.supplier) for the voucher and report pickers.</summary>
+/// <summary>A supplier or customer (both live in public.supplier) for the voucher and report pickers.</summary>
 public sealed class PartyOption
 {
     public int Id { get; set; }
@@ -158,7 +158,7 @@ public sealed class VoucherLine
     /// <summary>0 for a line not saved yet.</summary>
     public long Id { get; set; }
     public int LineNo { get; set; }
-    /// <summary>The ledger head: an accounting.acc_sub_class id (voucher_line.acc_sub_class_id).</summary>
+    /// <summary>The ledger head: a public.acc_sub_class id (voucher_line.acc_sub_class_id).</summary>
     public int AccountId { get; set; }
     public string AccountCode { get; set; } = string.Empty;
     public string AccountName { get; set; } = string.Empty;

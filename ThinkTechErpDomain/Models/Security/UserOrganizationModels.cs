@@ -9,7 +9,7 @@ public sealed class UserOrganization
     public string Name { get; set; } = string.Empty;
     public string? Code { get; set; }
     public bool IsDefault { get; set; }
-    /// <summary>Linked to the user in security.user_organization (not only reachable as Super Admin).</summary>
+    /// <summary>Linked to the user in public.user_organization (not only reachable as Super Admin).</summary>
     public bool IsLinked { get; set; }
     /// <summary>Outside this company (e.g. a customer); the ERP's organization switcher leaves these out.</summary>
     public bool IsExternal { get; set; }

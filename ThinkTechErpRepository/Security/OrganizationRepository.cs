@@ -31,7 +31,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                created_by AS CreatedBy,
                updated_at AT TIME ZONE 'utc' AS UpdatedAt,
                updated_by AS UpdatedBy
-        FROM security.organization
+        FROM public.organization
         """;
 
     public async Task<IReadOnlyList<Organization>> GetOrganizationsAsync(CancellationToken cancellationToken = default)
@@ -66,7 +66,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
 
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO security.organization (
+            INSERT INTO public.organization (
                 object_id, organization_name_en, organization_name_bn, slogan, organization_code, email, phone, website,
                 address_line1, address_line2, city, state, postal_code, country, logo_url, is_external, is_active,
                 is_finalized, created_at, created_by)
@@ -87,7 +87,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
 
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
-            UPDATE security.organization
+            UPDATE public.organization
             SET object_id = COALESCE(@ObjectId, object_id),
                 organization_name_en = @NameEn,
                 organization_name_bn = @NameBn,
