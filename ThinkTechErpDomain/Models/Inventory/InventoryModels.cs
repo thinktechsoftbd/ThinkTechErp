@@ -262,8 +262,9 @@ public sealed class ProductBarcode
 
 public sealed class ProductUpsertRequest
 {
-    [Required, StringLength(50, MinimumLength = 1)]
-    public string Code { get; set; } = string.Empty;
+    /// <summary>Optional: a new product without one is numbered P-00001, P-00002, ...; an edit without one keeps its code.</summary>
+    [StringLength(50)]
+    public string? Code { get; set; }
 
     [Required, StringLength(250, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;

@@ -82,7 +82,7 @@ public sealed class ProductService(IProductRepository products, IOwnershipReposi
         if (request.HasExpiry && request.TrackingType != "Batch")
             throw new BusinessRuleException("Turn on batch tracking to record expiry dates.");
 
-        request.Code = request.Code.Trim();
+        request.Code = Text.Clean(request.Code);
         request.Name = request.Name.Trim();
         request.NameLocal = Text.Clean(request.NameLocal);
         request.GenericName = Text.Clean(request.GenericName);

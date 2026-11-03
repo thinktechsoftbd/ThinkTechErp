@@ -3,6 +3,7 @@ using System.Text.Json;
 using Dapper;
 using Npgsql;
 using NpgsqlTypes;
+using ThinkTechErpDomain.Models.Common;
 using ThinkTechErpDomain.Models.Inventory;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Common;
@@ -157,6 +158,20 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(request.Code))
+        {
+            // No code typed: the next of P-00001, P-00002, ..., skipping numbers already typed by hand.
+            string code;
+            var attempts = 0;
+            do
+            {
+                code = await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.Product, cancellationToken);
+            } while (++attempts < 50 && await connection.QuerySingleAsync<bool>(new CommandDefinition("""
+                SELECT EXISTS (SELECT 1 FROM inventory.product WHERE organization_id = @Org AND lower(product_code) = lower(@Code))
+                """, new { Org = organizationId, Code = code }, transaction, cancellationToken: cancellationToken)));
+            request.Code = code;
+        }
+
         var productId = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO inventory.product (
                 organization_id, product_code, product_name, product_name_local, product_type, category_id, brand_id,
@@ -184,7 +199,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         parameters.Add("Id", productId);
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE inventory.product
-            SET product_code = @Code, product_name = @Name, product_name_local = @NameLocal, product_type = @ProductType,
+            SET product_code = COALESCE(@Code, product_code), product_name = @Name, product_name_local = @NameLocal, product_type = @ProductType,
                 category_id = @CategoryId, brand_id = @BrandId, base_unit_id = @BaseUnitId, tracking_type = @TrackingType,
                 has_expiry = @HasExpiry, shelf_life_days = @ShelfLifeDays, generic_name = @GenericName,
                 registration_no = @RegistrationNo, hs_code = @HsCode, country_of_origin = @CountryOfOrigin,

@@ -28,7 +28,8 @@ public sealed class UserOrganizationRepository(IDbConnectionFactory connectionFa
                    o.organization_name_en AS Name,
                    o.organization_code AS Code,
                    coalesce(uo.is_default, false) AS IsDefault,
-                   uo.user_id IS NOT NULL AS IsLinked
+                   uo.user_id IS NOT NULL AS IsLinked,
+                   o.is_external AS IsExternal
             FROM security.organization o
             LEFT JOIN security.user_organization uo ON uo.organization_id = o.organization_id AND uo.user_id = @UserId
             WHERE o.is_active AND (uo.user_id IS NOT NULL OR @IncludeAll)
@@ -42,7 +43,7 @@ public sealed class UserOrganizationRepository(IDbConnectionFactory connectionFa
         await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<UserOrganization>(new CommandDefinition("""
             SELECT o.organization_id AS OrganizationId, o.organization_name_en AS Name, o.organization_code AS Code,
-                   uo.is_default AS IsDefault, true AS IsLinked
+                   uo.is_default AS IsDefault, true AS IsLinked, o.is_external AS IsExternal
             FROM security.user_organization uo
             JOIN security.organization o ON o.organization_id = uo.organization_id
             WHERE uo.user_id = @UserId

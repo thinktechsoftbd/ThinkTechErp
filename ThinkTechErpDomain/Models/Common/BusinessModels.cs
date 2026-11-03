@@ -34,6 +34,8 @@ public static class DocumentType
     public const string Voucher = "Voucher";
     /// <summary>Not a document: the series new customer codes are taken from.</summary>
     public const string Customer = "Customer";
+    /// <summary>Not a document: the series a new product's code is taken from when none is typed.</summary>
+    public const string Product = "Product";
 
     /// <summary>The number prefix a new organization's series starts with, e.g. PINV-00001.</summary>
     public static string DefaultPrefix(string documentType) => documentType switch
@@ -53,6 +55,7 @@ public static class DocumentType
         // Voucher Ref. Numbers are digits only: 00000000001.
         Voucher => "",
         Customer => "C-",
+        Product => "P-",
         _ => "DOC-"
     };
 
