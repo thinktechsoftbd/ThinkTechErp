@@ -26,6 +26,9 @@ public interface IPaymentSourceRepository
     Task<bool> NameExistsAsync(string nameEn, int? excludeId, CancellationToken cancellationToken = default);
     /// <summary>The ids of the source's lines, so a save can only keep lines that are its own.</summary>
     Task<IReadOnlyList<int>> GetLineIdsAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>True when the line exists under an active source (for other documents to reference).</summary>
+    Task<bool> ActiveLineExistsAsync(int lineId, CancellationToken cancellationToken = default);
 }
 
 public sealed class PaymentSourceRepository(IDbConnectionFactory connectionFactory) : IPaymentSourceRepository
@@ -186,5 +189,15 @@ public sealed class PaymentSourceRepository(IDbConnectionFactory connectionFacto
         return (await connection.QueryAsync<int>(new CommandDefinition(
             "SELECT id FROM public.inv_payment_source_d WHERE inv_payment_source_h_id = @Id",
             new { Id = id }, cancellationToken: cancellationToken))).AsList();
+    }
+
+    public async Task<bool> ActiveLineExistsAsync(int lineId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.QuerySingleAsync<bool>(new CommandDefinition("""
+            SELECT EXISTS (SELECT 1 FROM public.inv_payment_source_d d
+                           JOIN public.inv_payment_source_h h ON h.id = d.inv_payment_source_h_id
+                           WHERE d.id = @Id AND h.is_active)
+            """, new { Id = lineId }, cancellationToken: cancellationToken));
     }
 }

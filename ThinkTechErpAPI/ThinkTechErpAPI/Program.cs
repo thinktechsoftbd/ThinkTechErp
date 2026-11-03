@@ -256,6 +256,13 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, AccountingRules.PostVoucherPermission));
 
+    options.AddPolicy(AccountingPolicies.LedgerHeadLookup, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            AccountingRules.ViewAccountingPermission, AccountingRules.ManageAccountingPermission,
+            AccountingRules.PostVoucherPermission,
+            InventoryRules.ManageInventoryPermission, PurchaseRules.ManagePurchasePermission));
+
     options.AddPolicy(SmsPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SmsRules.ViewSmsPermission, SmsRules.ManageSmsPermission));

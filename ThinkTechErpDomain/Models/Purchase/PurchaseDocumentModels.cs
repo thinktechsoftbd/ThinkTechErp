@@ -218,6 +218,11 @@ public sealed class PurchaseInvoice
     public string? PaymentMethod { get; set; }
     public string? PaymentProvider { get; set; }
     public string? PaymentReferenceNo { get; set; }
+    /// <summary>The chosen payment source line (inv_payment_source_d); its ledger head is where the payment posts.</summary>
+    public int? InvPaymentSourceDId { get; set; }
+    public int? PaymentSourceId { get; set; }
+    public string? PaymentSourceName { get; set; }
+    public string? PaymentSourceType { get; set; }
     public decimal SettledAmount { get; set; }
     public decimal DueAmount { get; set; }
     public string Status { get; set; } = "Draft";
@@ -281,6 +286,10 @@ public sealed class PurchaseInvoiceUpsertRequest
     public string? PaymentMethod { get; set; }
     [StringLength(100)] public string? PaymentProvider { get; set; }
     [StringLength(100)] public string? PaymentReferenceNo { get; set; }
+
+    /// <summary>The payment source line (inv_payment_source_d). Required: where the payment posts.</summary>
+    [Range(1, int.MaxValue)] public int? InvPaymentSourceDId { get; set; }
+
     [StringLength(1000)] public string? Remarks { get; set; }
 
     [MinLength(1, ErrorMessage = "Add at least one line.")]

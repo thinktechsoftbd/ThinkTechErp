@@ -73,6 +73,12 @@ public sealed class Category
     public int SortOrder { get; set; }
     public bool IsActive { get; set; }
     public int ProductCount { get; set; }
+    /// <summary>The mapped ledger head: a public.acc_sub_class id (category.acc_sub_class_id), if any.</summary>
+    public int? AccSubClassId { get; set; }
+    public string? LedgerHeadCode { get; set; }
+    public string? LedgerHeadName { get; set; }
+    /// <summary>Map class/main class/account class/parent class of the head.</summary>
+    public string? LedgerHeadPath { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -93,6 +99,10 @@ public sealed class CategoryUpsertRequest
 
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>The ledger head (acc_sub_class id) to map, or null for none.</summary>
+    [Range(1, int.MaxValue)]
+    public int? AccSubClassId { get; set; }
 }
 
 // ---- Brands

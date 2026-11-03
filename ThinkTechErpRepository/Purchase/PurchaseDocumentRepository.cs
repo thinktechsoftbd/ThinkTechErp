@@ -340,6 +340,8 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
                i.tax_amount AS TaxAmount, i.charge_amount AS ChargeAmount, i.round_off_amount AS RoundOffAmount,
                i.total_amount AS TotalAmount, i.paid_amount AS PaidAmount, i.payment_method AS PaymentMethod,
                i.payment_provider AS PaymentProvider, i.payment_reference_no AS PaymentReferenceNo,
+               i.inv_payment_source_d_id AS InvPaymentSourceDId,
+               psh.id AS PaymentSourceId, psh.source_name_en AS PaymentSourceName, psd.payment_for AS PaymentSourceType,
                i.settled_amount AS SettledAmount, i.total_amount - i.settled_amount AS DueAmount,
                i.status AS Status, i.payment_status AS PaymentStatus,
                (SELECT count(*) FROM public.purchase_invoice_line l WHERE l.purchase_invoice_id = i.purchase_invoice_id)::int AS LineCount,
@@ -349,6 +351,8 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
         LEFT JOIN public.supplier s ON s.supplier_id = i.supplier_id
         LEFT JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
         LEFT JOIN public.purchase_order po ON po.purchase_order_id = i.purchase_order_id
+        LEFT JOIN public.inv_payment_source_d psd ON psd.id = i.inv_payment_source_d_id
+        LEFT JOIN public.inv_payment_source_h psh ON psh.id = psd.inv_payment_source_h_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
         """;
 
@@ -457,6 +461,7 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
             invoice.PaymentMethod,
             invoice.PaymentProvider,
             invoice.PaymentReferenceNo,
+            invoice.InvPaymentSourceDId,
             SettledAmount = invoice.PaidAmount,
             invoice.Remarks,
             UserId = userId
@@ -472,14 +477,14 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
                     supplier_mobile, receives_stock, warehouse_id, purchase_order_id, supplier_invoice_no,
                     supplier_invoice_date, tax_invoice_no, currency_lookup_data_id, exchange_rate, subtotal_amount,
                     discount_amount, tax_amount, charge_amount, round_off_amount, total_amount, paid_amount,
-                    payment_method, payment_provider, payment_reference_no, settled_amount, status, payment_status,
+                    payment_method, payment_provider, payment_reference_no, inv_payment_source_d_id, settled_amount, status, payment_status,
                     remarks, created_at, created_by)
                 VALUES (
                     @Org, @Number, @InvoiceDate, @PurchaseType, @DueDate, @SupplierId, @SupplierName,
                     @SupplierMobile, @ReceivesStock, @WarehouseId, @PurchaseOrderId, @SupplierInvoiceNo,
                     @SupplierInvoiceDate, @TaxInvoiceNo, @CurrencyLookupDataId, @ExchangeRate, @SubtotalAmount,
                     @DiscountAmount, @TaxAmount, @ChargeAmount, @RoundOffAmount, @TotalAmount, @PaidAmount,
-                    @PaymentMethod, @PaymentProvider, @PaymentReferenceNo, @SettledAmount, 'Draft', 'Unpaid',
+                    @PaymentMethod, @PaymentProvider, @PaymentReferenceNo, @InvPaymentSourceDId, @SettledAmount, 'Draft', 'Unpaid',
                     @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING purchase_invoice_id
                 """, parameters, transaction, cancellationToken: cancellationToken));
@@ -501,7 +506,8 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
                     subtotal_amount = @SubtotalAmount, discount_amount = @DiscountAmount, tax_amount = @TaxAmount,
                     charge_amount = @ChargeAmount, round_off_amount = @RoundOffAmount, total_amount = @TotalAmount,
                     paid_amount = @PaidAmount, payment_method = @PaymentMethod, payment_provider = @PaymentProvider,
-                    payment_reference_no = @PaymentReferenceNo, settled_amount = @SettledAmount, remarks = @Remarks,
+                    payment_reference_no = @PaymentReferenceNo, inv_payment_source_d_id = @InvPaymentSourceDId,
+                    settled_amount = @SettledAmount, remarks = @Remarks,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE purchase_invoice_id = @Id;
                 DELETE FROM public.purchase_invoice_line WHERE purchase_invoice_id = @Id;

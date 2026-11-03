@@ -10,10 +10,11 @@ namespace ThinkTechErpAPI.Areas.Accounting.Controller;
 
 /// <summary>
 /// Sub classes of the chart of accounts (public.acc_sub_class): the ledger heads vouchers post to.
-/// The chart itself is kept under api/accounting/account-classes.
+/// The chart itself is kept under api/accounting/account-classes. Inventory and purchase managers may read
+/// them too, to map a head to a category or supplier.
 /// </summary>
 [Route("api/accounting/ledger-heads")]
-[Authorize(Policy = AccountingPolicies.View)]
+[Authorize(Policy = AccountingPolicies.LedgerHeadLookup)]
 public sealed class AccountingLedgerHeadsController(ILedgerLookupService lookups) : ErpControllerBase
 {
     /// <summary>Sub classes for the voucher and report pickers (by code or name); with ids it returns exactly those heads.</summary>

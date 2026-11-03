@@ -56,6 +56,7 @@ public sealed class PurchaseDocumentService(
     IPurchaseSetupRepository setup,
     IProductRepository products,
     IInventorySetupRepository inventorySetup,
+    IPaymentSourceRepository paymentSources,
     IOwnershipRepository ownership) : IPurchaseDocumentService
 {
     private sealed record Context(
@@ -305,6 +306,11 @@ public sealed class PurchaseDocumentService(
         var credit = request.PurchaseType == PurchaseTypes.Credit;
         if (credit && request.SupplierId is null)
             throw new BusinessRuleException("A credit purchase needs a supplier on file, so the due can be tracked.");
+
+        // Required: the payment source line whose ledger head the invoice's payment posts to.
+        var paymentSourceLineId = request.InvPaymentSourceDId;
+        if (paymentSourceLineId is null || !await paymentSources.ActiveLineExistsAsync(paymentSourceLineId.Value, cancellationToken))
+            throw new BusinessRuleException("Choose the payment source and its type.");
         var supplier = request.SupplierId is null ? null : await SupplierAsync(organizationId, request.SupplierId.Value, cancellationToken);
         if (supplier is null && Text.Clean(request.SupplierName) is null && !credit)
             request.SupplierName = "Walk-in supplier";
@@ -385,6 +391,7 @@ public sealed class PurchaseDocumentService(
             PaymentMethod = method,
             PaymentProvider = paid > 0 ? Text.Clean(request.PaymentProvider) : null,
             PaymentReferenceNo = paid > 0 ? Text.Clean(request.PaymentReferenceNo) : null,
+            InvPaymentSourceDId = paymentSourceLineId,
             Remarks = Text.Clean(request.Remarks),
             Lines = lines,
             Charges = charges

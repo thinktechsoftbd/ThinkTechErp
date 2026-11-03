@@ -135,10 +135,13 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
                c.category_code AS Code, c.category_name AS Name, c.category_name_local AS NameLocal,
                coalesce(tree.path, c.category_name) AS Path, c.sort_order AS SortOrder, c.is_active AS IsActive,
                (SELECT count(*) FROM public.product p WHERE p.category_id = c.category_id)::int AS ProductCount,
+               c.acc_sub_class_id AS AccSubClassId, lh.sub_code AS LedgerHeadCode, lh.sub_name AS LedgerHeadName,
+               nullif(concat_ws('/', lh.map_name, lh.main_name, lh.class_name, lh.parent_name), '') AS LedgerHeadPath,
                c.created_at AT TIME ZONE 'utc' AS CreatedAt, c.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM public.category c
         LEFT JOIN public.category parent ON parent.category_id = c.parent_category_id
         LEFT JOIN tree ON tree.category_id = c.category_id
+        LEFT JOIN public.ledger_head lh ON lh.acc_sub_class_id = c.acc_sub_class_id
         """;
 
     private const string CategoryFilter = """
@@ -188,8 +191,8 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO public.category (organization_id, parent_category_id, category_code, category_name,
-                                            category_name_local, sort_order, is_active, created_at, created_by)
-            VALUES (@Org, @ParentCategoryId, @Code, @Name, @NameLocal, @SortOrder, @IsActive, {SecurityDb.NowUtc}, @UserId)
+                                            category_name_local, sort_order, is_active, acc_sub_class_id, created_at, created_by)
+            VALUES (@Org, @ParentCategoryId, @Code, @Name, @NameLocal, @SortOrder, @IsActive, @AccSubClassId, {SecurityDb.NowUtc}, @UserId)
             RETURNING category_id
             """, Params(organizationId, request, userId), cancellationToken: cancellationToken));
     }
@@ -203,7 +206,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
             UPDATE public.category
             SET parent_category_id = @ParentCategoryId, category_code = @Code, category_name = @Name,
                 category_name_local = @NameLocal, sort_order = @SortOrder, is_active = @IsActive,
-                updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+                acc_sub_class_id = @AccSubClassId, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE organization_id = @Org AND category_id = @Id
             """, parameters, cancellationToken: cancellationToken)) > 0;
     }

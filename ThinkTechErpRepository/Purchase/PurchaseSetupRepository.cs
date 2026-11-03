@@ -56,10 +56,13 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                s.bank_account_no AS BankAccountNo, s.bank_routing_code AS BankRoutingCode,
                s.mobile_wallet_no AS MobileWalletNo, s.remarks AS Remarks, s.is_active AS IsActive,
                s.is_customer AS IsCustomer, {SupplierBalance} AS Balance,
+               s.acc_sub_class_id AS AccSubClassId, lh.sub_code AS LedgerHeadCode, lh.sub_name AS LedgerHeadName,
+               nullif(concat_ws('/', lh.map_name, lh.main_name, lh.class_name, lh.parent_name), '') AS LedgerHeadPath,
                s.created_at AT TIME ZONE 'utc' AS CreatedAt, s.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM public.supplier s
         LEFT JOIN public.lookup_data g ON g.lookup_data_id = s.supplier_group_lookup_data_id
         LEFT JOIN public.lookup_data cur ON cur.lookup_data_id = s.currency_lookup_data_id
+        LEFT JOIN public.ledger_head lh ON lh.acc_sub_class_id = s.acc_sub_class_id
         """;
 
     // Suppliers and customers share public.supplier; the purchase screens see the supplier side.
@@ -119,14 +122,14 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                 tax_registration_no, tax_id_no, trade_license_no, regulatory_license_no, currency_lookup_data_id,
                 payment_terms_days, credit_limit, opening_balance, opening_balance_date, bank_name, bank_branch,
                 bank_account_name, bank_account_no, bank_routing_code, mobile_wallet_no, remarks, is_active,
-                is_supplier, is_customer, created_at, created_by)
+                is_supplier, is_customer, acc_sub_class_id, created_at, created_by)
             VALUES (
                 @Org, @Code, @Name, @NameLocal, @SupplierGroupLookupDataId,
                 @ContactPerson, @Phone, @Mobile, @Email, @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @CountryCode,
                 @TaxRegistrationNo, @TaxIdNo, @TradeLicenseNo, @RegulatoryLicenseNo, @CurrencyLookupDataId,
                 @PaymentTermsDays, @CreditLimit, @OpeningBalance, @OpeningBalanceDate, @BankName, @BankBranch,
                 @BankAccountName, @BankAccountNo, @BankRoutingCode, @MobileWalletNo, @Remarks, @IsActive,
-                TRUE, @IsCustomer, {SecurityDb.NowUtc}, @UserId)
+                TRUE, @IsCustomer, @AccSubClassId, {SecurityDb.NowUtc}, @UserId)
             RETURNING supplier_id
             """, Params(organizationId, request, userId), cancellationToken: cancellationToken));
     }
@@ -149,7 +152,8 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                 opening_balance_date = @OpeningBalanceDate, bank_name = @BankName, bank_branch = @BankBranch,
                 bank_account_name = @BankAccountName, bank_account_no = @BankAccountNo,
                 bank_routing_code = @BankRoutingCode, mobile_wallet_no = @MobileWalletNo, remarks = @Remarks,
-                is_active = @IsActive, is_customer = @IsCustomer, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+                is_active = @IsActive, is_customer = @IsCustomer, acc_sub_class_id = @AccSubClassId,
+                updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE organization_id = @Org AND supplier_id = @Id AND is_supplier
             """, parameters, cancellationToken: cancellationToken)) > 0;
     }

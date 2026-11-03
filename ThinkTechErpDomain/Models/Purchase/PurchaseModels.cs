@@ -56,6 +56,12 @@ public sealed class Supplier
     public bool IsCustomer { get; set; }
     /// <summary>Owed to the supplier now (+), or advanced to them (-), in the base currency.</summary>
     public decimal Balance { get; set; }
+    /// <summary>The mapped ledger head: a public.acc_sub_class id (supplier.acc_sub_class_id), if any.</summary>
+    public int? AccSubClassId { get; set; }
+    public string? LedgerHeadCode { get; set; }
+    public string? LedgerHeadName { get; set; }
+    /// <summary>Map class/main class/account class/parent class of the head.</summary>
+    public string? LedgerHeadPath { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -99,6 +105,8 @@ public sealed class SupplierUpsertRequest
     public bool IsActive { get; set; } = true;
     /// <summary>Also a customer; their credit terms are set on the sales Customers screen.</summary>
     public bool IsCustomer { get; set; }
+    /// <summary>The ledger head (acc_sub_class id) to map, or null for none.</summary>
+    [Range(1, int.MaxValue)] public int? AccSubClassId { get; set; }
 }
 
 /// <summary>A supplier as a document picks it.</summary>

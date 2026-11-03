@@ -33,6 +33,8 @@ internal static class BusinessDbErrors
         ["ck_purchase_return_due_supplier"] = "A return deducted from dues needs a supplier on file.",
         ["ux_customer_code"] = "A customer with this code already exists.",
         ["sms_provider_provider_code_key"] = "An SMS provider with this code already exists.",
+        ["fk_category_acc_sub_class"] = "The ledger head doesn't exist. Pick one from the list.",
+        ["fk_supplier_acc_sub_class"] = "The ledger head doesn't exist. Pick one from the list.",
         ["ck_sales_invoice_credit_customer"] = "A credit sale needs a customer on file.",
         ["ck_sales_invoice_cash_paid"] = "A cash sale must be paid in full.",
         ["ck_sales_invoice_paid"] = "The amount paid must be between 0 and the total, with how it was paid.",
