@@ -68,8 +68,9 @@ public sealed class Supplier
 
 public sealed class SupplierUpsertRequest
 {
-    [Required, StringLength(30, MinimumLength = 1)]
-    public string Code { get; set; } = string.Empty;
+    /// <summary>Empty: the next code in the series (S-00001) on create; the current code on update.</summary>
+    [StringLength(30)]
+    public string? Code { get; set; }
 
     [Required, StringLength(250, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;
@@ -116,6 +117,8 @@ public sealed class SupplierOption
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Mobile { get; set; }
+    /// <summary>Address line 1 (or the city when it is empty), shown beside the name in pickers.</summary>
+    public string? Address { get; set; }
     public int PaymentTermsDays { get; set; }
     public long? CurrencyLookupDataId { get; set; }
     public decimal Balance { get; set; }

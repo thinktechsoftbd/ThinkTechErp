@@ -34,6 +34,8 @@ public static class DocumentType
     public const string Voucher = "Voucher";
     /// <summary>Not a document: the series new customer codes are taken from.</summary>
     public const string Customer = "Customer";
+    /// <summary>Not a document: the series a supplier added from a purchase invoice takes its code from.</summary>
+    public const string Supplier = "Supplier";
     /// <summary>Not a document: the series a new product's code is taken from when none is typed.</summary>
     public const string Product = "Product";
 
@@ -55,6 +57,7 @@ public static class DocumentType
         // Voucher Ref. Numbers are digits only: 00000000001.
         Voucher => "",
         Customer => "C-",
+        Supplier => "S-",
         Product => "P-",
         _ => "DOC-"
     };

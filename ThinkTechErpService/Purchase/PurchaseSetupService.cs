@@ -62,15 +62,19 @@ public sealed class PurchaseSetupService(IPurchaseSetupRepository repository) : 
 
     private async Task NormalizeAsync(int organizationId, int? supplierId, SupplierUpsertRequest request, CancellationToken cancellationToken)
     {
-        request.Code = request.Code.Trim();
         request.Name = request.Name.Trim();
-        foreach (var property in typeof(SupplierUpsertRequest).GetProperties().Where(p => p.PropertyType == typeof(string) && p.Name is not ("Code" or "Name")))
+        foreach (var property in typeof(SupplierUpsertRequest).GetProperties().Where(p => p.PropertyType == typeof(string) && p.Name != "Name"))
             property.SetValue(request, Text.Clean((string?)property.GetValue(request)));
         request.CountryCode = request.CountryCode?.ToUpperInvariant();
         if (request.OpeningBalance == 0)
             request.OpeningBalanceDate = null;
+        if (request.Phone is null)
+            throw new BusinessRuleException("Enter the supplier's phone.");
+        if (request.AddressLine1 is null)
+            throw new BusinessRuleException("Enter the supplier's address line 1.");
 
-        if (await repository.SupplierCodeExistsAsync(organizationId, request.Code, supplierId, cancellationToken))
+        // An empty code keeps the current one on update, and takes the next in the series on create.
+        if (request.Code is not null && await repository.SupplierCodeExistsAsync(organizationId, request.Code, supplierId, cancellationToken))
             throw new BusinessConflictException("A supplier with this code already exists.");
         if (request.SupplierGroupLookupDataId is not null &&
             !await repository.LookupValueExistsAsync(request.SupplierGroupLookupDataId.Value, PurchaseRules.SupplierGroupLookupTable, cancellationToken))

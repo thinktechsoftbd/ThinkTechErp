@@ -100,12 +100,13 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
         await using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<SupplierOption>(new CommandDefinition($"""
             SELECT s.supplier_id AS Id, s.supplier_code AS Code, s.supplier_name AS Name, s.mobile AS Mobile,
+                   coalesce(s.address_line1, s.city) AS Address,
                    s.payment_terms_days AS PaymentTermsDays, s.currency_lookup_data_id AS CurrencyLookupDataId,
                    {SupplierBalance} AS Balance, s.is_active AS IsActive
             FROM public.supplier s
             WHERE s.organization_id = @Org AND s.is_supplier
               AND (CAST(@Pattern AS text) IS NULL OR s.supplier_code ILIKE @Pattern OR s.supplier_name ILIKE @Pattern
-                   OR s.mobile ILIKE @Pattern)
+                   OR s.mobile ILIKE @Pattern OR s.address_line1 ILIKE @Pattern)
             ORDER BY s.is_active DESC, s.supplier_name
             LIMIT @Limit
             """, new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), Limit = limit },
@@ -115,7 +116,11 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
     public async Task<int> CreateSupplierAsync(int organizationId, SupplierUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
-        return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // No code typed: the next in the series.
+        request.Code ??= await DocumentNumbers.NextSupplierCodeAsync(connection, transaction, organizationId, cancellationToken);
+        var id = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO public.supplier (
                 organization_id, supplier_code, supplier_name, supplier_name_local, supplier_group_lookup_data_id,
                 contact_person, phone, mobile, email, address_line1, address_line2, city, state, postal_code, country_code,
@@ -131,7 +136,9 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
                 @BankAccountName, @BankAccountNo, @BankRoutingCode, @MobileWalletNo, @Remarks, @IsActive,
                 TRUE, @IsCustomer, @AccSubClassId, {SecurityDb.NowUtc}, @UserId)
             RETURNING supplier_id
-            """, Params(organizationId, request, userId), cancellationToken: cancellationToken));
+            """, Params(organizationId, request, userId), transaction, cancellationToken: cancellationToken));
+        await transaction.CommitAsync(cancellationToken);
+        return id;
     }
 
     public async Task<bool> UpdateSupplierAsync(int organizationId, int supplierId, SupplierUpsertRequest request, int userId, CancellationToken cancellationToken = default)
@@ -141,7 +148,7 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
         parameters.Add("Id", supplierId);
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public.supplier
-            SET supplier_code = @Code, supplier_name = @Name, supplier_name_local = @NameLocal,
+            SET supplier_code = coalesce(@Code, supplier_code), supplier_name = @Name, supplier_name_local = @NameLocal,
                 supplier_group_lookup_data_id = @SupplierGroupLookupDataId, contact_person = @ContactPerson,
                 phone = @Phone, mobile = @Mobile, email = @Email, address_line1 = @AddressLine1,
                 address_line2 = @AddressLine2, city = @City, state = @State, postal_code = @PostalCode,

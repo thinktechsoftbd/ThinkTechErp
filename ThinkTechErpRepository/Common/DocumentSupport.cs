@@ -34,6 +34,24 @@ internal static class DocumentNumbers
             """, parameters, transaction, cancellationToken: cancellationToken));
         return prefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(padding, '0');
     }
+
+    /// <summary>
+    /// The next supplier code in the series (S-00001), skipping codes already typed by hand: suppliers and customers
+    /// share public.supplier and one list of codes.
+    /// </summary>
+    public static async Task<string> NextSupplierCodeAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, CancellationToken cancellationToken)
+    {
+        string code;
+        var attempts = 0;
+        do
+        {
+            code = await NextAsync(connection, transaction, organizationId, DocumentType.Supplier, cancellationToken);
+        } while (++attempts < 50 && await connection.QuerySingleAsync<bool>(new CommandDefinition("""
+            SELECT EXISTS (SELECT 1 FROM public.supplier WHERE organization_id = @Org AND lower(supplier_code) = lower(@Code))
+            """, new { Org = organizationId, Code = code }, transaction, cancellationToken: cancellationToken)));
+        return code;
+    }
 }
 
 /// <summary>

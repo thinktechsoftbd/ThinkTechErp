@@ -163,10 +163,8 @@ public sealed class PurchaseDocumentService(
             {
                 if (mode.ReceivesStock)
                 {
-                    line.BatchNo = Text.Clean(request.BatchNo)
-                        ?? throw new BusinessRuleException($"{label}: enter the batch (lot) number.");
-                    if (product.HasExpiry && request.ExpiryDate is null)
-                        throw new BusinessRuleException($"{label}: enter the expiry date.");
+                    // Both optional: without a batch (lot) number the stock comes in under the document's number.
+                    line.BatchNo = Text.Clean(request.BatchNo);
                     line.ManufactureDate = request.ManufactureDate;
                     line.ExpiryDate = request.ExpiryDate;
                 }
@@ -284,8 +282,8 @@ public sealed class PurchaseDocumentService(
 
     public async Task<PurchaseInvoice> CreateInvoiceAsync(int organizationId, PurchaseInvoiceUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        var invoice = await BuildInvoiceAsync(organizationId, null, request, cancellationToken);
-        var id = await BusinessDbErrors.ExecuteAsync(() => documents.SaveInvoiceAsync(organizationId, invoice, userId, cancellationToken));
+        var (invoice, newSupplier) = await BuildInvoiceAsync(organizationId, null, request, cancellationToken);
+        var id = await BusinessDbErrors.ExecuteAsync(() => documents.SaveInvoiceAsync(organizationId, invoice, newSupplier, userId, cancellationToken));
         return (await documents.GetInvoiceAsync(organizationId, id, cancellationToken))!;
     }
 
@@ -293,18 +291,31 @@ public sealed class PurchaseDocumentService(
     {
         if (await documents.GetInvoiceAsync(organizationId, id, cancellationToken) is null)
             return null;
-        var invoice = await BuildInvoiceAsync(organizationId, id, request, cancellationToken);
+        var (invoice, newSupplier) = await BuildInvoiceAsync(organizationId, id, request, cancellationToken);
         invoice.Id = id;
-        await BusinessDbErrors.ExecuteAsync(() => documents.SaveInvoiceAsync(organizationId, invoice, userId, cancellationToken));
+        await BusinessDbErrors.ExecuteAsync(() => documents.SaveInvoiceAsync(organizationId, invoice, newSupplier, userId, cancellationToken));
         return await documents.GetInvoiceAsync(organizationId, id, cancellationToken);
     }
 
-    private async Task<PurchaseInvoice> BuildInvoiceAsync(int organizationId, long? id, PurchaseInvoiceUpsertRequest request, CancellationToken cancellationToken)
+    /// <summary>The invoice, and the supplier that saving adds to the supplier list (AddSupplier).</summary>
+    private async Task<(PurchaseInvoice Invoice, NewSupplier? NewSupplier)> BuildInvoiceAsync(
+        int organizationId, long? id, PurchaseInvoiceUpsertRequest request, CancellationToken cancellationToken)
     {
         if (request.PurchaseType is not (PurchaseTypes.Cash or PurchaseTypes.Credit))
             throw new BusinessRuleException("Choose Cash or Credit.");
         var credit = request.PurchaseType == PurchaseTypes.Credit;
-        if (credit && request.SupplierId is null)
+
+        NewSupplier? newSupplier = null;
+        if (request.AddSupplier)
+        {
+            if (request.SupplierId is not null)
+                throw new BusinessRuleException("Pick a supplier on file or add a new one, not both.");
+            var (name, mobile, address) = (Text.Clean(request.SupplierName), Text.Clean(request.SupplierMobile), Text.Clean(request.SupplierAddressLine1));
+            if (name is null || mobile is null || address is null)
+                throw new BusinessRuleException("A new supplier needs a name, a mobile and address line 1.");
+            newSupplier = new NewSupplier(name, mobile, address);
+        }
+        if (credit && request.SupplierId is null && newSupplier is null)
             throw new BusinessRuleException("A credit purchase needs a supplier on file, so the due can be tracked.");
 
         // Required: the payment source line whose ledger head the invoice's payment posts to.
@@ -365,7 +376,7 @@ public sealed class PurchaseDocumentService(
             await documents.SupplierInvoiceNoExistsAsync(organizationId, supplier.Id, supplierInvoiceNo, id, cancellationToken))
             throw new BusinessConflictException("This supplier invoice number is already entered for the supplier.");
 
-        return new PurchaseInvoice
+        return (new PurchaseInvoice
         {
             InvoiceDate = request.InvoiceDate,
             PurchaseType = request.PurchaseType,
@@ -395,7 +406,7 @@ public sealed class PurchaseDocumentService(
             Remarks = Text.Clean(request.Remarks),
             Lines = lines,
             Charges = charges
-        };
+        }, newSupplier);
     }
 
     public Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)

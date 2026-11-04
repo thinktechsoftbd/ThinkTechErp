@@ -14,7 +14,8 @@ public interface IPurchaseDocumentRepository
     Task<PagedResult<PurchaseInvoice>> GetInvoicesAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default);
     Task<PurchaseInvoice?> GetInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
     /// <summary>Creates (Id 0) or replaces a draft invoice with fully calculated lines; returns its id.</summary>
-    Task<long> SaveInvoiceAsync(int organizationId, PurchaseInvoice invoice, int userId, CancellationToken cancellationToken = default);
+    /// <param name="newSupplier">Added to the supplier list in the same transaction, and the invoice linked to it.</param>
+    Task<long> SaveInvoiceAsync(int organizationId, PurchaseInvoice invoice, NewSupplier? newSupplier, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
     Task PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task CancelInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
@@ -268,10 +269,10 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
             long? batchId = null;
             if (line.TrackingType == "Batch")
             {
-                if (string.IsNullOrWhiteSpace(line.BatchNo) && line.BatchId is null)
-                    throw new BusinessRuleException("Enter the batch number for every batch-tracked line.");
+                // No batch (lot) number entered: the stock comes in under the document's number, e.g. PINV-00012.
+                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? header.Number : line.BatchNo;
                 batchId = line.BatchId ?? await StockItems.EnsureBatchAsync(connection, transaction, organizationId, userId,
-                    line.ProductId, line.BatchNo!, line.ManufactureDate, line.ExpiryDate, cancellationToken);
+                    line.ProductId, batchNo, line.ManufactureDate, line.ExpiryDate, cancellationToken);
                 await connection.ExecuteAsync(new CommandDefinition(
                     $"UPDATE {lineTable} SET batch_id = @BatchId WHERE {lineKey} = @Id", new { Id = line.Id, BatchId = batchId },
                     transaction, cancellationToken: cancellationToken));
@@ -430,10 +431,28 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
         return invoice;
     }
 
-    public async Task<long> SaveInvoiceAsync(int organizationId, PurchaseInvoice invoice, int userId, CancellationToken cancellationToken = default)
+    /// <summary>A supplier added from a purchase invoice: name, mobile and address line 1, its code the next in the series.</summary>
+    private static async Task<int> AddSupplierAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, NewSupplier supplier, int userId, CancellationToken cancellationToken)
+    {
+        var code = await DocumentNumbers.NextSupplierCodeAsync(connection, transaction, organizationId, cancellationToken);
+        return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
+            INSERT INTO public.supplier (
+                organization_id, supplier_code, supplier_name, mobile, address_line1, is_active, is_supplier, is_customer,
+                created_at, created_by)
+            VALUES (@Org, @Code, @Name, @Mobile, @AddressLine1, TRUE, TRUE, FALSE, {SecurityDb.NowUtc}, @UserId)
+            RETURNING supplier_id
+            """, new { Org = organizationId, Code = code, supplier.Name, supplier.Mobile, supplier.AddressLine1, UserId = userId },
+            transaction, cancellationToken: cancellationToken));
+    }
+
+    public async Task<long> SaveInvoiceAsync(
+        int organizationId, PurchaseInvoice invoice, NewSupplier? newSupplier, int userId, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (newSupplier is not null)
+            invoice.SupplierId = await AddSupplierAsync(connection, transaction, organizationId, newSupplier, userId, cancellationToken);
         var parameters = new DynamicParameters(new
         {
             Org = organizationId,
@@ -441,8 +460,9 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
             invoice.PurchaseType,
             invoice.DueDate,
             invoice.SupplierId,
-            SupplierName = invoice.SupplierId is null ? invoice.SupplierName : null,
-            invoice.SupplierMobile,
+            // A supplier not on file, and one just added from this invoice, keep their name and mobile on the invoice too.
+            SupplierName = newSupplier?.Name ?? (invoice.SupplierId is null ? invoice.SupplierName : null),
+            SupplierMobile = newSupplier?.Mobile ?? invoice.SupplierMobile,
             invoice.ReceivesStock,
             invoice.WarehouseId,
             invoice.PurchaseOrderId,

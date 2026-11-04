@@ -250,6 +250,9 @@ public sealed class InvoiceAllocationItem
     public string SourceNo { get; set; } = string.Empty;
 }
 
+/// <summary>A supplier added to the supplier list from a purchase invoice (PurchaseInvoiceUpsertRequest.AddSupplier).</summary>
+public sealed record NewSupplier(string Name, string Mobile, string AddressLine1);
+
 public sealed class PurchaseInvoiceUpsertRequest
 {
     public DateOnly InvoiceDate { get; set; }
@@ -262,6 +265,15 @@ public sealed class PurchaseInvoiceUpsertRequest
     [Range(1, int.MaxValue)] public int? SupplierId { get; set; }
     [StringLength(250)] public string? SupplierName { get; set; }
     [StringLength(30)] public string? SupplierMobile { get; set; }
+
+    /// <summary>
+    /// Adds the supplier to the supplier list on save (SupplierName, SupplierMobile and SupplierAddressLine1, all
+    /// required; the code is the next in the series) and links the invoice to it. Without it, a cash purchase from
+    /// a supplier not on file keeps SupplierName and SupplierMobile on the invoice only.
+    /// </summary>
+    public bool AddSupplier { get; set; }
+
+    [StringLength(250)] public string? SupplierAddressLine1 { get; set; }
 
     /// <summary>True: a direct purchase that receives the stock. False: bills earlier goods receipts.</summary>
     public bool ReceivesStock { get; set; } = true;
