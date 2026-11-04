@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using ThinkTechErpAPI.Security;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpService.Security;
@@ -78,4 +79,44 @@ public sealed class SecuritySubscriptionModulesController(ISubscriptionModuleSer
             DeleteOutcome.NotFound => NotFound(),
             _ => Conflict(new { error = "Organizations subscribe to this module. Deactivate it instead." })
         };
+}
+
+/// <summary>
+/// For integration clients with the thinktech-website.exchange scope (the ThinkTech website): the
+/// active subscription modules, for its pricing page. Takes an integration token from
+/// POST api/security/integration/token; user tokens are rejected here.
+/// </summary>
+[ApiController]
+[Route("api/security/integration/subscription-modules")]
+[Authorize(Policy = IntegrationPolicies.WebsiteExchange)]
+[EnableRateLimiting(IntegrationPolicies.RateLimit)]
+[SecurityExceptionFilter]
+public sealed class SecuritySubscriptionModulesIntegrationController(
+    ISubscriptionModuleService moduleService,
+    IntegrationClientStore clients) : ControllerBase
+{
+    // The catalogue is small; this is the most GetModulesAsync returns in one page.
+    private const int MaxModules = 500;
+
+    [HttpGet]
+    [ProducesResponseType(typeof(PublicSubscriptionModule[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PublicSubscriptionModule[]>> GetActiveModules(CancellationToken cancellationToken)
+    {
+        // Looked up again so a client removed from configuration loses its unexpired tokens too.
+        var client = await clients.FindAsync(User.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value, cancellationToken);
+        if (client is null || !client.Scopes.Contains(IntegrationScopes.WebsiteExchange))
+            return Unauthorized();
+
+        var modules = await moduleService.GetModulesAsync(null, true, MaxModules, 0, cancellationToken);
+        return Ok(modules.Items
+            .Select(module => new PublicSubscriptionModule
+            {
+                ObjectId = module.ObjectId,
+                ModuleName = module.ModuleName,
+                Remarks = module.Remarks
+            })
+            .ToArray());
+    }
 }

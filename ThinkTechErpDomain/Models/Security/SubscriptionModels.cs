@@ -78,6 +78,17 @@ public sealed class SubscriptionModule
     public int? UpdatedBy { get; set; }
 }
 
+/// <summary>
+/// An active subscription module as the ThinkTech website shows it. Kept free of internal IDs,
+/// subscription counts and audit fields: it is published on a public page.
+/// </summary>
+public sealed class PublicSubscriptionModule
+{
+    public Guid ObjectId { get; set; }
+    public string ModuleName { get; set; } = string.Empty;
+    public string? Remarks { get; set; }
+}
+
 public sealed class SubscriptionModuleUpsertRequest
 {
     [Required, StringLength(200, MinimumLength = 1)]

@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ISecurityPermissionRepository, SecurityPermissionRepository>();
         services.AddScoped<ISecurityMenuRepository, SecurityMenuRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<IOrganizationClientRepository, OrganizationClientRepository>();
         services.AddScoped<IAuthTokenRepository, AuthTokenRepository>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.TryAddSingleton<IPasswordResetNotifier, LoggingPasswordResetNotifier>();
@@ -57,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<ISecurityPermissionService, SecurityPermissionService>();
         services.AddScoped<ISecurityMenuService, SecurityMenuService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IOrganizationClientService, OrganizationClientService>();
         services.AddScoped<ISubscriptionModuleRepository, SubscriptionModuleRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<ISubscriptionModuleService, SubscriptionModuleService>();

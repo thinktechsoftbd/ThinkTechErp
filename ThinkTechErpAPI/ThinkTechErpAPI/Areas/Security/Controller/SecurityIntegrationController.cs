@@ -9,7 +9,7 @@ namespace ThinkTechErpAPI.Areas.Security.Controller;
 
 /// <summary>
 /// Server-to-server API for client applications such as a MediDesk installation. A client trades
-/// its client ID and secret (Authentication:Integration:Clients) for a short-lived access token and
+/// its client ID and secret from the security_organization_client table for a short-lived access token and
 /// calls the other endpoints with it. Those tokens work only here; user tokens don't work here.
 /// </summary>
 [ApiController]
@@ -27,9 +27,11 @@ public sealed class SecurityIntegrationController(
     [EnableRateLimiting(SecurityPolicies.AuthRateLimit)]
     [ProducesResponseType(typeof(IntegrationTokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public ActionResult<IntegrationTokenResponse> IssueToken([FromBody] IntegrationTokenRequest request)
+    public async Task<ActionResult<IntegrationTokenResponse>> IssueToken(
+        [FromBody] IntegrationTokenRequest request,
+        CancellationToken cancellationToken)
     {
-        var client = clients.Authenticate(request.ClientId, request.ClientSecret);
+        var client = await clients.AuthenticateAsync(request.ClientId, request.ClientSecret, cancellationToken);
         if (client is null)
         {
             logger.LogWarning("Rejected integration client credentials for {ClientId} from {ClientIp}.",
@@ -59,7 +61,7 @@ public sealed class SecurityIntegrationController(
         CancellationToken cancellationToken)
     {
         // Looked up again so a client removed from configuration loses its unexpired tokens too.
-        var client = clients.Find(User.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value);
+        var client = await clients.FindAsync(User.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value, cancellationToken);
         if (client is null || !client.Scopes.Contains(IntegrationScopes.OrganizationSync))
             return Unauthorized();
 

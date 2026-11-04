@@ -1,3 +1,5 @@
+using ThinkTechErpDomain.Models.Security;
+
 namespace ThinkTechErpAPI.Security;
 
 public static class IntegrationPolicies
@@ -15,6 +17,12 @@ public static class IntegrationPolicies
     /// <summary>A client with the sms.usage scope: read and use the SMS balance of its own organizations.</summary>
     public const string SmsUsage = "IntegrationSmsUsage";
 
+    /// <summary>
+    /// A client with the thinktech-website.exchange scope (the ThinkTech website): read the public
+    /// catalogue, such as the active subscription modules. It changes nothing.
+    /// </summary>
+    public const string WebsiteExchange = "IntegrationWebsiteExchange";
+
     /// <summary>Per-IP limit for the integration endpoints that need a token.</summary>
     public const string RateLimit = "IntegrationRateLimit";
 
@@ -24,8 +32,15 @@ public static class IntegrationPolicies
 
 public static class IntegrationScopes
 {
-    public const string OrganizationSync = "organization.sync";
-    public const string SmsUsage = "sms.usage";
+    public const string OrganizationSync = OrganizationClientScopeRules.OrganizationSync;
+    public const string SmsUsage = OrganizationClientScopeRules.SmsUsage;
+    public const string WebsiteExchange = OrganizationClientScopeRules.WebsiteExchange;
 
-    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal) { OrganizationSync, SmsUsage };
+    public static readonly IReadOnlySet<string> All = OrganizationClientScopeRules.All;
+
+    /// <summary>
+    /// Scopes that act on the organizations the client created, which belong to its ActingUserId.
+    /// Clients holding any of them need an ActingUserId of their own.
+    /// </summary>
+    public static readonly IReadOnlySet<string> OwnOrganizations = OrganizationClientScopeRules.OwnOrganizations;
 }

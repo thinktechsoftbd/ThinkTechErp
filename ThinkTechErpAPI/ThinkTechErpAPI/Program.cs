@@ -82,19 +82,17 @@ if (string.IsNullOrWhiteSpace(integrationAudience) || string.Equals(integrationA
 var integrationTokenMinutes = builder.Configuration.GetValue("Authentication:Integration:AccessTokenMinutes", 10);
 if (integrationTokenMinutes <= 0)
     throw new InvalidOperationException("Authentication:Integration:AccessTokenMinutes must be positive.");
-var integrationClients = IntegrationClientStore.FromConfiguration(
-    builder.Configuration.GetSection("Authentication:Integration:Clients"));
 
 // Add services to the container.
 
 builder.Services.AddControllers();
 builder.Services.AddThinkTechErpServices(builder.Configuration);
+builder.Services.AddScoped<IntegrationClientStore>();
 builder.Services.AddSingleton(new JwtSettings(issuer!, audience!, signingKey!, TimeSpan.FromMinutes(accessTokenMinutes)));
 builder.Services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
 builder.Services.AddSingleton(new SecurityTokenSettings(
     RefreshTokenLifetime: TimeSpan.FromDays(refreshTokenDays),
     PasswordResetTokenLifetime: TimeSpan.FromMinutes(30)));
-builder.Services.AddSingleton(integrationClients);
 builder.Services.AddSingleton(new IntegrationTokenSettings(integrationAudience, TimeSpan.FromMinutes(integrationTokenMinutes)));
 builder.Services.AddSingleton<IntegrationTokenIssuer>();
 
@@ -147,14 +145,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.IncludeErrorDetails = false;
         options.Events = new JwtBearerEvents
         {
-            OnTokenValidated = context =>
+            OnTokenValidated = async context =>
             {
                 var clientId = context.Principal?.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value;
                 var tokenId = context.Principal?.FindFirst("jti")?.Value;
                 if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(tokenId))
+                {
                     context.Fail("The access token is missing required client claims.");
+                    return;
+                }
 
-                return Task.CompletedTask;
+                var clients = context.HttpContext.RequestServices.GetRequiredService<IntegrationClientStore>();
+                if (await clients.FindAsync(clientId, context.HttpContext.RequestAborted) is null)
+                    context.Fail("The integration client is inactive or no longer exists.");
+
             }
         };
         options.TokenValidationParameters = TokenValidationFor(integrationAudience);
@@ -193,6 +197,11 @@ builder.Services.AddAuthorization(options =>
         .AddAuthenticationSchemes(IntegrationPolicies.Scheme)
         .RequireAuthenticatedUser()
         .RequireClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.SmsUsage));
+
+    options.AddPolicy(IntegrationPolicies.WebsiteExchange, policy => policy
+        .AddAuthenticationSchemes(IntegrationPolicies.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.WebsiteExchange));
 
     options.AddPolicy(SettingsPolicies.View, policy => policy
         .RequireAuthenticatedUser()

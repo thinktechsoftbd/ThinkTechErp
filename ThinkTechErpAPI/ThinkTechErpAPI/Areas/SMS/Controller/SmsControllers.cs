@@ -186,7 +186,7 @@ public sealed class SmsIntegrationController(ISmsService sms, IntegrationClientS
     [HttpGet("balance")]
     public async Task<ActionResult<SmsBalance>> GetBalance(Guid objectId, CancellationToken cancellationToken)
     {
-        var client = CurrentClient();
+        var client = await CurrentClientAsync(cancellationToken);
         if (client is null)
             return Unauthorized();
         return OkOrForbidden(await sms.GetClientBalanceAsync(objectId, client.ActingUserId, cancellationToken));
@@ -196,16 +196,16 @@ public sealed class SmsIntegrationController(ISmsService sms, IntegrationClientS
     [HttpPost("usage")]
     public async Task<ActionResult<SmsBalance>> AddUsage(Guid objectId, [FromBody] SmsUsageRequest request, CancellationToken cancellationToken)
     {
-        var client = CurrentClient();
+        var client = await CurrentClientAsync(cancellationToken);
         if (client is null)
             return Unauthorized();
         return OkOrForbidden(await sms.AddClientUsageAsync(objectId, request.SmsCount, client.ActingUserId, cancellationToken));
     }
 
     // Looked up again so a client removed from configuration loses its unexpired tokens too.
-    private IntegrationClient? CurrentClient()
+    private async Task<IntegrationClient?> CurrentClientAsync(CancellationToken cancellationToken)
     {
-        var client = clients.Find(User.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value);
+        var client = await clients.FindAsync(User.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value, cancellationToken);
         return client is not null && client.Scopes.Contains(IntegrationScopes.SmsUsage) ? client : null;
     }
 
