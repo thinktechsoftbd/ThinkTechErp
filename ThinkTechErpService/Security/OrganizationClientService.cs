@@ -1,6 +1,6 @@
-using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Security;
 
@@ -8,8 +8,6 @@ namespace ThinkTechErpService.Security;
 
 public sealed class OrganizationClientService(IOrganizationClientRepository clients) : IOrganizationClientService
 {
-    private static readonly Regex ScopePattern = new("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     public Task<PagedResult<OrganizationClient>> GetClientsAsync(
         string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
         => clients.GetClientsAsync(
@@ -66,8 +64,13 @@ public sealed class OrganizationClientService(IOrganizationClientRepository clie
         if (request.OrgObjectId is null || request.OrgObjectId == Guid.Empty)
             throw new SecurityValidationException("An organization is required.");
 
-        request.SecretSha256Hash = Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(request.ClientSecret))).ToLowerInvariant();
+        var secretHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.ClientSecret))).ToLowerInvariant();
+        var providedHash = request.SecretSha256Hash;
+        if (!Regex.IsMatch(providedHash ?? string.Empty, "^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant) ||
+            !CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(secretHash), Convert.FromHexString(providedHash!)))
+            throw new SecurityValidationException("Generate a valid SHA-256 hash key for this client secret.");
+        request.SecretSha256Hash = secretHash;
 
         request.Scopes = (request.Scopes ?? [])
             .Where(scope => !string.IsNullOrWhiteSpace(scope))
@@ -75,11 +78,12 @@ public sealed class OrganizationClientService(IOrganizationClientRepository clie
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (request.Scopes.Length is < 1 or > 50 || request.Scopes.Any(scope =>
-                !ScopePattern.IsMatch(scope) || !OrganizationClientScopeRules.All.Contains(scope)))
-            throw new SecurityValidationException("Provide 1 to 50 valid scopes, each up to 128 characters.");
+                scope.Length > 128 || scope.Any(char.IsControl)))
+            throw new SecurityValidationException("Provide 1 to 50 non-empty scopes, each up to 128 characters.");
 
-        if (request.Scopes.Any(OrganizationClientScopeRules.OwnOrganizations.Contains) &&
-            await clients.HasActingUserScopeConflictAsync(request.ActingUserId, excludeClientId, cancellationToken))
+        if (request.ActingUserId is int actingUserId &&
+            request.Scopes.Any(OrganizationClientScopeRules.OwnOrganizations.Contains) &&
+            await clients.HasActingUserScopeConflictAsync(actingUserId, excludeClientId, cancellationToken))
             throw new SecurityValidationException("This acting user already owns organizations for another integration client.");
 
         if (await clients.ClientNameExistsAsync(request.ClientName, excludeClientId, cancellationToken))

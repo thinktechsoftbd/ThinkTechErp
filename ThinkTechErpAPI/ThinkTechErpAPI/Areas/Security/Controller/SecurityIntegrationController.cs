@@ -64,9 +64,11 @@ public sealed class SecurityIntegrationController(
         var client = await clients.FindAsync(User.FindFirst(IntegrationPolicies.ClientIdClaim)?.Value, cancellationToken);
         if (client is null || !client.Scopes.Contains(IntegrationScopes.OrganizationSync))
             return Unauthorized();
+        if (client.ActingUserId is not int actingUserId)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "This integration scope requires an acting user." });
 
         var result = await organizationService.SyncClientOrganizationAsync(
-            objectId, request, client.ActingUserId, cancellationToken);
+            objectId, request, actingUserId, cancellationToken);
         return result.Status switch
         {
             ClientOrganizationSyncStatus.Created => StatusCode(StatusCodes.Status201Created, result.Organization),

@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.security_organization_client
     client_secret       TEXT NOT NULL,
     org_object_id       UUID NOT NULL,
     secret_sha256_hash  CHAR(64) NOT NULL,
-    acting_user_id      INT4 NOT NULL,
+    acting_user_id      INT4 NULL,
     scopes              TEXT[] NOT NULL,
     is_active           BOOL NOT NULL DEFAULT TRUE,
     created_at          TIMESTAMP(3) NOT NULL DEFAULT (now() AT TIME ZONE 'utc'::text),
@@ -20,8 +20,6 @@ CREATE TABLE IF NOT EXISTS public.security_organization_client
     updated_at          TIMESTAMP(3) NULL,
     updated_by          INT4 NULL,
 
-    CONSTRAINT fk_security_organization_client_acting_user
-        FOREIGN KEY (acting_user_id) REFERENCES public."User" (id),
     CONSTRAINT fk_security_organization_client_organization
         FOREIGN KEY (org_object_id) REFERENCES public.organization (object_id),
     CONSTRAINT fk_security_organization_client_created_by
@@ -44,6 +42,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_security_organization_client_name
 
 CREATE INDEX IF NOT EXISTS ix_security_organization_client_acting_user
     ON public.security_organization_client (acting_user_id);
+
+CREATE INDEX IF NOT EXISTS ix_security_organization_client_org_object_id
+    ON public.security_organization_client (org_object_id);
 
 -- Security client APIs use the existing security view/manage authorization policies.
 INSERT INTO public."Permission" (code, name, description)

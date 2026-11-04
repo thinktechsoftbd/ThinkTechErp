@@ -39,8 +39,8 @@ public static class IntegrationScopes
     public static readonly IReadOnlySet<string> All = OrganizationClientScopeRules.All;
 
     /// <summary>
-    /// Scopes that act on the organizations the client created, which belong to its ActingUserId.
-    /// Clients holding any of them need an ActingUserId of their own.
+    /// Scopes that act on organizations attributed to an ActingUserId. Runtime endpoints for these
+    /// scopes require an ActingUserId even though the client record itself may omit it.
     /// </summary>
     public static readonly IReadOnlySet<string> OwnOrganizations = OrganizationClientScopeRules.OwnOrganizations;
 }

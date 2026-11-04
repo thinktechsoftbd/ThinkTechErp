@@ -7,10 +7,12 @@ public sealed class OrganizationClient
     public int Id { get; set; }
     public Guid ObjectId { get; set; }
     public string ClientName { get; set; } = string.Empty;
+    public string? ClientSecret { get; set; }
+    public string? SecretSha256Hash { get; set; }
     public Guid OrgObjectId { get; set; }
     public string? OrganizationName { get; set; }
-    public int ActingUserId { get; set; }
-    public string ActingUserName { get; set; } = string.Empty;
+    public int? ActingUserId { get; set; }
+    public string? ActingUserName { get; set; }
     public string[] Scopes { get; set; } = [];
     public bool IsActive { get; set; }
     public bool HasSecretSha256Hash { get; set; }
@@ -36,15 +38,14 @@ public sealed class OrganizationClientUpsertRequest
     [Required, StringLength(512, MinimumLength = 1)]
     public string ClientSecret { get; set; } = string.Empty;
 
+    [Required, RegularExpression("^[0-9a-fA-F]{64}$")]
+    public string SecretSha256Hash { get; set; } = string.Empty;
+
     [Required]
     public Guid? OrgObjectId { get; set; }
 
-    /// <summary>Derived from ClientSecret by the service, never accepted from or returned to clients.</summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string? SecretSha256Hash { get; set; }
-
     [Range(1, int.MaxValue)]
-    public int ActingUserId { get; set; }
+    public int? ActingUserId { get; set; }
 
     [Required, MinLength(1), MaxLength(50)]
     public string[] Scopes { get; set; } = [];
@@ -57,7 +58,7 @@ public sealed class OrganizationClientCredentials
 {
     public string ClientName { get; set; } = string.Empty;
     public string SecretSha256Hash { get; set; } = string.Empty;
-    public int ActingUserId { get; set; }
+    public int? ActingUserId { get; set; }
     public string[] Scopes { get; set; } = [];
     public bool IsActive { get; set; }
 }

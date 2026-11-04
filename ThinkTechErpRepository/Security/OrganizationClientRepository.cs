@@ -10,6 +10,8 @@ public sealed class OrganizationClientRepository(IDbConnectionFactory connection
         SELECT c.id AS Id,
                c.object_id AS ObjectId,
                c.client_name AS ClientName,
+               c.client_secret AS ClientSecret,
+               btrim(c.secret_sha256_hash) AS SecretSha256Hash,
                c.org_object_id AS OrgObjectId,
                o.organization_name_en AS OrganizationName,
                c.acting_user_id AS ActingUserId,
@@ -22,7 +24,7 @@ public sealed class OrganizationClientRepository(IDbConnectionFactory connection
                c.updated_at AT TIME ZONE 'utc' AS UpdatedAt,
                c.updated_by AS UpdatedBy
         FROM public.security_organization_client c
-        JOIN public."User" u ON u.id = c.acting_user_id
+        LEFT JOIN public."User" u ON u.id = c.acting_user_id
         LEFT JOIN public.organization o ON o.object_id = c.org_object_id
         """;
 

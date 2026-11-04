@@ -21,7 +21,13 @@ public sealed class SecurityOrganizationClientsController(IOrganizationClientSer
         [FromQuery, Range(1, 500)] int limit = 50,
         [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await clientService.GetClientsAsync(search, isActive, limit, offset, cancellationToken));
+    {
+        var result = await clientService.GetClientsAsync(search, isActive, limit, offset, cancellationToken);
+        if (!CanManageClients())
+            foreach (var client in result.Items)
+                HideSecrets(client);
+        return Ok(result);
+    }
 
     [HttpGet("organizations/options")]
     [ProducesResponseType(typeof(PagedResult<OrganizationClientOrganizationOption>), StatusCodes.Status200OK)]
@@ -38,7 +44,11 @@ public sealed class SecurityOrganizationClientsController(IOrganizationClientSer
     public async Task<ActionResult<OrganizationClient>> GetClient(int clientId, CancellationToken cancellationToken)
     {
         var client = await clientService.GetClientAsync(clientId, cancellationToken);
-        return client is null ? NotFound() : Ok(client);
+        if (client is null)
+            return NotFound();
+        if (!CanManageClients())
+            HideSecrets(client);
+        return Ok(client);
     }
 
     [HttpPost]
@@ -89,5 +99,14 @@ public sealed class SecurityOrganizationClientsController(IOrganizationClientSer
 
         var client = await clientService.SetClientActiveAsync(clientId, request.IsActive, userId, cancellationToken);
         return client is null ? NotFound() : Ok(client);
+    }
+
+    private bool CanManageClients()
+        => User.HasClaim(SecurityPolicies.PermissionClaim, SecurityRules.ManageSecurityPermission);
+
+    private static void HideSecrets(OrganizationClient client)
+    {
+        client.ClientSecret = null;
+        client.SecretSha256Hash = null;
     }
 }

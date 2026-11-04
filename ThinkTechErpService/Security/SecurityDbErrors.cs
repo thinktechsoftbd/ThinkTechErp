@@ -24,7 +24,6 @@ internal static class SecurityDbErrors
         ["fk_subscription_module"] = "The subscription module does not exist.",
         ["fk_subscription_currency"] = "The currency does not exist.",
         ["fk_lookup_data_lookup_table"] = "The lookup table does not exist.",
-        ["fk_security_organization_client_acting_user"] = "The acting user does not exist.",
         ["fk_security_organization_client_organization"] = "The selected organization does not exist."
     };
 

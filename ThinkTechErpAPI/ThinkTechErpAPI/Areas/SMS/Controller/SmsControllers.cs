@@ -187,9 +187,9 @@ public sealed class SmsIntegrationController(ISmsService sms, IntegrationClientS
     public async Task<ActionResult<SmsBalance>> GetBalance(Guid objectId, CancellationToken cancellationToken)
     {
         var client = await CurrentClientAsync(cancellationToken);
-        if (client is null)
+        if (client?.ActingUserId is not int actingUserId)
             return Unauthorized();
-        return OkOrForbidden(await sms.GetClientBalanceAsync(objectId, client.ActingUserId, cancellationToken));
+        return OkOrForbidden(await sms.GetClientBalanceAsync(objectId, actingUserId, cancellationToken));
     }
 
     /// <summary>Records SMS sent; 409 with the balance left when the organization hasn't that many.</summary>
@@ -197,9 +197,9 @@ public sealed class SmsIntegrationController(ISmsService sms, IntegrationClientS
     public async Task<ActionResult<SmsBalance>> AddUsage(Guid objectId, [FromBody] SmsUsageRequest request, CancellationToken cancellationToken)
     {
         var client = await CurrentClientAsync(cancellationToken);
-        if (client is null)
+        if (client?.ActingUserId is not int actingUserId)
             return Unauthorized();
-        return OkOrForbidden(await sms.AddClientUsageAsync(objectId, request.SmsCount, client.ActingUserId, cancellationToken));
+        return OkOrForbidden(await sms.AddClientUsageAsync(objectId, request.SmsCount, actingUserId, cancellationToken));
     }
 
     // Looked up again so a client removed from configuration loses its unexpired tokens too.

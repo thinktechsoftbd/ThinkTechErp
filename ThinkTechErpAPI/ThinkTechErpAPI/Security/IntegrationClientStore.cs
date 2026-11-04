@@ -7,12 +7,12 @@ using ThinkTechErpRepository.Security;
 namespace ThinkTechErpAPI.Security;
 
 /// <summary>
-/// A server-to-server client from PostgreSQL. Only the SHA-256 of its secret
-/// is kept. ActingUserId is the user recorded as created_by/updated_by for its changes, and the
+/// A server-to-server client from PostgreSQL. Authentication compares the SHA-256 of the supplied
+/// secret with its stored hash. ActingUserId is optional audit attribution, and the
 /// organizations created under it are the only ones the client may change.
 /// </summary>
 public sealed record IntegrationClient(
-    string ClientId, byte[] SecretSha256, int ActingUserId, IReadOnlySet<string> Scopes);
+    string ClientId, byte[] SecretSha256, int? ActingUserId, IReadOnlySet<string> Scopes);
 
 /// <summary>
 /// Reads integration clients from PostgreSQL for each credential check and protected request, so
@@ -130,7 +130,7 @@ public sealed partial class IntegrationClientStore
     }
 
     private static bool HasValidScopes(IEnumerable<string> scopes)
-        => scopes.Any() && scopes.All(IntegrationScopes.All.Contains);
+        => scopes.Any(scope => !string.IsNullOrWhiteSpace(scope));
 
     private static byte[]? TryFromHex(string? value)
     {
