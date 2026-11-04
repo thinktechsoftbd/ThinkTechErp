@@ -145,12 +145,13 @@ public sealed class OrganizationClientRepository(IDbConnectionFactory connection
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO public.security_organization_client
-                (client_name, org_object_id, secret_sha256_hash, acting_user_id, scopes, is_active, created_at, created_by)
-            VALUES (@ClientName, @OrgObjectId, @SecretSha256Hash, @ActingUserId, @Scopes, @IsActive, {SecurityDb.NowUtc}, @UserId)
+                (client_name, client_secret, org_object_id, secret_sha256_hash, acting_user_id, scopes, is_active, created_at, created_by)
+            VALUES (@ClientName, @ClientSecret, @OrgObjectId, @SecretSha256Hash, @ActingUserId, @Scopes, @IsActive, {SecurityDb.NowUtc}, @UserId)
             RETURNING id
             """, new
             {
                 request.ClientName,
+                request.ClientSecret,
                 request.OrgObjectId,
                 request.SecretSha256Hash,
                 request.ActingUserId,
@@ -168,8 +169,9 @@ public sealed class OrganizationClientRepository(IDbConnectionFactory connection
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public.security_organization_client
             SET client_name = @ClientName,
+                client_secret = @ClientSecret,
                 org_object_id = @OrgObjectId,
-                secret_sha256_hash = COALESCE(@SecretSha256Hash, secret_sha256_hash),
+                secret_sha256_hash = @SecretSha256Hash,
                 acting_user_id = @ActingUserId,
                 scopes = @Scopes,
                 is_active = @IsActive,
@@ -180,6 +182,7 @@ public sealed class OrganizationClientRepository(IDbConnectionFactory connection
             {
                 ClientId = clientId,
                 request.ClientName,
+                request.ClientSecret,
                 request.OrgObjectId,
                 request.SecretSha256Hash,
                 request.ActingUserId,

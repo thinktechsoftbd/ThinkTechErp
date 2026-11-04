@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using System.Text;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Security;
 
@@ -6,7 +8,6 @@ namespace ThinkTechErpService.Security;
 
 public sealed class OrganizationClientService(IOrganizationClientRepository clients) : IOrganizationClientService
 {
-    private static readonly Regex SecretHashPattern = new("^[0-9a-f]{64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ScopePattern = new("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public Task<PagedResult<OrganizationClient>> GetClientsAsync(
@@ -25,7 +26,7 @@ public sealed class OrganizationClientService(IOrganizationClientRepository clie
     public async Task<OrganizationClient> CreateClientAsync(
         OrganizationClientUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {
-        await NormalizeAsync(request, requireHash: true, excludeClientId: null, cancellationToken);
+        await NormalizeAsync(request, excludeClientId: null, cancellationToken);
         var clientId = await SecurityDbErrors.ExecuteAsync(() =>
             clients.CreateClientAsync(request, userId, cancellationToken));
         return await clients.GetClientAsync(clientId, cancellationToken)
@@ -36,7 +37,7 @@ public sealed class OrganizationClientService(IOrganizationClientRepository clie
         int clientId, OrganizationClientUpsertRequest request, int userId,
         CancellationToken cancellationToken = default)
     {
-        await NormalizeAsync(request, requireHash: false, excludeClientId: clientId, cancellationToken);
+        await NormalizeAsync(request, excludeClientId: clientId, cancellationToken);
         if (!await SecurityDbErrors.ExecuteAsync(() =>
                 clients.UpdateClientAsync(clientId, request, userId, cancellationToken)))
             return null;
@@ -53,20 +54,20 @@ public sealed class OrganizationClientService(IOrganizationClientRepository clie
     }
 
     private async Task NormalizeAsync(
-        OrganizationClientUpsertRequest request, bool requireHash, int? excludeClientId,
-        CancellationToken cancellationToken)
+        OrganizationClientUpsertRequest request, int? excludeClientId, CancellationToken cancellationToken)
     {
         request.ClientName = request.ClientName.Trim();
         if (!Regex.IsMatch(request.ClientName, "^[A-Za-z0-9][A-Za-z0-9_]{2,63}$", RegexOptions.CultureInvariant))
             throw new SecurityValidationException("Client name must be 3 to 64 letters, numbers or underscores, and start with a letter or number.");
 
-        request.SecretSha256Hash = string.IsNullOrWhiteSpace(request.SecretSha256Hash)
-            ? null
-            : request.SecretSha256Hash.Trim().ToLowerInvariant();
-        if (requireHash && request.SecretSha256Hash is null)
-            throw new SecurityValidationException("A SHA-256 client secret hash is required.");
-        if (request.SecretSha256Hash is not null && !SecretHashPattern.IsMatch(request.SecretSha256Hash))
-            throw new SecurityValidationException("Secret hash must be a 64-character SHA-256 value in hexadecimal.");
+        if (string.IsNullOrEmpty(request.ClientSecret) || request.ClientSecret.Length > 512)
+            throw new SecurityValidationException("A client secret between 1 and 512 characters is required.");
+
+        if (request.OrgObjectId is null || request.OrgObjectId == Guid.Empty)
+            throw new SecurityValidationException("An organization is required.");
+
+        request.SecretSha256Hash = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(request.ClientSecret))).ToLowerInvariant();
 
         request.Scopes = (request.Scopes ?? [])
             .Where(scope => !string.IsNullOrWhiteSpace(scope))

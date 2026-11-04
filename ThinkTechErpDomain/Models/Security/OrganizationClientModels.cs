@@ -7,7 +7,7 @@ public sealed class OrganizationClient
     public int Id { get; set; }
     public Guid ObjectId { get; set; }
     public string ClientName { get; set; } = string.Empty;
-    public Guid? OrgObjectId { get; set; }
+    public Guid OrgObjectId { get; set; }
     public string? OrganizationName { get; set; }
     public int ActingUserId { get; set; }
     public string ActingUserName { get; set; } = string.Empty;
@@ -33,10 +33,14 @@ public sealed class OrganizationClientUpsertRequest
     [Required, StringLength(64, MinimumLength = 3), RegularExpression("^[A-Za-z0-9][A-Za-z0-9_]*$")]
     public string ClientName { get; set; } = string.Empty;
 
+    [Required, StringLength(512, MinimumLength = 1)]
+    public string ClientSecret { get; set; } = string.Empty;
+
+    [Required]
     public Guid? OrgObjectId { get; set; }
 
-    /// <summary>SHA-256 hex digest of the client secret. Null on update leaves the current hash untouched.</summary>
-    [RegularExpression("^[0-9a-fA-F]{64}$")]
+    /// <summary>Derived from ClientSecret by the service, never accepted from or returned to clients.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public string? SecretSha256Hash { get; set; }
 
     [Range(1, int.MaxValue)]
