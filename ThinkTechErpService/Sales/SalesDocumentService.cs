@@ -103,6 +103,9 @@ public sealed class SalesDocumentService(
         var credit = request.SaleType == SaleTypes.Credit;
         if (credit && request.CustomerId is null)
             throw new BusinessRuleException("A credit sale needs a customer on file, so the due can be collected later.");
+        // The sales screen lists every party; a supplier sold to becomes a customer too.
+        if (request.CustomerId is int partyId)
+            await setup.MakeCustomerAsync(organizationId, partyId, cancellationToken);
         var customer = request.CustomerId is null ? null : await CustomerAsync(organizationId, request.CustomerId.Value, cancellationToken);
         if (customer is { IsActive: false })
             throw new BusinessRuleException($"{customer.Name} is inactive. Activate the customer to sell to them.");

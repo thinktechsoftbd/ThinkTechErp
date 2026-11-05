@@ -2,16 +2,27 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ThinkTechErpAPI.Security;
+using ThinkTechErpDomain.Models.Accounting;
 using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Security;
+using ThinkTechErpService.Accounting;
 using ThinkTechErpService.Purchase;
 
 namespace ThinkTechErpAPI.Areas.Purchase.Controller;
 
 [Route("api/purchase/suppliers")]
 [Authorize(Policy = PurchasePolicies.View)]
-public sealed class PurchaseSuppliersController(IPurchaseSetupService setup, IPurchaseDocumentService documents) : OrganizationControllerBase
+public sealed class PurchaseSuppliersController(
+    IPurchaseSetupService setup, IPurchaseDocumentService documents, IInvoiceVoucherService vouchers) : OrganizationControllerBase
 {
+    /// <summary>Sets just the supplier's ledger head (what a finalized credit purchase's payable posts to).</summary>
+    [HttpPut("{supplierId:int}/ledger-head")]
+    [Authorize(Policy = PurchasePolicies.Manage)]
+    public async Task<IActionResult> SetLedgerHead(int supplierId, [FromBody] PartyLedgerHeadRequest request, CancellationToken cancellationToken)
+        => await vouchers.SetPartyLedgerHeadAsync(OrganizationId, supplierId, request.AccSubClassId, UserId, cancellationToken)
+            ? NoContent()
+            : NotFound();
+
     [HttpGet]
     public async Task<ActionResult<PagedResult<Supplier>>> GetSuppliers(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive, [FromQuery] long? groupId,

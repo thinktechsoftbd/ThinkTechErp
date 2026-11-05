@@ -1,4 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ThinkTechErpDomain.Models.Accounting;
+
+/// <summary>Sets just the ledger head of a supplier or customer (e.g. from the Map popup of a failed finalize).</summary>
+public sealed class PartyLedgerHeadRequest
+{
+    /// <summary>A sub class (acc_sub_class id); null clears it.</summary>
+    [Range(1, int.MaxValue)] public int? AccSubClassId { get; set; }
+}
 
 // The ledger mappings a Bill Voucher is worked out from when an invoice is finalized.
 

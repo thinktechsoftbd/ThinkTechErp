@@ -10,7 +10,9 @@ public interface ISalesSetupService
 {
     Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default);
+    /// <param name="includeSuppliers">Suppliers that aren't customers yet too (the sales screen sells to any party).</param>
+    Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
+        int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, bool includeSuppliers = false, CancellationToken cancellationToken = default);
     Task<Customer> CreateCustomerAsync(int organizationId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<Customer?> UpdateCustomerAsync(int organizationId, int customerId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
@@ -24,8 +26,10 @@ public sealed class SalesSetupService(ISalesSetupRepository repository) : ISales
     public Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
         => repository.GetCustomerAsync(organizationId, customerId, cancellationToken);
 
-    public Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default)
-        => repository.GetCustomerOptionsAsync(organizationId, Text.Clean(search), ids is { Count: > 0 } ? ids : null, limit, cancellationToken);
+    public Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
+        int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, bool includeSuppliers = false, CancellationToken cancellationToken = default)
+        => repository.GetCustomerOptionsAsync(
+            organizationId, Text.Clean(search), ids is { Count: > 0 } ? ids : null, limit, includeSuppliers, cancellationToken);
 
     public async Task<Customer> CreateCustomerAsync(int organizationId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default)
     {

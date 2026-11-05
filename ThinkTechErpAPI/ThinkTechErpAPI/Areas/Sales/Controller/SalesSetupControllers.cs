@@ -2,15 +2,18 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ThinkTechErpAPI.Security;
+using ThinkTechErpDomain.Models.Accounting;
 using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Security;
+using ThinkTechErpService.Accounting;
 using ThinkTechErpService.Sales;
 
 namespace ThinkTechErpAPI.Areas.Sales.Controller;
 
 [Route("api/sales/customers")]
 [Authorize(Policy = SalesPolicies.View)]
-public sealed class SalesCustomersController(ISalesSetupService setup, ISalesDocumentService documents) : OrganizationControllerBase
+public sealed class SalesCustomersController(
+    ISalesSetupService setup, ISalesDocumentService documents, IInvoiceVoucherService vouchers) : OrganizationControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<Customer>>> GetCustomers(
@@ -20,17 +23,19 @@ public sealed class SalesCustomersController(ISalesSetupService setup, ISalesDoc
         => Ok(await setup.GetCustomersAsync(OrganizationId, search, isActive, groupId, limit, offset, cancellationToken));
 
     /// <summary>
-    /// Customers for the sales screen's picker (by code, name or mobile), with what they owe and the credit
-    /// left. With ids (comma separated) it returns exactly those customers.
+    /// Customers for the sales screen's picker (by code, name, mobile, phone or address), with what they owe and
+    /// the credit left. With ids (comma separated) it returns exactly those customers; with includeSuppliers, the
+    /// suppliers that aren't customers yet too (a sale to one makes them a customer).
     /// </summary>
     [HttpGet("options")]
     public async Task<ActionResult<IReadOnlyList<CustomerOption>>> GetCustomerOptions(
         [FromQuery, StringLength(100)] string? search, [FromQuery, StringLength(500)] string? ids,
-        [FromQuery, Range(1, 500)] int limit = 20, CancellationToken cancellationToken = default)
+        [FromQuery, Range(1, 500)] int limit = 20, [FromQuery] bool includeSuppliers = false,
+        CancellationToken cancellationToken = default)
     {
         var customerIds = ids?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(id => int.TryParse(id, out var value) ? value : 0).Where(id => id > 0).Distinct().Take(100).ToList();
-        return Ok(await setup.GetCustomerOptionsAsync(OrganizationId, search, customerIds, limit, cancellationToken));
+        return Ok(await setup.GetCustomerOptionsAsync(OrganizationId, search, customerIds, limit, includeSuppliers, cancellationToken));
     }
 
     [HttpGet("{customerId:int}")]
@@ -61,4 +66,12 @@ public sealed class SalesCustomersController(ISalesSetupService setup, ISalesDoc
     public async Task<IActionResult> DeleteCustomer(int customerId, CancellationToken cancellationToken)
         => DeleteResult(await setup.DeleteCustomerAsync(OrganizationId, customerId, cancellationToken),
             "The customer has sales documents. Deactivate it instead.");
+
+    /// <summary>Sets just the customer's ledger head (what a finalized credit sale's receivable posts to).</summary>
+    [HttpPut("{customerId:int}/ledger-head")]
+    [Authorize(Policy = SalesPolicies.Manage)]
+    public async Task<IActionResult> SetLedgerHead(int customerId, [FromBody] PartyLedgerHeadRequest request, CancellationToken cancellationToken)
+        => await vouchers.SetPartyLedgerHeadAsync(OrganizationId, customerId, request.AccSubClassId, UserId, cancellationToken)
+            ? NoContent()
+            : NotFound();
 }

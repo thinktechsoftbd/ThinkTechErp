@@ -1,6 +1,7 @@
 using Dapper;
 using ThinkTechErpDomain.Models.Accounting;
 using ThinkTechErpRepository.Database;
+using ThinkTechErpRepository.Security;
 
 namespace ThinkTechErpRepository.Accounting;
 
@@ -15,6 +16,8 @@ public interface IInvoiceVoucherRepository
     /// <summary>A payment source line (inv_payment_source_d) and its ledger head.</summary>
     Task<PaymentSourceLedgerHead?> GetPaymentSourceHeadAsync(int lineId, CancellationToken cancellationToken = default);
     Task<bool> LedgerHeadExistsAsync(int accSubClassId, CancellationToken cancellationToken = default);
+    /// <summary>Sets just a supplier's or customer's ledger head (supplier.acc_sub_class_id); false if there's no such party.</summary>
+    Task<bool> SetPartyLedgerHeadAsync(int organizationId, int partyId, int? accSubClassId, int userId, CancellationToken cancellationToken = default);
 }
 
 public sealed class InvoiceVoucherRepository(IDbConnectionFactory connectionFactory) : IInvoiceVoucherRepository
@@ -59,5 +62,17 @@ public sealed class InvoiceVoucherRepository(IDbConnectionFactory connectionFact
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
             "SELECT EXISTS (SELECT 1 FROM public.acc_sub_class WHERE acc_sub_class_id = @Id)",
             new { Id = accSubClassId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<bool> SetPartyLedgerHeadAsync(
+        int organizationId, int partyId, int? accSubClassId, int userId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE public.supplier
+            SET acc_sub_class_id = @AccSubClassId, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            WHERE organization_id = @Org AND supplier_id = @Id
+            """, new { Org = organizationId, Id = partyId, AccSubClassId = accSubClassId, UserId = userId },
+            cancellationToken: cancellationToken)) > 0;
     }
 }

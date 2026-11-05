@@ -3,6 +3,7 @@ using ThinkTechErpDomain.Models.Common;
 using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpRepository.Accounting;
+using ThinkTechErpService.Common;
 using ThinkTechErpService.Purchase;
 using ThinkTechErpService.Sales;
 
@@ -24,6 +25,8 @@ public interface IInvoiceVoucherService
 {
     Task<PurchaseInvoice?> FinalizePurchaseInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task<SalesInvoice?> FinalizeSalesInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>Maps a supplier's or customer's ledger head (the Map popup of a failed finalize); false if there's no such party.</summary>
+    Task<bool> SetPartyLedgerHeadAsync(int organizationId, int partyId, int? accSubClassId, int userId, CancellationToken cancellationToken = default);
 }
 
 public sealed class InvoiceVoucherService(
@@ -64,6 +67,10 @@ public sealed class InvoiceVoucherService(
         await CreateVoucherAsync(organizationId, request, userId, posting, cancellationToken);
         return await sales.GetInvoiceAsync(organizationId, id, cancellationToken);
     }
+
+    public Task<bool> SetPartyLedgerHeadAsync(
+        int organizationId, int partyId, int? accSubClassId, int userId, CancellationToken cancellationToken = default)
+        => BusinessDbErrors.ExecuteAsync(() => mappings.SetPartyLedgerHeadAsync(organizationId, partyId, accSubClassId, userId, cancellationToken));
 
     private static void RequireFinalizable(string status, string? billVoucherRefNo)
     {

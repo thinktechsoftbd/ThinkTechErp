@@ -109,6 +109,8 @@ public sealed class CustomerOption
     /// <summary>Credit limit minus balance; null when there is no limit.</summary>
     public decimal? AvailableCredit { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>False for a supplier listed with includeSuppliers: selling to them makes them a customer too.</summary>
+    public bool IsCustomer { get; set; }
 }
 
 // ---- Sales invoice

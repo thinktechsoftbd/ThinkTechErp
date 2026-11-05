@@ -12,7 +12,11 @@ public interface ISalesSetupRepository
 {
     Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default);
+    /// <param name="includeSuppliers">Suppliers that aren't customers yet too (the sales screen sells to any party).</param>
+    Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
+        int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, bool includeSuppliers, CancellationToken cancellationToken = default);
+    /// <summary>Makes a supplier of the organization a customer too (a sale to them); true if it changed.</summary>
+    Task<bool> MakeCustomerAsync(int organizationId, int partyId, CancellationToken cancellationToken = default);
     /// <summary>Creates a customer; an empty Code takes the next one in the series (C-00001, ...).</summary>
     Task<int> CreateCustomerAsync(int organizationId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<bool> UpdateCustomerAsync(int organizationId, int customerId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -78,22 +82,25 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
     }
 
     public async Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
-        int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default)
+        int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, bool includeSuppliers,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
-        // Shops find customers by mobile number, so an exact mobile match comes first.
+        // Shops find customers by mobile number, so an exact mobile (or phone) match comes first.
         return (await connection.QueryAsync<CustomerOption>(new CommandDefinition($"""
-            SELECT c.supplier_id AS Id, c.supplier_code AS Code, c.supplier_name AS Name, c.mobile AS Mobile,
-                   nullif(concat_ws(', ', c.address_line1, c.city), '') AS Address,
+            SELECT c.supplier_id AS Id, c.supplier_code AS Code, c.supplier_name AS Name, coalesce(c.mobile, c.phone) AS Mobile,
+                   coalesce(c.address_line1, c.city) AS Address,
                    c.customer_payment_terms_days AS PaymentTermsDays, c.customer_credit_limit AS CreditLimit,
                    {CustomerBalance} AS Balance,
-                   c.customer_credit_limit - {CustomerBalance} AS AvailableCredit, c.is_active AS IsActive
+                   c.customer_credit_limit - {CustomerBalance} AS AvailableCredit, c.is_active AS IsActive,
+                   c.is_customer AS IsCustomer
             FROM public.supplier c
-            WHERE c.organization_id = @Org AND c.is_customer
+            WHERE c.organization_id = @Org AND (c.is_customer OR (@IncludeSuppliers AND c.is_supplier))
               AND (CAST(@Ids AS int[]) IS NULL OR c.supplier_id = ANY(@Ids))
               AND (CAST(@Pattern AS text) IS NULL OR c.supplier_code ILIKE @Pattern OR c.supplier_name ILIKE @Pattern
-                   OR c.supplier_name_local ILIKE @Pattern OR c.mobile ILIKE @Pattern)
-            ORDER BY c.is_active DESC, (c.mobile = @Search) DESC, c.supplier_name
+                   OR c.supplier_name_local ILIKE @Pattern OR c.mobile ILIKE @Pattern OR c.phone ILIKE @Pattern
+                   OR c.address_line1 ILIKE @Pattern)
+            ORDER BY c.is_active DESC, (c.mobile = @Search OR c.phone = @Search) DESC, c.is_customer DESC, c.supplier_name
             LIMIT @Limit
             """, new
             {
@@ -101,8 +108,18 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
                 Ids = ids?.ToArray(),
                 Search = search,
                 Pattern = RepositoryHelpers.Pattern(search),
-                Limit = limit
+                Limit = limit,
+                IncludeSuppliers = includeSuppliers
             }, cancellationToken: cancellationToken))).AsList();
+    }
+
+    public async Task<bool> MakeCustomerAsync(int organizationId, int partyId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE public.supplier SET is_customer = TRUE, updated_at = {SecurityDb.NowUtc}
+            WHERE organization_id = @Org AND supplier_id = @Id AND NOT is_customer
+            """, new { Org = organizationId, Id = partyId }, cancellationToken: cancellationToken)) > 0;
     }
 
     public async Task<int> CreateCustomerAsync(int organizationId, CustomerUpsertRequest request, int userId, CancellationToken cancellationToken = default)
