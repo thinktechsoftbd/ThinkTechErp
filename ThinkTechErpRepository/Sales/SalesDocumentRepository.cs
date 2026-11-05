@@ -113,10 +113,12 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                coalesce((SELECT round(sum(l.unit_cost * l.base_quantity), 4) FROM public.sales_invoice_line l
                          WHERE l.sales_invoice_id = i.sales_invoice_id), 0) AS CostAmount,
                i.status AS Status, i.payment_status AS PaymentStatus,
+               bv.voucher_id AS BillVoucherId, bv.voucher_ref_no AS BillVoucherRefNo, bv.status AS BillVoucherStatus,
                (SELECT count(*) FROM public.sales_invoice_line l WHERE l.sales_invoice_id = i.sales_invoice_id)::int AS LineCount,
                i.posted_at AT TIME ZONE 'utc' AS PostedAt, i.posted_by AS PostedBy, i.remarks AS Remarks,
                i.created_at AT TIME ZONE 'utc' AS CreatedAt, i.created_by AS CreatedBy, i.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM public.sales_invoice i
+        LEFT JOIN public.voucher bv ON bv.sales_invoice_id = i.sales_invoice_id AND NOT bv.is_deleted AND bv.status <> 'Cancelled'
         LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id
         JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
@@ -546,6 +548,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             throw new BusinessRuleException(header.Status == DocumentStatus.Draft
                 ? "Delete a draft invoice instead of cancelling it."
                 : "This invoice is already cancelled.");
+        await InvoiceVouchers.RequireNoBillVoucherAsync(connection, transaction, "sales_invoice_id", id, cancellationToken);
 
         var blockers = await connection.QuerySingleAsync<(int Allocations, int Returns)>(new CommandDefinition("""
             SELECT (SELECT count(*) FROM public.sales_invoice_allocation WHERE sales_invoice_id = @Id)::int,

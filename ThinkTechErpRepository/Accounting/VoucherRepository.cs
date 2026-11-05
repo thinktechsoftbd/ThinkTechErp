@@ -43,13 +43,17 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
                v.posted_at AT TIME ZONE 'utc' AS PostedAt, v.posted_by AS PostedBy,
                v.cancelled_at AT TIME ZONE 'utc' AS CancelledAt, v.cancelled_by AS CancelledBy,
                v.created_at AT TIME ZONE 'utc' AS CreatedAt, v.created_by AS CreatedBy,
-               v.updated_at AT TIME ZONE 'utc' AS UpdatedAt, v.updated_by AS UpdatedBy
+               v.updated_at AT TIME ZONE 'utc' AS UpdatedAt, v.updated_by AS UpdatedBy,
+               v.purchase_invoice_id AS PurchaseInvoiceId, pinv.invoice_no AS PurchaseInvoiceNo,
+               v.sales_invoice_id AS SalesInvoiceId, sinv.invoice_no AS SalesInvoiceNo
         """;
 
     private const string VoucherFrom = """
         FROM public.voucher v
         JOIN public.lookup_data vt ON vt.lookup_data_id = v.voucher_type_id
         LEFT JOIN public.lookup_data pm ON pm.lookup_data_id = v.payment_method_id
+        LEFT JOIN public.purchase_invoice pinv ON pinv.purchase_invoice_id = v.purchase_invoice_id
+        LEFT JOIN public.sales_invoice sinv ON sinv.sales_invoice_id = v.sales_invoice_id
         """;
 
     private const string VoucherFilter = """
@@ -143,6 +147,8 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
             voucher.PayType,
             voucher.Narration,
             TotalAmount = voucher.Lines.Sum(l => l.DebitAmount),
+            voucher.PurchaseInvoiceId,
+            voucher.SalesInvoiceId,
             UserId = userId,
             VoucherRefNo = voucher.Id == 0
                 ? await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.Voucher, cancellationToken)
@@ -156,10 +162,12 @@ public sealed class VoucherRepository(IDbConnectionFactory connectionFactory) : 
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
                 INSERT INTO public.voucher (
                     organization_id, voucher_ref_no, voucher_type_id, voucher_date, payment_method_id, cheque_no,
-                    cheque_date, pay_type, narration, total_amount, status, created_at, created_by)
+                    cheque_date, pay_type, narration, total_amount, status, purchase_invoice_id, sales_invoice_id,
+                    created_at, created_by)
                 VALUES (
                     @Org, @VoucherRefNo, @VoucherTypeId, @VoucherDate, @PaymentMethodId, @ChequeNo,
-                    @ChequeDate, @PayType, @Narration, @TotalAmount, 'Draft', {SecurityDb.NowUtc}, @UserId)
+                    @ChequeDate, @PayType, @Narration, @TotalAmount, 'Draft', @PurchaseInvoiceId, @SalesInvoiceId,
+                    {SecurityDb.NowUtc}, @UserId)
                 RETURNING voucher_id
                 """, parameters, transaction, cancellationToken: cancellationToken));
             savedLineIds = [];

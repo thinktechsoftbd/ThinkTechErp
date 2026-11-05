@@ -31,6 +31,11 @@ public interface IVoucherService
     Task<Voucher> CreateBillPaymentAsync(int organizationId, BillVoucherRequest request, int userId, CancellationToken cancellationToken = default);
     /// <summary>Customer bill collection: Dr cash or bank, Cr the customer's receivable head. Posted at once.</summary>
     Task<Voucher> CreateBillCollectionAsync(int organizationId, BillVoucherRequest request, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// A voucher another module worked out from its document (a purchase or sales invoice, ...): checked like any
+    /// voucher, then saved and posted at once, linked to the document.
+    /// </summary>
+    Task<Voucher> CreateSourceVoucherAsync(int organizationId, SourceVoucherRequest request, int userId, CancellationToken cancellationToken = default);
 }
 
 public sealed class VoucherService(
@@ -182,6 +187,51 @@ public sealed class VoucherService(
             Narration = Text.Clean(request.Narration)
                 ?? (isPayment ? $"Bill payment to {party.Name}" : $"Bill collection from {party.Name}"),
             Lines = lines
+        };
+        var id = await BusinessDbErrors.ExecuteAsync(() => repository.SaveVoucherAsync(organizationId, voucher, true, userId, cancellationToken));
+        return (await repository.GetVoucherAsync(organizationId, id, cancellationToken))!;
+    }
+
+    public async Task<Voucher> CreateSourceVoucherAsync(
+        int organizationId, SourceVoucherRequest request, int userId, CancellationToken cancellationToken = default)
+    {
+        var type = (await GetVoucherTypesAsync(cancellationToken))
+            .FirstOrDefault(t => string.Equals(t.Name, request.VoucherTypeName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new BusinessRuleException($"Add \"{request.VoucherTypeName}\" to the Voucher Type lookup list under Settings → Lookup Data.");
+        if (!type.IsActive)
+            throw new BusinessRuleException($"The voucher type {type.Name} is inactive.");
+
+        foreach (var line in request.Lines)
+        {
+            line.DebitAmount = TaxCalculator.Round(line.DebitAmount);
+            line.CreditAmount = TaxCalculator.Round(line.CreditAmount);
+            line.LineNarration = Text.Clean(line.LineNarration);
+        }
+        var lines = request.Lines.Where(l => l.DebitAmount != 0 || l.CreditAmount != 0).ToList();
+        var defaultCurrency = await CheckLinesAsync(organizationId, lines, cancellationToken);
+        var debit = lines.Sum(l => l.DebitAmount);
+        var credit = lines.Sum(l => l.CreditAmount);
+        if (debit != credit)
+            throw new BusinessRuleException($"The voucher doesn't balance: debits {debit:N2}, credits {credit:N2}.");
+
+        var voucher = new Voucher
+        {
+            VoucherTypeId = type.Id,
+            VoucherDate = VoucherDate(request.VoucherDate),
+            Narration = Text.Clean(request.Narration),
+            PurchaseInvoiceId = request.PurchaseInvoiceId,
+            SalesInvoiceId = request.SalesInvoiceId,
+            Lines = lines.Select((line, index) => new VoucherLine
+            {
+                LineNo = index + 1,
+                AccountId = line.AccountId,
+                PartyId = line.PartyId,
+                DebitAmount = line.DebitAmount,
+                CreditAmount = line.CreditAmount,
+                CurrencyLookupDataId = line.CurrencyLookupDataId ?? defaultCurrency,
+                LocalExchangeRate = line.LocalExchangeRate ?? 1,
+                LineNarration = line.LineNarration
+            }).ToList()
         };
         var id = await BusinessDbErrors.ExecuteAsync(() => repository.SaveVoucherAsync(organizationId, voucher, true, userId, cancellationToken));
         return (await repository.GetVoucherAsync(organizationId, id, cancellationToken))!;

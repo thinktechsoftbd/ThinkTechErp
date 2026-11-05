@@ -57,6 +57,11 @@ public static class VoucherLookups
     public const string BankPaymentVoucher = "Bank Payment Voucher";
     public const string CashReceiveVoucher = "Cash Receive Voucher";
     public const string BankReceiveVoucher = "Bank Receive Voucher";
+    /// <summary>The type of the vouchers made by finalizing purchase and sales invoices.</summary>
+    public const string BillVoucher = "Bill Voucher";
+
+    /// <summary>The fixed ledger head a cash sale (and the paid-now part of a credit sale) is debited to.</summary>
+    public const int CashSalesHeadId = 52;
 
     public const string Cheque = "Cheque";
 
@@ -149,6 +154,12 @@ public sealed class Voucher
     public int? CreatedBy { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public int? UpdatedBy { get; set; }
+    /// <summary>The purchase invoice this voucher was made from by finalizing it; the invoice stays locked meanwhile.</summary>
+    public long? PurchaseInvoiceId { get; set; }
+    public string? PurchaseInvoiceNo { get; set; }
+    /// <summary>The sales invoice this voucher was made from by finalizing it; the invoice stays locked meanwhile.</summary>
+    public long? SalesInvoiceId { get; set; }
+    public string? SalesInvoiceNo { get; set; }
     /// <summary>Empty in lists.</summary>
     public IReadOnlyList<VoucherLine> Lines { get; set; } = [];
 }
@@ -228,6 +239,23 @@ public sealed class VoucherLineRequest
     /// <summary>Empty = 1.</summary>
     [Range(typeof(decimal), "0.000001", "999999999999")] public decimal? LocalExchangeRate { get; set; }
     [StringLength(300)] public string? LineNarration { get; set; }
+}
+
+/// <summary>
+/// A voucher worked out by another module from its own document (e.g. finalizing a purchase or sales invoice),
+/// saved and posted at once. Lines with no amount are left out; the rest must balance.
+/// </summary>
+public sealed class SourceVoucherRequest
+{
+    /// <summary>A "Voucher Type" lookup value, by name.</summary>
+    public string VoucherTypeName { get; set; } = VoucherLookups.BillVoucher;
+    public DateOnly VoucherDate { get; set; }
+    public string? Narration { get; set; }
+    /// <summary>The purchase invoice the voucher is made from (locks it while the voucher is there).</summary>
+    public long? PurchaseInvoiceId { get; set; }
+    /// <summary>The sales invoice the voucher is made from (locks it while the voucher is there).</summary>
+    public long? SalesInvoiceId { get; set; }
+    public List<VoucherLineRequest> Lines { get; set; } = [];
 }
 
 /// <summary>

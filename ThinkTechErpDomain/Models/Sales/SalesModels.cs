@@ -51,6 +51,11 @@ public sealed class Customer
     public bool IsSupplier { get; set; }
     /// <summary>Owed by the customer now (+), or paid in advance by them (-), in the base currency.</summary>
     public decimal Balance { get; set; }
+    /// <summary>The party's ledger head (supplier.acc_sub_class_id, shared with the supplier side): a credit sale's receivable.</summary>
+    public int? AccSubClassId { get; set; }
+    public string? LedgerHeadCode { get; set; }
+    public string? LedgerHeadName { get; set; }
+    public string? LedgerHeadPath { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -86,6 +91,8 @@ public sealed class CustomerUpsertRequest
     public bool IsActive { get; set; } = true;
     /// <summary>Also a supplier; their purchase terms are set on the purchase Suppliers screen.</summary>
     public bool IsSupplier { get; set; }
+    /// <summary>The ledger head (sub class) credit sales are debited to; shared with the supplier side.</summary>
+    [Range(1, int.MaxValue)] public int? AccSubClassId { get; set; }
 }
 
 /// <summary>A customer as the sales screen picks it, with what they owe and the credit left.</summary>
@@ -235,6 +242,10 @@ public sealed class SalesInvoice
     public decimal CostAmount { get; set; }
     public string Status { get; set; } = "Draft";
     public string PaymentStatus { get; set; } = "Unpaid";
+    /// <summary>The Bill Voucher made by finalizing the invoice, while it is there; the invoice is locked meanwhile.</summary>
+    public long? BillVoucherId { get; set; }
+    public string? BillVoucherRefNo { get; set; }
+    public string? BillVoucherStatus { get; set; }
     public int LineCount { get; set; }
     public DateTime? PostedAt { get; set; }
     public int? PostedBy { get; set; }

@@ -7,6 +7,7 @@ using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Sales;
+using ThinkTechErpService.Accounting;
 using ThinkTechErpService.Sales;
 
 namespace ThinkTechErpAPI.Areas.Sales.Controller;
@@ -44,7 +45,7 @@ public sealed class SalesListQuery
 /// </summary>
 [Route("api/sales/invoices")]
 [Authorize(Policy = SalesPolicies.View)]
-public sealed class SalesInvoicesController(ISalesDocumentService documents) : OrganizationControllerBase
+public sealed class SalesInvoicesController(ISalesDocumentService documents, IInvoiceVoucherService finalizer) : OrganizationControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<SalesInvoice>>> GetInvoices([FromQuery] SalesListQuery query, CancellationToken cancellationToken)
@@ -88,7 +89,17 @@ public sealed class SalesInvoicesController(ISalesDocumentService documents) : O
     public async Task<ActionResult<SalesInvoice>> PostInvoice(long id, CancellationToken cancellationToken)
         => OkOrNotFound(await documents.PostInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
 
-    /// <summary>Puts the stock back at the cost it left at; refused while receipts settle the invoice.</summary>
+    /// <summary>
+    /// Posts the invoice if it is a draft, then posts its Bill Voucher from the ledger mappings (customer or the
+    /// cash sales head, item categories). Refused, with what is missing, unless every mapping is there. The invoice
+    /// can't be cancelled while the voucher is there.
+    /// </summary>
+    [HttpPost("{id:long}/finalize")]
+    [Authorize(Policy = SalesPolicies.Manage)]
+    public async Task<ActionResult<SalesInvoice>> FinalizeInvoice(long id, CancellationToken cancellationToken)
+        => OkOrNotFound(await finalizer.FinalizeSalesInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
+
+    /// <summary>Puts the stock back at the cost it left at; refused while receipts settle the invoice or it is finalized.</summary>
     [HttpPost("{id:long}/cancel")]
     [Authorize(Policy = SalesPolicies.Manage)]
     public async Task<ActionResult<SalesInvoice>> CancelInvoice(long id, CancellationToken cancellationToken)

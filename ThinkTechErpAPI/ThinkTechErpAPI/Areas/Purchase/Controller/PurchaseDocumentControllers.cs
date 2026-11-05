@@ -6,6 +6,7 @@ using ThinkTechErpDomain.Models.Inventory;
 using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Purchase;
+using ThinkTechErpService.Accounting;
 using ThinkTechErpService.Purchase;
 
 namespace ThinkTechErpAPI.Areas.Purchase.Controller;
@@ -43,7 +44,7 @@ public sealed class PurchaseListQuery
 /// </summary>
 [Route("api/purchase/invoices")]
 [Authorize(Policy = PurchasePolicies.View)]
-public sealed class PurchaseInvoicesController(IPurchaseDocumentService documents) : OrganizationControllerBase
+public sealed class PurchaseInvoicesController(IPurchaseDocumentService documents, IInvoiceVoucherService finalizer) : OrganizationControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<PurchaseInvoice>>> GetInvoices([FromQuery] PurchaseListQuery query, CancellationToken cancellationToken)
@@ -87,6 +88,17 @@ public sealed class PurchaseInvoicesController(IPurchaseDocumentService document
     public async Task<ActionResult<PurchaseInvoice>> PostInvoice(long id, CancellationToken cancellationToken)
         => OkOrNotFound(await documents.PostInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
 
+    /// <summary>
+    /// Posts the invoice if it is a draft, then posts its Bill Voucher from the ledger mappings (item categories,
+    /// supplier, payment source type). Refused, with what is missing, unless every mapping is there. The invoice
+    /// can't be cancelled while the voucher is there.
+    /// </summary>
+    [HttpPost("{id:long}/finalize")]
+    [Authorize(Policy = PurchasePolicies.Manage)]
+    public async Task<ActionResult<PurchaseInvoice>> FinalizeInvoice(long id, CancellationToken cancellationToken)
+        => OkOrNotFound(await finalizer.FinalizePurchaseInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
+
+    /// <summary>Refused while the invoice is finalized (its Bill Voucher is there).</summary>
     [HttpPost("{id:long}/cancel")]
     [Authorize(Policy = PurchasePolicies.Manage)]
     public async Task<ActionResult<PurchaseInvoice>> CancelInvoice(long id, CancellationToken cancellationToken)

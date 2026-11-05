@@ -112,6 +112,8 @@ public static class DependencyInjection
         services.AddScoped<IAccountingReportService, AccountingReportService>();
         services.AddScoped<IAccountClassRepository, AccountClassRepository>();
         services.AddScoped<IAccountClassService, AccountClassService>();
+        services.AddScoped<IInvoiceVoucherRepository, InvoiceVoucherRepository>();
+        services.AddScoped<IInvoiceVoucherService, InvoiceVoucherService>();
         return services;
     }
 }

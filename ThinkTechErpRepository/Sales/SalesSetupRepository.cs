@@ -40,9 +40,12 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
                c.customer_payment_terms_days AS PaymentTermsDays, c.customer_credit_limit AS CreditLimit,
                c.customer_opening_balance AS OpeningBalance, c.customer_opening_balance_date AS OpeningBalanceDate,
                c.remarks AS Remarks, c.is_active AS IsActive, c.is_supplier AS IsSupplier, {CustomerBalance} AS Balance,
+               c.acc_sub_class_id AS AccSubClassId, lh.sub_code AS LedgerHeadCode, lh.sub_name AS LedgerHeadName,
+               nullif(concat_ws('/', lh.map_name, lh.main_name, lh.class_name, lh.parent_name), '') AS LedgerHeadPath,
                c.created_at AT TIME ZONE 'utc' AS CreatedAt, c.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM public.supplier c
         LEFT JOIN public.lookup_data g ON g.lookup_data_id = c.customer_group_lookup_data_id
+        LEFT JOIN public.ledger_head lh ON lh.acc_sub_class_id = c.acc_sub_class_id
         """;
 
     // Suppliers and customers share public.supplier; the sales screens see the customer side.
@@ -128,13 +131,13 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
                 contact_person, mobile, phone, email, address_line1, address_line2, city, state, postal_code, country_code,
                 national_id_no, tax_registration_no, customer_payment_terms_days, customer_credit_limit,
                 customer_opening_balance, customer_opening_balance_date, remarks, is_active, is_supplier, is_customer,
-                created_at, created_by)
+                acc_sub_class_id, created_at, created_by)
             VALUES (
                 @Org, @Code, @Name, @NameLocal, @CustomerGroupLookupDataId,
                 @ContactPerson, @Mobile, @Phone, @Email, @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @CountryCode,
                 @NationalIdNo, @TaxRegistrationNo, @PaymentTermsDays, @CreditLimit,
                 @OpeningBalance, @OpeningBalanceDate, @Remarks, @IsActive, @IsSupplier, TRUE,
-                {SecurityDb.NowUtc}, @UserId)
+                @AccSubClassId, {SecurityDb.NowUtc}, @UserId)
             RETURNING supplier_id
             """, parameters, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
@@ -155,7 +158,7 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
                 country_code = @CountryCode, national_id_no = @NationalIdNo, tax_registration_no = @TaxRegistrationNo,
                 customer_payment_terms_days = @PaymentTermsDays, customer_credit_limit = @CreditLimit,
                 customer_opening_balance = @OpeningBalance, customer_opening_balance_date = @OpeningBalanceDate,
-                remarks = @Remarks, is_active = @IsActive, is_supplier = @IsSupplier,
+                remarks = @Remarks, is_active = @IsActive, is_supplier = @IsSupplier, acc_sub_class_id = @AccSubClassId,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             WHERE organization_id = @Org AND supplier_id = @Id AND is_customer
             """, parameters, cancellationToken: cancellationToken)) > 0;
