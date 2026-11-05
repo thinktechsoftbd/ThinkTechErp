@@ -63,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<ISubscriptionModuleService, SubscriptionModuleService>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
+        services.AddScoped<ISubscriptionPlanRepository, SubscriptionPlanRepository>();
+        services.AddScoped<ISubscriptionPlanService, SubscriptionPlanService>();
 
         // Settings
         services.AddScoped<ILookupRepository, LookupRepository>();

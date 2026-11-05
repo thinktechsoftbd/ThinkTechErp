@@ -12,6 +12,7 @@ internal static class SecurityDbErrors
         ["organization_organization_code_key"] = "An organization with this code already exists.",
         ["ux_organization_object_id"] = "Another organization already uses this Organization Id.",
         ["ux_subscription_module_name"] = "A subscription module with this name already exists.",
+        ["ux_subscription_plan_name"] = "A subscription plan with this name already exists.",
         ["ux_security_organization_client_name"] = "An API client with this name already exists.",
         ["ux_security_organization_client_object_id"] = "Another API client already uses this object ID.",
         ["ux_lookup_table_name"] = "A lookup table with this name already exists.",
@@ -23,6 +24,7 @@ internal static class SecurityDbErrors
         ["fk_subscription_organization"] = "The organization does not exist.",
         ["fk_subscription_module"] = "The subscription module does not exist.",
         ["fk_subscription_currency"] = "The currency does not exist.",
+        ["fk_subscription_plan_currency"] = "The currency does not exist.",
         ["fk_lookup_data_lookup_table"] = "The lookup table does not exist.",
         ["fk_security_organization_client_organization"] = "The selected organization does not exist."
     };
