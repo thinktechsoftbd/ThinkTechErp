@@ -349,6 +349,8 @@ public sealed class Organization
     public string? NameBn { get; set; }
     public string? Slogan { get; set; }
     public string? Code { get; set; }
+    /// <summary>A unique, URL-friendly name (organization_slug), e.g. dental-test-care.</summary>
+    public string? Slug { get; set; }
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public string? Website { get; set; }
@@ -433,6 +435,10 @@ public sealed class OrganizationUpsertRequest : OrganizationDetails
     /// generate one.
     /// </summary>
     public Guid? ObjectId { get; set; }
+
+    /// <summary>A unique, URL-friendly name: lowercase letters, numbers and hyphens. Kept by the ERP (sync leaves it).</summary>
+    [StringLength(100)]
+    public string? Slug { get; set; }
 
     public bool IsExternal { get; set; }
 

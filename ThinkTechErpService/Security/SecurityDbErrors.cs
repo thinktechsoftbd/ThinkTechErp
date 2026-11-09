@@ -11,6 +11,7 @@ internal static class SecurityDbErrors
         ["Permission_code_key"] = "A permission with this code already exists.",
         ["organization_organization_code_key"] = "An organization with this code already exists.",
         ["ux_organization_object_id"] = "Another organization already uses this Organization Id.",
+        ["uq_organization_organization_slug"] = "Another organization already uses this slug.",
         ["ux_subscription_module_name"] = "A subscription module with this name already exists.",
         ["ux_subscription_plan_name"] = "A subscription plan with this name already exists.",
         ["ux_security_organization_client_name"] = "An API client with this name already exists.",

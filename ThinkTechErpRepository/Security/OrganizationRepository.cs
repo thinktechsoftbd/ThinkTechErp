@@ -13,6 +13,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                organization_name_bn AS NameBn,
                slogan AS Slogan,
                organization_code AS Code,
+               organization_slug AS Slug,
                email AS Email,
                phone AS Phone,
                website AS Website,
@@ -67,13 +68,13 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleAsync<int>(new CommandDefinition($"""
             INSERT INTO public.organization (
-                object_id, organization_name_en, organization_name_bn, slogan, organization_code, email, phone, website,
-                address_line1, address_line2, city, state, postal_code, country, logo_url, is_external, is_active,
-                is_finalized, created_at, created_by)
+                object_id, organization_name_en, organization_name_bn, slogan, organization_code, organization_slug, email,
+                phone, website, address_line1, address_line2, city, state, postal_code, country, logo_url, is_external,
+                is_active, is_finalized, created_at, created_by)
             VALUES (
-                COALESCE(@ObjectId, gen_random_uuid()), @NameEn, @NameBn, @Slogan, @Code, @Email, @Phone, @Website,
-                @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @Country, @LogoUrl, @IsExternal, @IsActive,
-                @IsFinalized, {SecurityDb.NowUtc}, @UserId)
+                COALESCE(@ObjectId, gen_random_uuid()), @NameEn, @NameBn, @Slogan, @Code, @Slug, @Email,
+                @Phone, @Website, @AddressLine1, @AddressLine2, @City, @State, @PostalCode, @Country, @LogoUrl, @IsExternal,
+                @IsActive, @IsFinalized, {SecurityDb.NowUtc}, @UserId)
             RETURNING organization_id
             """, parameters, cancellationToken: cancellationToken));
     }
@@ -93,6 +94,7 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                 organization_name_bn = @NameBn,
                 slogan = @Slogan,
                 organization_code = @Code,
+                organization_slug = @Slug,
                 email = @Email,
                 phone = @Phone,
                 website = @Website,

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Security;
 
@@ -58,6 +59,7 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
             PostalCode = details.PostalCode,
             Country = details.Country,
             LogoUrl = details.LogoUrl,
+            Slug = existing?.Slug,
             IsExternal = existing?.IsExternal ?? true,
             IsActive = existing?.IsActive ?? true,
             IsFinalized = existing?.IsFinalized ?? false
@@ -82,6 +84,9 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
         request.NameBn = Clean(request.NameBn);
         request.Slogan = Clean(request.Slogan);
         request.Code = Clean(request.Code);
+        request.Slug = Clean(request.Slug)?.ToLowerInvariant();
+        if (request.Slug is not null && !Regex.IsMatch(request.Slug, "^[a-z0-9]+(-[a-z0-9]+)*$", RegexOptions.CultureInvariant))
+            throw new SecurityValidationException("The slug can only have lowercase letters, numbers and single hyphens, e.g. dental-test-care.");
         request.Email = Clean(request.Email);
         request.Phone = Clean(request.Phone);
         request.Website = Clean(request.Website);
