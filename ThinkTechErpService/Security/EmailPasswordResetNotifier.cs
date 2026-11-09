@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
+using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -64,13 +66,8 @@ public sealed class EmailPasswordResetNotifier(
         var appName = configuration["Email:FromName"] is { Length: > 0 } fromName ? fromName : "ThinkTechErp";
         var from = configuration["Email:From"] is { Length: > 0 } address ? address.Trim() : "no-reply@localhost";
         var href = WebUtility.HtmlEncode(link);
-        var message = new MailMessage
-        {
-            From = new MailAddress(from, appName),
-            Subject = $"Reset your {appName} password",
-            IsBodyHtml = true,
-            // A table-based button: mail apps don't all support modern CSS.
-            Body = $"""
+        // A table-based button: mail apps don't all support modern CSS.
+        var html = $"""
                 <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1f2937;line-height:1.5">
                   <p>Hello {WebUtility.HtmlEncode(user.Name)},</p>
                   <p>Someone asked to reset the password of your {WebUtility.HtmlEncode(appName)} account. Click the button to choose a new one:</p>
@@ -84,13 +81,22 @@ public sealed class EmailPasswordResetNotifier(
                   <p>Or open this link: <a href="{href}">{href}</a></p>
                   <p style="color:#6b7280">The link works for {minutes} minutes and only once. If you didn't ask for it, ignore this email: your password stays as it is.</p>
                 </div>
-                """
+                """;
+        var plain = $"Hello {user.Name},\n\nUse this link to choose a new {appName} password:\n{link}\n\n" +
+                    $"It works for {minutes} minutes and only once. If you didn't ask for it, ignore this email.";
+
+        var message = new MailMessage
+        {
+            From = new MailAddress(from, appName),
+            Subject = $"Reset your {appName} password",
+            SubjectEncoding = Encoding.UTF8
         };
         message.To.Add(new MailAddress(user.Email, user.Name));
-        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-            $"Hello {user.Name},\n\nUse this link to choose a new {appName} password:\n{link}\n\n" +
-            $"It works for {minutes} minutes and only once. If you didn't ask for it, ignore this email.",
-            null, "text/plain"));
+        // Both versions as alternate views, plain text first: mail apps show the last one they can display.
+        // (With Body + IsBodyHtml plus a plain-text view, .NET labels the HTML part text/plain too, so Gmail
+        // showed the raw tags.)
+        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(plain, Encoding.UTF8, MediaTypeNames.Text.Plain));
+        message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(html, Encoding.UTF8, MediaTypeNames.Text.Html));
         return message;
     }
 

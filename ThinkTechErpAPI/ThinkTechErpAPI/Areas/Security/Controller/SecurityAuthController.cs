@@ -110,15 +110,18 @@ public sealed class SecurityAuthController(IAuthService authService) : Controlle
     [AllowAnonymous]
     [EnableRateLimiting(SecurityPolicies.AuthRateLimit)]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ForgotPassword(
         [FromBody] ForgotPasswordRequest request,
         CancellationToken cancellationToken)
-    {
-        await authService.RequestPasswordResetAsync(request.Email, cancellationToken);
-
-        // Same answer whether or not the account exists.
-        return Accepted(new { message = "If the email belongs to an active account, a reset token has been sent." });
-    }
+        => await authService.RequestPasswordResetAsync(request.Email, cancellationToken) switch
+        {
+            PasswordResetRequestStatus.NotFound => NotFound(new { error = "No account uses this email address." }),
+            PasswordResetRequestStatus.Inactive => StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "This account is inactive, so its password can't be reset. Contact your administrator." }),
+            _ => Accepted(new { message = "A password reset link has been emailed." })
+        };
 
     [HttpPost("reset-password")]
     [AllowAnonymous]

@@ -115,17 +115,21 @@ public sealed class AuthService(
         return await StartSessionAsync(user, clientIp, cancellationToken);
     }
 
-    public async Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default)
+    public async Task<PasswordResetRequestStatus> RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default)
     {
-        // The caller answers the same way whether or not the account exists.
+        // The forgot-password page says when no account uses the email (an internal ERP: the rate limit on the
+        // endpoint is what keeps it from being used to list accounts).
         var user = await users.GetCredentialsByEmailAsync(email.Trim(), cancellationToken);
-        if (user is null || user.Status != UserStatuses.Active)
-            return;
+        if (user is null)
+            return PasswordResetRequestStatus.NotFound;
+        if (user.Status != UserStatuses.Active)
+            return PasswordResetRequestStatus.Inactive;
 
         var resetToken = OpaqueToken.Create();
         await tokens.CreatePasswordResetTokenAsync(
             user.Id, OpaqueToken.Hash(resetToken), settings.PasswordResetTokenLifetime, cancellationToken);
         await passwordResetNotifier.SendAsync(user, resetToken, settings.PasswordResetTokenLifetime, cancellationToken);
+        return PasswordResetRequestStatus.Sent;
     }
 
     public async Task<bool> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
