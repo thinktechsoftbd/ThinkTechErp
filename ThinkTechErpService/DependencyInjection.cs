@@ -51,7 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IOrganizationClientRepository, OrganizationClientRepository>();
         services.AddScoped<IAuthTokenRepository, AuthTokenRepository>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
-        services.TryAddSingleton<IPasswordResetNotifier, LoggingPasswordResetNotifier>();
+        services.TryAddSingleton<IPasswordResetNotifier, EmailPasswordResetNotifier>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ISecurityUserService, SecurityUserService>();
         services.AddScoped<ISecurityRoleService, SecurityRoleService>();
