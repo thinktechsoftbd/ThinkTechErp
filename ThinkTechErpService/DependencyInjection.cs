@@ -18,6 +18,7 @@ using ThinkTechErpService.Sales;
 using ThinkTechErpService.Security;
 using ThinkTechErpService.Settings;
 using ThinkTechErpService.Sms;
+using ThinkTechErpService.Storage;
 using ThinkTechErpService.Website;
 
 namespace ThinkTechErpService;
@@ -114,6 +115,10 @@ public static class DependencyInjection
         services.AddScoped<IAccountClassService, AccountClassService>();
         services.AddScoped<IInvoiceVoucherRepository, InvoiceVoucherRepository>();
         services.AddScoped<IInvoiceVoucherService, InvoiceVoucherService>();
+
+        // File storage (FileStorage section): files for product.image_url, organization.logo_url, User.photoUrl
+        services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
+        services.AddScoped<IFileStorageService, FileStorageService>();
         return services;
     }
 }

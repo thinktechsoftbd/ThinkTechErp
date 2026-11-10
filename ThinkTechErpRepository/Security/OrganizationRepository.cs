@@ -1,5 +1,7 @@
 using Dapper;
+using Npgsql;
 using ThinkTechErpDomain.Models.Security;
+using ThinkTechErpDomain.Models.Storage;
 using ThinkTechErpRepository.Database;
 
 namespace ThinkTechErpRepository.Security;
@@ -110,5 +112,44 @@ public sealed class OrganizationRepository(IDbConnectionFactory connectionFactor
                 updated_by = @UserId
             WHERE organization_id = @OrganizationId
             """, parameters, cancellationToken: cancellationToken)) > 0;
+    }
+
+    public async Task<OrganizationSlug?> GetOrganizationSlugAsync(int organizationId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<OrganizationSlug>(new CommandDefinition("""
+            SELECT organization_id AS OrganizationId,
+                   organization_name_en AS NameEn,
+                   nullif(trim(organization_slug), '') AS Slug
+            FROM public.organization
+            WHERE organization_id = @OrganizationId
+            """, new { OrganizationId = organizationId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<string?> EnsureOrganizationSlugAsync(
+        int organizationId, string slug, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        foreach (var candidate in new[] { slug, $"{slug}-{organizationId}" })
+        {
+            try
+            {
+                await connection.ExecuteAsync(new CommandDefinition("""
+                    UPDATE public.organization
+                    SET organization_slug = @Slug
+                    WHERE organization_id = @OrganizationId AND nullif(trim(organization_slug), '') IS NULL
+                    """, new { Slug = candidate, OrganizationId = organizationId }, cancellationToken: cancellationToken));
+                break;
+            }
+            // uq_organization_organization_slug: another organization has it, so try the one with this id.
+            catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation && candidate == slug)
+            {
+            }
+        }
+
+        return await connection.ExecuteScalarAsync<string?>(new CommandDefinition("""
+            SELECT nullif(trim(organization_slug), '') FROM public.organization WHERE organization_id = @OrganizationId
+            """, new { OrganizationId = organizationId }, cancellationToken: cancellationToken));
     }
 }

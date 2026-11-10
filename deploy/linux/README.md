@@ -91,6 +91,9 @@ server {
     listen 80;
     server_name api.example.com;
 
+    # nginx refuses bodies over 1 MB by default; allow file uploads (FileStorage:MaxFileSizeMb, plus room).
+    client_max_body_size 11m;
+
     location / {
         proxy_pass         http://127.0.0.1:5000;
         proxy_http_version 1.1;
@@ -137,3 +140,32 @@ the integration endpoints accept. Give each installation its own client:
 
 To revoke a client, remove its keys and restart; its unexpired tokens stop working too.
 To rotate, replace the hash, restart, and update the installation.
+
+### File storage
+
+`api/files` stores the files that records link to: a product's `image_url`, an organization's
+`logo_url` and a user's `photoUrl`. They live under `FileStorage:RootPath` (`/srv/storage/public`
+by default) at `{organization_slug}/{product|organization|user}/{50 random characters}.{extension}`.
+The API creates the folders; the service user must own the root:
+
+```bash
+sudo mkdir -p /srv/storage/public
+sudo chown -R thinktecherp:thinktecherp /srv/storage/public
+```
+
+- `POST api/files/{product|organization|user}` (multipart, field `file`) stores a file for the
+  organization the request works in (`X-Organization-Id`, else the user's default) and returns its
+  `url`. Save that `url` in the record through its usual endpoint; the upload changes no record.
+- `GET api/files/{slug}/{folder}/{file}` returns it. No sign-in is needed, so the URL works in an
+  `<img>` tag; the random names keep files from being found.
+- `DELETE api/files/{slug}/{folder}/{file}` deletes it, only from the request's organization.
+
+Any signed-in user may upload and delete; no permission is checked. An organization without an
+`organization_slug` gets one from its English name on its first upload (`M/S Akhi Enterprise` ->
+`m-s-akhi-enterprise`, or `...-{id}` when another organization has it).
+
+The returned `url` is built from the address the upload came in on. If the web client reaches the
+API on an internal address (e.g. `http://127.0.0.1:5000`), set `FileStorage__PublicBaseUrl` to the
+public one, e.g. `https://api.example.com/api/files`, or to a site that serves the folder directly.
+`FileStorage__MaxFileSizeMb` (default 10, at most 50; keep nginx's `client_max_body_size` above it)
+and `FileStorage__AllowedExtensions__0..n` change the limits.

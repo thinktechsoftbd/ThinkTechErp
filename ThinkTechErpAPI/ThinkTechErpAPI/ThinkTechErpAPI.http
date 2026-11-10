@@ -255,6 +255,31 @@ Content-Type: application/json
   "country": "Bangladesh"
 }
 
+### ======================= Files (any signed-in user; reading needs no sign-in) =======================
+
+### Upload for product (image_url), organization (logo_url) or user (photoUrl), in the organization the
+### request works in (X-Organization-Id, else your default). Save the response's url in the record.
+# @name uploadFile
+POST {{baseUrl}}/api/files/product
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=FileBoundary
+
+--FileBoundary
+Content-Disposition: form-data; name="file"; filename="shirt-01.jpg"
+Content-Type: image/jpeg
+
+< ./shirt-01.jpg
+--FileBoundary--
+
+@filePath = {{uploadFile.response.body.$.path}}
+
+### Read it (no Authorization needed)
+GET {{baseUrl}}/api/files/{{filePath}}
+
+### Delete it (only from the request's organization)
+DELETE {{baseUrl}}/api/files/{{filePath}}
+Authorization: Bearer {{accessToken}}
+
 ### ======================= Subscription modules (SECURITY.V / SECURITY.M) =======================
 
 GET {{baseUrl}}/api/security/subscription-modules?search=&isActive=true&limit=50&offset=0

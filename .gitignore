@@ -4,3 +4,6 @@
 # .NET build output
 bin/
 obj/
+
+# Local file storage (FileStorage:RootPath in Development)
+ThinkTechErpAPI/ThinkTechErpAPI/storage/
