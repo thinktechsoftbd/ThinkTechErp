@@ -34,8 +34,7 @@ public sealed class FileStorageController(IFileStorageService storage) : ErpCont
     [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes)]
     [ProducesResponseType(typeof(StoredFile), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<StoredFile>> UploadFile(
-        string folder,
+    public async Task<ActionResult<StoredFile>> UploadFile(string folder,
         [FromForm] FileUploadRequest request,
         CancellationToken cancellationToken)
     {
