@@ -11,6 +11,16 @@ public enum LoginStatus
 
 public sealed record LoginResult(LoginStatus Status, AuthResponse? Response = null);
 
+public enum PasswordResetRequestStatus
+{
+    /// <summary>A reset link was created and handed to the notifier to email.</summary>
+    Sent,
+    /// <summary>No user has that email address.</summary>
+    NotFound,
+    /// <summary>The user exists but isn't active, so it can't reset its password.</summary>
+    Inactive
+}
+
 public interface IAuthService
 {
     Task<LoginResult> LoginAsync(LoginRequest request, string? clientIp, CancellationToken cancellationToken = default);
@@ -32,6 +42,6 @@ public interface IAuthService
 
     /// <returns>A fresh token pair (every other session is signed out), or null when the current password is wrong.</returns>
     Task<AuthResponse?> ChangePasswordAsync(int userId, ChangePasswordRequest request, string? clientIp, CancellationToken cancellationToken = default);
-    Task RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
+    Task<PasswordResetRequestStatus> RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);
     Task<bool> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
 }
