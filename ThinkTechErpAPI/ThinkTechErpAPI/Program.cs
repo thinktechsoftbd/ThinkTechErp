@@ -212,6 +212,15 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SettingsRules.ManageSettingsPermission));
 
+    options.AddPolicy(AreaPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            AreaRules.ViewAreasPermission, AreaRules.ManageAreasPermission));
+
+    options.AddPolicy(AreaPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, AreaRules.ManageAreasPermission));
+
     options.AddPolicy(InventoryPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,

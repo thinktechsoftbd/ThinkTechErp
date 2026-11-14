@@ -27,7 +27,9 @@ internal static class SecurityDbErrors
         ["fk_subscription_currency"] = "The currency does not exist.",
         ["fk_subscription_plan_currency"] = "The currency does not exist.",
         ["fk_lookup_data_lookup_table"] = "The lookup table does not exist.",
-        ["fk_security_organization_client_organization"] = "The selected organization does not exist."
+        ["fk_security_organization_client_organization"] = "The selected organization does not exist.",
+        ["area_district_id_fkey"] = "The district does not exist.",
+        ["area_shipping_zone_id_fkey"] = "The shipping zone does not exist."
     };
 
     public static async Task<T> ExecuteAsync<T>(Func<Task<T>> operation)
