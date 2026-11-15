@@ -72,6 +72,12 @@ public static class DependencyInjection
         services.AddScoped<ILookupService, LookupService>();
         services.AddScoped<IAreaRepository, AreaRepository>();
         services.AddScoped<IAreaService, AreaService>();
+        services.AddScoped<IDivisionRepository, DivisionRepository>();
+        services.AddScoped<IDivisionService, DivisionService>();
+        services.AddScoped<IDistrictRepository, DistrictRepository>();
+        services.AddScoped<IDistrictService, DistrictService>();
+        services.AddScoped<IShippingZoneRepository, ShippingZoneRepository>();
+        services.AddScoped<IShippingZoneService, ShippingZoneService>();
 
         // Organizations a user works in (Inventory, Purchase)
         services.AddScoped<IUserOrganizationRepository, UserOrganizationRepository>();

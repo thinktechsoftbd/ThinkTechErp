@@ -17,7 +17,10 @@ internal static class SecurityDbErrors
         ["ux_security_organization_client_name"] = "An API client with this name already exists.",
         ["ux_security_organization_client_object_id"] = "Another API client already uses this object ID.",
         ["ux_lookup_table_name"] = "A lookup table with this name already exists.",
-        ["ux_lookup_data_name"] = "This lookup table already has a value with this name."
+        ["ux_lookup_data_name"] = "This lookup table already has a value with this name.",
+        ["division_name_key"] = "A division with this name already exists.",
+        ["district_division_id_name_key"] = "This division already has a district with this name.",
+        ["shipping_zone_code_key"] = "A shipping zone with this code already exists."
     };
 
     private static readonly Dictionary<string, string> ForeignKeyViolationMessages = new(StringComparer.Ordinal)
@@ -29,7 +32,9 @@ internal static class SecurityDbErrors
         ["fk_lookup_data_lookup_table"] = "The lookup table does not exist.",
         ["fk_security_organization_client_organization"] = "The selected organization does not exist.",
         ["area_district_id_fkey"] = "The district does not exist.",
-        ["area_shipping_zone_id_fkey"] = "The shipping zone does not exist."
+        ["area_shipping_zone_id_fkey"] = "The shipping zone does not exist.",
+        ["district_division_id_fkey"] = "The division does not exist.",
+        ["district_shipping_zone_id_fkey"] = "The shipping zone does not exist."
     };
 
     public static async Task<T> ExecuteAsync<T>(Func<Task<T>> operation)

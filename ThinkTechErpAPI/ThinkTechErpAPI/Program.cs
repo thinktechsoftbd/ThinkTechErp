@@ -221,6 +221,33 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, AreaRules.ManageAreasPermission));
 
+    options.AddPolicy(DivisionPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            DivisionRules.ViewDivisionsPermission, DivisionRules.ManageDivisionsPermission));
+
+    options.AddPolicy(DivisionPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, DivisionRules.ManageDivisionsPermission));
+
+    options.AddPolicy(DistrictPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            DistrictRules.ViewDistrictsPermission, DistrictRules.ManageDistrictsPermission));
+
+    options.AddPolicy(DistrictPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, DistrictRules.ManageDistrictsPermission));
+
+    options.AddPolicy(ShippingZonePolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            ShippingZoneRules.ViewShippingZonesPermission, ShippingZoneRules.ManageShippingZonesPermission));
+
+    options.AddPolicy(ShippingZonePolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, ShippingZoneRules.ManageShippingZonesPermission));
+
     options.AddPolicy(InventoryPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,

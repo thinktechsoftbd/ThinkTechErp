@@ -195,7 +195,7 @@ public sealed class AreaRepository(IDbConnectionFactory connectionFactory) : IAr
     {
         await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<ShippingZoneOption>(new CommandDefinition("""
-            SELECT id AS Id, code AS Code, name AS Name
+            SELECT id AS Id, code AS Code, name AS Name, is_active AS IsActive
             FROM public.shipping_zone
             WHERE is_active
             ORDER BY id
