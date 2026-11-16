@@ -143,29 +143,31 @@ To rotate, replace the hash, restart, and update the installation.
 
 ### File storage
 
-`api/files` stores the files that records link to: a product's `image_url`, an organization's
-`logo_url` and a user's `photoUrl`. They live under `FileStorage:RootPath` (`/srv/storage/public`
-by default) at `{organization_slug}/{product|organization|user}/{50 random characters}.{extension}`.
-The API creates the folders; the service user must own the root:
+`api/files` handles the files that records link to: a product's `image_url`, an organization's
+`logo_url` and a user's `photoUrl`. They are kept in the ThinkTech storage API
+(`FileStorage__BaseUrl`, default `https://storage.thinktechsoft.com`) under `/product/`,
+`/organization/` or `/user/`, where the storage API names each `{random id}.{extension}`. Give
+the API its storage client in the environment file; never put the secret in appsettings:
 
 ```bash
-sudo mkdir -p /srv/storage/public
-sudo chown -R thinktecherp:thinktecherp /srv/storage/public
+FileStorage__ClientId=bizone-erp
+FileStorage__ClientSecret=<the secret from the storage API's generate-client>
 ```
 
-- `POST api/files/{product|organization|user}` (multipart, field `file`) stores a file for the
-  organization the request works in (`X-Organization-Id`, else the user's default) and returns its
-  `url`. Save that `url` in the record through its usual endpoint; the upload changes no record.
-- `GET api/files/{slug}/{folder}/{file}` returns it. No sign-in is needed, so the URL works in an
-  `<img>` tag; the random names keep files from being found.
-- `DELETE api/files/{slug}/{folder}/{file}` deletes it, only from the request's organization.
+The client needs the `storage.read` and `storage.write` scopes. In development, use
+`dotnet user-secrets set "FileStorage:ClientId" "..."` (and `FileStorage:ClientSecret`).
 
-Any signed-in user may upload and delete; no permission is checked. An organization without an
-`organization_slug` gets one from its English name on its first upload (`M/S Akhi Enterprise` ->
-`m-s-akhi-enterprise`, or `...-{id}` when another organization has it).
+- `POST api/files/{product|organization|user}` (multipart, field `file`) uploads a file and returns
+  its `url`. Save that `url` in the record through its usual endpoint; the upload changes no record.
+- `GET api/files/{folder}/{file}` returns it, fetched from the storage API (whose files need a
+  token). No sign-in is needed, so the URL works in an `<img>` tag; the random names keep files
+  from being found.
+
+Any signed-in user may upload; no permission is checked. When the storage API can't be reached or
+refuses the client, both answer 503 and the log says why.
 
 The returned `url` is built from the address the upload came in on. If the web client reaches the
 API on an internal address (e.g. `http://127.0.0.1:5000`), set `FileStorage__PublicBaseUrl` to the
-public one, e.g. `https://api.example.com/api/files`, or to a site that serves the folder directly.
+public one, e.g. `https://api.example.com/api/files`.
 `FileStorage__MaxFileSizeMb` (default 10, at most 50; keep nginx's `client_max_body_size` above it)
 and `FileStorage__AllowedExtensions__0..n` change the limits.

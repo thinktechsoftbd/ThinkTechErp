@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using ThinkTechErpRepository.Accounting;
 using ThinkTechErpRepository.Common;
 using ThinkTechErpRepository.Database;
@@ -124,9 +125,17 @@ public static class DependencyInjection
         services.AddScoped<IInvoiceVoucherRepository, InvoiceVoucherRepository>();
         services.AddScoped<IInvoiceVoucherService, InvoiceVoucherService>();
 
-        // File storage (FileStorage section): files for product.image_url, organization.logo_url, User.photoUrl
+        // File storage (FileStorage section): the ThinkTech storage API keeps the files for product.image_url,
+        // organization.logo_url and User.photoUrl.
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
-        services.AddScoped<IFileStorageService, FileStorageService>();
+        services.AddSingleton<FileStorageTokenCache>();
+        services.AddHttpClient<IFileStorageService, FileStorageService>((provider, client) =>
+        {
+            // Left unset when missing or not an http(s) address: the service then answers that storage isn't set up.
+            var baseUrl = provider.GetRequiredService<IOptions<FileStorageOptions>>().Value.BaseUrl?.Trim().TrimEnd('/');
+            if (Uri.TryCreate(baseUrl + "/", UriKind.Absolute, out var address) && address.Scheme is "https" or "http")
+                client.BaseAddress = address;
+        });
         return services;
     }
 }

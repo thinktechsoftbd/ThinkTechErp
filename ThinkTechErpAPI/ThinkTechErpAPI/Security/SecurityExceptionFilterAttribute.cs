@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using ThinkTechErpDomain.Models.Common;
+using ThinkTechErpDomain.Models.Storage;
 using ThinkTechErpService.Security;
 
 namespace ThinkTechErpAPI.Security;
 
 /// <summary>
-/// Maps service errors (security, inventory, purchase) to 400 (validation) and 409 (conflict) with an
-/// { error } body.
+/// Maps service errors (security, inventory, purchase) to 400 (validation) and 409 (conflict), and file storage
+/// that can't be reached or refuses this API to 503, with an { error } body.
 /// </summary>
 public sealed class SecurityExceptionFilterAttribute : ExceptionFilterAttribute
 {
@@ -19,6 +20,10 @@ public sealed class SecurityExceptionFilterAttribute : ExceptionFilterAttribute
             SecurityConflictException exception => new ConflictObjectResult(new { error = exception.Message }),
             BusinessRuleException exception => new BadRequestObjectResult(new { error = exception.Message }),
             BusinessConflictException exception => new ConflictObjectResult(new { error = exception.Message }),
+            FileStorageUnavailableException exception => new ObjectResult(new { error = exception.Message })
+            {
+                StatusCode = StatusCodes.Status503ServiceUnavailable
+            },
             _ => null
         };
         context.ExceptionHandled = context.Result is not null;
