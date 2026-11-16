@@ -13,6 +13,8 @@ public sealed class UserOrganization
     public bool IsLinked { get; set; }
     /// <summary>Outside this company (e.g. a customer); the ERP's organization switcher leaves these out.</summary>
     public bool IsExternal { get; set; }
+    /// <summary>The organization's logo (public.organization.logo_url), shown with its name in the ERP's sidebar.</summary>
+    public string? LogoUrl { get; set; }
 }
 
 public sealed class UserOrganizationsUpdateRequest
