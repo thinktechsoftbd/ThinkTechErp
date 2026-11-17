@@ -10,8 +10,10 @@ using ThinkTechErpRepository.Purchase;
 using ThinkTechErpRepository.Sales;
 using ThinkTechErpRepository.Security;
 using ThinkTechErpRepository.Settings;
+using ThinkTechErpRepository.ThinkCart;
 using ThinkTechErpRepository.Website;
 using ThinkTechErpRepository.Sms;
+using ThinkTechErpRepository.Warranty;
 using ThinkTechErpService.Accounting;
 using ThinkTechErpService.Inventory;
 using ThinkTechErpService.Purchase;
@@ -20,6 +22,8 @@ using ThinkTechErpService.Security;
 using ThinkTechErpService.Settings;
 using ThinkTechErpService.Sms;
 using ThinkTechErpService.Storage;
+using ThinkTechErpService.ThinkCart;
+using ThinkTechErpService.Warranty;
 using ThinkTechErpService.Website;
 
 namespace ThinkTechErpService;
@@ -113,6 +117,14 @@ public static class DependencyInjection
         services.AddScoped<ISalesDocumentService, SalesDocumentService>();
         services.AddScoped<ISalesReportService, SalesReportService>();
 
+        // Warranty & Service
+        services.AddScoped<IWarrantySetupRepository, WarrantySetupRepository>();
+        services.AddScoped<IWarrantyCardRepository, WarrantyCardRepository>();
+        services.AddScoped<IServiceJobRepository, ServiceJobRepository>();
+        services.AddScoped<IWarrantySetupService, WarrantySetupService>();
+        services.AddScoped<IWarrantyCardService, WarrantyCardService>();
+        services.AddScoped<IServiceJobService, ServiceJobService>();
+
         // Accounting
         services.AddScoped<ILedgerLookupRepository, LedgerLookupRepository>();
         services.AddScoped<IVoucherRepository, VoucherRepository>();
@@ -124,6 +136,23 @@ public static class DependencyInjection
         services.AddScoped<IAccountClassService, AccountClassService>();
         services.AddScoped<IInvoiceVoucherRepository, InvoiceVoucherRepository>();
         services.AddScoped<IInvoiceVoucherService, InvoiceVoucherService>();
+
+        // ThinkCart storefront (api/thinkcart). The host must also register IThinkCartCustomerTokenIssuer and
+        // ThinkCartTokenSettings. OTP codes go through IThinkCartOtpSender: register an SMS gateway before this
+        // call to replace the default, which only logs (the code itself in Development only).
+        services.AddMemoryCache();
+        services.AddScoped<IThinkCartCatalogRepository, ThinkCartCatalogRepository>();
+        services.AddScoped<IThinkCartCartRepository, ThinkCartCartRepository>();
+        services.AddScoped<IThinkCartCheckoutRepository, ThinkCartCheckoutRepository>();
+        services.AddScoped<IThinkCartOrderRepository, ThinkCartOrderRepository>();
+        services.AddScoped<IThinkCartCustomerRepository, ThinkCartCustomerRepository>();
+        services.AddScoped<IThinkCartOrganizationResolver, ThinkCartOrganizationResolver>();
+        services.TryAddSingleton<IThinkCartOtpSender, LoggingThinkCartOtpSender>();
+        services.AddScoped<IThinkCartCatalogService, ThinkCartCatalogService>();
+        services.AddScoped<IThinkCartCartService, ThinkCartCartService>();
+        services.AddScoped<IThinkCartCheckoutService, ThinkCartCheckoutService>();
+        services.AddScoped<IThinkCartAuthService, ThinkCartAuthService>();
+        services.AddScoped<IThinkCartAccountService, ThinkCartAccountService>();
 
         // File storage (FileStorage section): the ThinkTech storage API keeps the files for product.image_url,
         // organization.logo_url and User.photoUrl.

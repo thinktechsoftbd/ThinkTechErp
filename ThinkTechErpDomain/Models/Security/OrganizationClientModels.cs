@@ -69,9 +69,12 @@ public static class OrganizationClientScopeRules
     public const string SmsUsage = "sms.usage";
     public const string WebsiteExchange = "thinktech-website.exchange";
 
+    /// <summary>The ThinkCart storefront server: api/thinkcart for the client's own organization (org_object_id).</summary>
+    public const string ThinkCartStorefront = "thinkcart.storefront";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        OrganizationSync, SmsUsage, WebsiteExchange
+        OrganizationSync, SmsUsage, WebsiteExchange, ThinkCartStorefront
     };
 
     public static readonly IReadOnlySet<string> OwnOrganizations = new HashSet<string>(StringComparer.Ordinal)

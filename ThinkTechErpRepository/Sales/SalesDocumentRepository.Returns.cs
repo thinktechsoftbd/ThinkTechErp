@@ -5,6 +5,7 @@ using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Common;
 using ThinkTechErpRepository.Security;
+using ThinkTechErpRepository.Warranty;
 
 namespace ThinkTechErpRepository.Sales;
 
@@ -411,6 +412,7 @@ public sealed partial class SalesDocumentRepository
 
         await SetStatusAsync(connection, transaction, "public.sales_return", "sales_return_id", id, DocumentStatus.Posted,
             userId, cancellationToken, posted: true);
+        await WarrantyCards.SyncReturnsAsync(connection, transaction, invoiceId, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -458,6 +460,8 @@ public sealed partial class SalesDocumentRepository
         await AddReturnedAsync(connection, transaction, lines, -1, cancellationToken);
         await SetStatusAsync(connection, transaction, "public.sales_return", "sales_return_id", id, DocumentStatus.Cancelled,
             userId, cancellationToken);
+        if (header.SalesInvoiceId is long invoiceId)
+            await WarrantyCards.SyncReturnsAsync(connection, transaction, invoiceId, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 }

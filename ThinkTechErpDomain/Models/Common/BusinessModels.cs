@@ -38,6 +38,12 @@ public static class DocumentType
     public const string Supplier = "Supplier";
     /// <summary>Not a document: the series a new product's code is taken from when none is typed.</summary>
     public const string Product = "Product";
+    /// <summary>A service job card (Warranty &amp; Service).</summary>
+    public const string ServiceJob = "ServiceJob";
+    /// <summary>A warranty card, issued for each unit sold with a warranty.</summary>
+    public const string WarrantyCard = "WarrantyCard";
+    /// <summary>A faulty unit sent back to the supplier (RMA).</summary>
+    public const string SupplierClaim = "SupplierClaim";
 
     /// <summary>The number prefix a new organization's series starts with, e.g. PINV-00001.</summary>
     public static string DefaultPrefix(string documentType) => documentType switch
@@ -59,6 +65,9 @@ public static class DocumentType
         Customer => "C-",
         Supplier => "S-",
         Product => "P-",
+        ServiceJob => "SJ-",
+        WarrantyCard => "WC-",
+        SupplierClaim => "RMA-",
         _ => "DOC-"
     };
 

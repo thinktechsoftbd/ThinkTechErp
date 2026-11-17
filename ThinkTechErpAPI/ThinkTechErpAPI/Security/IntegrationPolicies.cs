@@ -35,6 +35,7 @@ public static class IntegrationScopes
     public const string OrganizationSync = OrganizationClientScopeRules.OrganizationSync;
     public const string SmsUsage = OrganizationClientScopeRules.SmsUsage;
     public const string WebsiteExchange = OrganizationClientScopeRules.WebsiteExchange;
+    public const string ThinkCartStorefront = OrganizationClientScopeRules.ThinkCartStorefront;
 
     public static readonly IReadOnlySet<string> All = OrganizationClientScopeRules.All;
 

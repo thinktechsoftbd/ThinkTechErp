@@ -14,8 +14,10 @@ using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Sms;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpDomain.Models.Settings;
+using ThinkTechErpDomain.Models.Warranty;
 using ThinkTechErpService;
 using ThinkTechErpService.Security;
+using ThinkTechErpService.ThinkCart;
 
 var currentDirectory = Directory.GetCurrentDirectory();
 var webOptions = new WebApplicationOptions
@@ -83,6 +85,20 @@ var integrationTokenMinutes = builder.Configuration.GetValue("Authentication:Int
 if (integrationTokenMinutes <= 0)
     throw new InvalidOperationException("Authentication:Integration:AccessTokenMinutes must be positive.");
 
+// ThinkCart storefront customers sign in through api/thinkcart/auth and get tokens for their own audience,
+// so a customer token never passes as a user or integration token, or the reverse.
+var thinkCartAudience = builder.Configuration["Authentication:ThinkCart:Audience"] ?? "ThinkCart.Customer";
+if (string.IsNullOrWhiteSpace(thinkCartAudience) ||
+    string.Equals(thinkCartAudience, audience, StringComparison.Ordinal) ||
+    string.Equals(thinkCartAudience, integrationAudience, StringComparison.Ordinal))
+    throw new InvalidOperationException(
+        "Authentication:ThinkCart:Audience must be set and differ from Authentication:Jwt:Audience and Authentication:Integration:Audience.");
+var thinkCartAccessTokenMinutes = builder.Configuration.GetValue("Authentication:ThinkCart:AccessTokenMinutes", 60);
+var thinkCartRefreshTokenDays = builder.Configuration.GetValue("Authentication:ThinkCart:RefreshTokenDays", 30);
+if (thinkCartAccessTokenMinutes <= 0 || thinkCartRefreshTokenDays <= 0)
+    throw new InvalidOperationException(
+        "Authentication:ThinkCart:AccessTokenMinutes and RefreshTokenDays must be positive.");
+
 // Add services to the container.
 
 builder.Services.AddControllers();
@@ -95,6 +111,9 @@ builder.Services.AddSingleton(new SecurityTokenSettings(
     PasswordResetTokenLifetime: TimeSpan.FromMinutes(30)));
 builder.Services.AddSingleton(new IntegrationTokenSettings(integrationAudience, TimeSpan.FromMinutes(integrationTokenMinutes)));
 builder.Services.AddSingleton<IntegrationTokenIssuer>();
+builder.Services.AddSingleton(new ThinkCartTokenSettings(
+    thinkCartAudience, TimeSpan.FromMinutes(thinkCartAccessTokenMinutes), TimeSpan.FromDays(thinkCartRefreshTokenDays)));
+builder.Services.AddSingleton<IThinkCartCustomerTokenIssuer, ThinkCartCustomerTokenIssuer>();
 
 // Browser clients on another origin (e.g. a SPA dev server) must be listed in Cors:AllowedOrigins.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -162,6 +181,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
         options.TokenValidationParameters = TokenValidationFor(integrationAudience);
+    })
+    .AddJwtBearer(ThinkCartPolicies.CustomerScheme, options =>
+    {
+        options.MapInboundClaims = false;
+        options.IncludeErrorDetails = false;
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                var principal = context.Principal;
+                if (principal?.FindFirst(ThinkCartPolicies.TokenUseClaim)?.Value != ThinkCartPolicies.CustomerTokenUse ||
+                    !int.TryParse(principal.FindFirst("sub")?.Value, out _) ||
+                    !int.TryParse(principal.FindFirst(ThinkCartPolicies.OrganizationClaim)?.Value, out _) ||
+                    !Guid.TryParse(principal.FindFirst(ThinkCartPolicies.CustomerObjectIdClaim)?.Value, out _) ||
+                    string.IsNullOrWhiteSpace(principal.FindFirst("jti")?.Value))
+                    context.Fail("The access token is missing required customer claims.");
+
+                return Task.CompletedTask;
+            }
+        };
+        options.TokenValidationParameters = TokenValidationFor(thinkCartAudience);
     });
 builder.Services.AddAuthorization(options =>
 {
@@ -202,6 +242,19 @@ builder.Services.AddAuthorization(options =>
         .AddAuthenticationSchemes(IntegrationPolicies.Scheme)
         .RequireAuthenticatedUser()
         .RequireClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.WebsiteExchange));
+
+    // The storefront server's integration token (scope thinkcart.storefront) or a signed-in customer's token.
+    options.AddPolicy(ThinkCartPolicies.Storefront, policy => policy
+        .AddAuthenticationSchemes(IntegrationPolicies.Scheme, ThinkCartPolicies.CustomerScheme)
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            context.User.HasClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.ThinkCartStorefront) ||
+            context.User.HasClaim(ThinkCartPolicies.TokenUseClaim, ThinkCartPolicies.CustomerTokenUse)));
+
+    options.AddPolicy(ThinkCartPolicies.Customer, policy => policy
+        .AddAuthenticationSchemes(ThinkCartPolicies.CustomerScheme)
+        .RequireAuthenticatedUser()
+        .RequireClaim(ThinkCartPolicies.TokenUseClaim, ThinkCartPolicies.CustomerTokenUse));
 
     options.AddPolicy(SettingsPolicies.View, policy => policy
         .RequireAuthenticatedUser()
@@ -262,7 +315,8 @@ builder.Services.AddAuthorization(options =>
         .RequireClaim(SecurityPolicies.PermissionClaim,
             InventoryRules.ViewInventoryPermission, InventoryRules.ManageInventoryPermission,
             PurchaseRules.ViewPurchasePermission, PurchaseRules.ManagePurchasePermission,
-            SalesRules.ViewSalesPermission, SalesRules.ManageSalesPermission));
+            SalesRules.ViewSalesPermission, SalesRules.ManageSalesPermission,
+            WarrantyRules.ViewWarrantyPermission, WarrantyRules.ManageWarrantyPermission));
 
     options.AddPolicy(InventoryPolicies.SharedManage, policy => policy
         .RequireAuthenticatedUser()
@@ -286,6 +340,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(SalesPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SalesRules.ManageSalesPermission));
+
+    options.AddPolicy(WarrantyPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            WarrantyRules.ViewWarrantyPermission, WarrantyRules.ManageWarrantyPermission));
+
+    options.AddPolicy(WarrantyPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, WarrantyRules.ManageWarrantyPermission));
 
     options.AddPolicy(AccountingPolicies.View, policy => policy
         .RequireAuthenticatedUser()

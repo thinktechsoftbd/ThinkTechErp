@@ -7,6 +7,7 @@ using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Common;
 using ThinkTechErpRepository.Database;
 using ThinkTechErpRepository.Security;
+using ThinkTechErpRepository.Warranty;
 
 namespace ThinkTechErpRepository.Sales;
 
@@ -365,9 +366,19 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             return DeleteOutcome.NotFound;
         if (status != DocumentStatus.Draft)
             return DeleteOutcome.InUse;
-        return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
+
+        // A draft made for a service job: the job is no longer billed and can be invoiced again.
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE public.service_job SET sales_invoice_id = NULL WHERE organization_id = @Org AND sales_invoice_id = @Id",
+            new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken));
+        var outcome = await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM public.sales_invoice WHERE organization_id = @Org AND sales_invoice_id = @Id AND status = 'Draft'",
-            new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
+            new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken));
+        if (outcome == DeleteOutcome.Deleted)
+            await transaction.CommitAsync(cancellationToken);
+        return outcome;
     }
 
     private sealed class SellingLine
@@ -467,6 +478,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         await SetStatusAsync(connection, transaction, "public.sales_invoice", "sales_invoice_id", id, DocumentStatus.Posted,
             userId, cancellationToken, posted: true);
         await RecomputeSettlementAsync(connection, transaction, [id], cancellationToken);
+        await WarrantyCards.IssueForInvoiceAsync(connection, transaction, organizationId, id, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -566,6 +578,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             DocumentType.SalesInvoice, id, header.Number, settings.AllowNegativeStock).ReverseAsync(null, cancellationToken);
         await SetStatusAsync(connection, transaction, "public.sales_invoice", "sales_invoice_id", id, DocumentStatus.Cancelled,
             userId, cancellationToken);
+        await WarrantyCards.VoidForInvoiceAsync(connection, transaction, id, header.Number, userId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

@@ -47,7 +47,19 @@ internal static class BusinessDbErrors
         ["ck_stock_transfer_warehouses"] = "The two warehouses must be different.",
         ["ck_product_expiry"] = "Only batch-tracked products can have an expiry date.",
         ["ck_product_tracking_stock"] = "Only stock products can be tracked by batch or serial number.",
-        ["ck_category_parent"] = "A category can't be its own parent."
+        ["ck_category_parent"] = "A category can't be its own parent.",
+        ["ux_warranty_policy_name"] = "A warranty policy with this name already exists.",
+        ["ck_warranty_policy_period"] = "The replacement period can't be longer than the warranty.",
+        ["fk_product_warranty_policy"] = "The warranty policy doesn't exist.",
+        ["ux_warranty_registration_active_serial"] = "This unit already has a warranty card in force.",
+        ["ck_warranty_registration_dates"] = "The warranty must end on or after the date of sale, with the replacement period inside it.",
+        ["ck_service_job_customer"] = "Pick the customer, or enter the walk-in customer's mobile number.",
+        ["ck_service_job_warranty"] = "A warranty job needs the warranty card the claim is made under.",
+        ["ck_service_job_on_site"] = "On-site service needs the address.",
+        ["fk_service_job_technician"] = "The technician doesn't exist.",
+        ["fk_service_job_device_type"] = "Choose a device type from the list.",
+        ["ux_service_job_invoice"] = "This invoice already bills another service job.",
+        ["ck_service_supplier_claim_dates"] = "The return date can't be before the date the unit was sent."
     };
 
     public static async Task<T> ExecuteAsync<T>(Func<Task<T>> operation)
