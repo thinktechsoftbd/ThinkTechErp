@@ -64,6 +64,8 @@ public static class DependencyInjection
         services.AddScoped<ISecurityPermissionService, SecurityPermissionService>();
         services.AddScoped<ISecurityMenuService, SecurityMenuService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IDeploymentRepository, DeploymentRepository>();
+        services.AddScoped<IDeploymentService, DeploymentService>();
         services.AddScoped<IOrganizationClientService, OrganizationClientService>();
         services.AddScoped<ISubscriptionModuleRepository, SubscriptionModuleRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();

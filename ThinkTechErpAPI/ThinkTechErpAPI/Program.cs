@@ -301,6 +301,15 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, ShippingZoneRules.ManageShippingZonesPermission));
 
+    options.AddPolicy(DeploymentPolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            DeploymentRules.ViewDeploymentsPermission, DeploymentRules.ManageDeploymentsPermission));
+
+    options.AddPolicy(DeploymentPolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, DeploymentRules.ManageDeploymentsPermission));
+
     options.AddPolicy(InventoryPolicies.View, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim,
