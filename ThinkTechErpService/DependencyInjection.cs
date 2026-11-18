@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using ThinkTechErpRepository.Accounting;
 using ThinkTechErpRepository.Common;
+using ThinkTechErpRepository.Dashboard;
 using ThinkTechErpRepository.Database;
 using ThinkTechErpRepository.Inventory;
 using ThinkTechErpRepository.Purchase;
@@ -15,6 +16,7 @@ using ThinkTechErpRepository.Website;
 using ThinkTechErpRepository.Sms;
 using ThinkTechErpRepository.Warranty;
 using ThinkTechErpService.Accounting;
+using ThinkTechErpService.Dashboard;
 using ThinkTechErpService.Inventory;
 using ThinkTechErpService.Purchase;
 using ThinkTechErpService.Sales;
@@ -118,6 +120,10 @@ public static class DependencyInjection
         services.AddScoped<ISalesSetupService, SalesSetupService>();
         services.AddScoped<ISalesDocumentService, SalesDocumentService>();
         services.AddScoped<ISalesReportService, SalesReportService>();
+
+        // Dashboard
+        services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<IDashboardService, DashboardService>();
 
         // Warranty & Service
         services.AddScoped<IWarrantySetupRepository, WarrantySetupRepository>();
