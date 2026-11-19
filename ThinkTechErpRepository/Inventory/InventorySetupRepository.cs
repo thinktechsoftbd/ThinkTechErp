@@ -441,13 +441,18 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
             $"{BrandSelect} {BrandFilter} ORDER BY b.brand_name", parameters, cancellationToken: cancellationToken))).AsList();
         var warehouses = (await connection.QueryAsync<Warehouse>(new CommandDefinition(
             $"{WarehouseSelect} {WarehouseFilter} ORDER BY w.warehouse_name", parameters, cancellationToken: cancellationToken))).AsList();
+        // Badges first ('badge' sorts before 'tag').
+        var tags = (await connection.QueryAsync<TagOption>(new CommandDefinition(
+            $"SELECT {TagSql.Columns} FROM public.tag t WHERE {TagSql.Visible} ORDER BY t.tag_type, lower(t.name), t.id",
+            new { Org = organizationId }, cancellationToken: cancellationToken))).AsList();
         return new InventoryOptions
         {
             Units = units,
             Categories = categories,
             Brands = brands,
             Warehouses = warehouses,
-            TaxGroups = await GetTaxGroupOptionsAsync(organizationId, null, cancellationToken)
+            TaxGroups = await GetTaxGroupOptionsAsync(organizationId, null, cancellationToken),
+            Tags = tags
         };
     }
 

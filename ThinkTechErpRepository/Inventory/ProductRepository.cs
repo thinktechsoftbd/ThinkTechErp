@@ -29,6 +29,24 @@ public interface IProductRepository
 
     Task<IReadOnlyList<BatchStockItem>> GetBatchStockAsync(int organizationId, int productId, int warehouseId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SerialStockItem>> GetSerialStockAsync(int organizationId, int productId, int warehouseId, CancellationToken cancellationToken = default);
+
+    /// <summary>Which of these tag ids the organization may use (see <see cref="TagSql.Visible"/>).</summary>
+    Task<IReadOnlyList<int>> GetVisibleTagIdsAsync(int organizationId, IReadOnlyCollection<int> tagIds, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// public.tag has no organization column (the website shares it), so an organization sees the website
+/// badges and the tags its own products use. Needs @Org.
+/// </summary>
+public static class TagSql
+{
+    public const string Columns = "t.id AS Id, t.name AS Name, t.slug AS Slug, t.tag_type AS TagType, t.color AS Color";
+
+    public const string Visible = """
+        (t.tag_type = 'badge' OR EXISTS (
+            SELECT 1 FROM public.product_tag vpt JOIN public.product vp ON vp.product_id = vpt.product_id
+            WHERE vpt.tag_id = t.id AND vp.organization_id = @Org))
+        """;
 }
 
 public sealed class ProductQuery
@@ -134,6 +152,18 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
             FROM public.product_barcode pb LEFT JOIN public.unit u ON u.unit_id = pb.unit_id
             WHERE pb.product_id = @Id ORDER BY pb.product_barcode_id
             """, new { Id = productId }, cancellationToken: cancellationToken))).AsList();
+        product.Images = (await connection.QueryAsync<ProductImage>(new CommandDefinition("""
+            SELECT url AS Url, alt_text AS AltText, is_primary AS IsPrimary, sort_order AS SortOrder
+            FROM public.product_image
+            WHERE product_id = @Id AND product_variant_id IS NULL
+            ORDER BY is_primary DESC, sort_order, id
+            """, new { Id = productId }, cancellationToken: cancellationToken))).AsList();
+        product.Tags = (await connection.QueryAsync<TagOption>(new CommandDefinition($"""
+            SELECT {TagSql.Columns}
+            FROM public.product_tag pt JOIN public.tag t ON t.id = pt.tag_id
+            WHERE pt.product_id = @Id
+            ORDER BY lower(t.name), t.id
+            """, new { Id = productId }, cancellationToken: cancellationToken))).AsList();
         return product;
     }
 
@@ -186,6 +216,7 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
             RETURNING product_id
             """, ProductParams(organizationId, request, userId), transaction, cancellationToken: cancellationToken));
         await WriteUnitsAndBarcodesAsync(connection, transaction, organizationId, productId, request, userId, cancellationToken);
+        await WriteImagesAndTagsAsync(connection, transaction, productId, request, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return productId;
     }
@@ -215,10 +246,71 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
         await connection.ExecuteAsync(new CommandDefinition("""
             DELETE FROM public.product_unit WHERE product_id = @Id;
             DELETE FROM public.product_barcode WHERE product_id = @Id;
+            DELETE FROM public.product_image WHERE product_id = @Id AND product_variant_id IS NULL;
+            DELETE FROM public.product_tag WHERE product_id = @Id;
             """, new { Id = productId }, transaction, cancellationToken: cancellationToken));
         await WriteUnitsAndBarcodesAsync(connection, transaction, organizationId, productId, request, userId, cancellationToken);
+        await WriteImagesAndTagsAsync(connection, transaction, productId, request, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
+    }
+
+    /// <summary>
+    /// The main picture becomes the primary product_image row (the website shows it first) and the related
+    /// ones follow in order; new tag names are created (or matched by slug) and attached with TagIds.
+    /// </summary>
+    private static async Task WriteImagesAndTagsAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, int productId,
+        ProductUpsertRequest request, CancellationToken cancellationToken)
+    {
+        var images = new List<object>();
+        if (request.ImageUrl is not null)
+            images.Add(new { ProductId = productId, Url = request.ImageUrl, AltText = request.Name, SortOrder = 0, IsPrimary = true });
+        images.AddRange(request.RelatedImageUrls.Select((url, index) => (object)new
+        {
+            ProductId = productId,
+            Url = url,
+            AltText = request.Name,
+            SortOrder = index + 1,
+            IsPrimary = false
+        }));
+        if (images.Count > 0)
+            await connection.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO public.product_image (product_id, url, alt_text, sort_order, is_primary)
+                VALUES (@ProductId, @Url, @AltText, @SortOrder, @IsPrimary)
+                """, images, transaction, cancellationToken: cancellationToken));
+
+        var tagIds = request.TagIds.ToHashSet();
+        if (request.NewTags.Count > 0)
+        {
+            var names = request.NewTags.ToArray();
+            var slugs = names.Select(InventoryRules.TagSlug).ToArray();
+            await connection.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO public.tag (name, slug)
+                SELECT x.name, x.slug FROM unnest(@Names, @Slugs) AS x(name, slug)
+                ON CONFLICT (slug) DO NOTHING
+                """, new { Names = names, Slugs = slugs }, transaction, cancellationToken: cancellationToken));
+            tagIds.UnionWith(await connection.QueryAsync<int>(new CommandDefinition(
+                "SELECT id FROM public.tag WHERE slug = ANY(@Slugs)",
+                new { Slugs = slugs }, transaction, cancellationToken: cancellationToken)));
+        }
+        if (tagIds.Count > 0)
+            await connection.ExecuteAsync(new CommandDefinition("""
+                INSERT INTO public.product_tag (product_id, tag_id)
+                SELECT @ProductId, unnest(@TagIds)
+                ON CONFLICT DO NOTHING
+                """, new { ProductId = productId, TagIds = tagIds.ToArray() }, transaction, cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<int>> GetVisibleTagIdsAsync(
+        int organizationId, IReadOnlyCollection<int> tagIds, CancellationToken cancellationToken = default)
+    {
+        if (tagIds.Count == 0)
+            return [];
+        await using var connection = connectionFactory.CreateConnection();
+        return (await connection.QueryAsync<int>(new CommandDefinition(
+            $"SELECT t.id FROM public.tag t WHERE t.id = ANY(@Ids) AND {TagSql.Visible}",
+            new { Org = organizationId, Ids = tagIds.ToArray() }, cancellationToken: cancellationToken))).AsList();
     }
 
     private static async Task WriteUnitsAndBarcodesAsync(

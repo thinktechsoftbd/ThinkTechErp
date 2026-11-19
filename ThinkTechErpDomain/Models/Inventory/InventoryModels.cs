@@ -18,6 +18,18 @@ public static class InventoryRules
 
     public static readonly IReadOnlySet<string> TrackingTypes = new HashSet<string>(StringComparer.Ordinal)
         { "None", "Batch", "Serial" };
+
+    /// <summary>Pictures besides the main one (product_image rows not tied to a size).</summary>
+    public const int MaxRelatedImages = 12;
+    public const int MaxTags = 20;
+    public const int MaxTagNameLength = 50;
+
+    /// <summary>
+    /// A tag's url slug: lower case, runs of anything but letters, marks and digits as one hyphen, so a
+    /// Bangla name keeps its letters ("জৈব সার" → "জৈব-সার"). Empty when the name has no letters or digits.
+    /// </summary>
+    public static string TagSlug(string name)
+        => System.Text.RegularExpressions.Regex.Replace(name.Trim().ToLowerInvariant(), @"[^\p{L}\p{M}\p{N}]+", "-").Trim('-');
 }
 
 // ---- Units
@@ -250,6 +262,28 @@ public sealed class Product
     /// <summary>Every unit the product is bought or sold in, the base unit first (factor 1).</summary>
     public List<ProductUnit> Units { get; set; } = [];
     public List<ProductBarcode> Barcodes { get; set; } = [];
+    /// <summary>Pictures not tied to a size, the primary (main) one first. Only on a single product.</summary>
+    public List<ProductImage> Images { get; set; } = [];
+    /// <summary>Only on a single product.</summary>
+    public List<TagOption> Tags { get; set; } = [];
+}
+
+public sealed class ProductImage
+{
+    public string Url { get; set; } = string.Empty;
+    public string? AltText { get; set; }
+    public bool IsPrimary { get; set; }
+    public int SortOrder { get; set; }
+}
+
+/// <summary>A product tag; "badge" tags are the website's card ribbons (Best Selling, New Arrival, ...).</summary>
+public sealed class TagOption
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string TagType { get; set; } = "tag";
+    public string? Color { get; set; }
 }
 
 public sealed class ProductUnit
@@ -344,6 +378,21 @@ public sealed class ProductUpsertRequest
 
     public List<ProductBarcodeRequest> Barcodes { get; set; } = [];
 
+    /// <summary>
+    /// Pictures besides the main one (ImageUrl), in display order. Saved as product_image rows with the
+    /// main picture as the primary row; pictures tied to a size are left alone.
+    /// </summary>
+    [MaxLength(InventoryRules.MaxRelatedImages)]
+    public List<string> RelatedImageUrls { get; set; } = [];
+
+    /// <summary>Existing tags to attach (the product's tags are replaced by these plus NewTags).</summary>
+    [MaxLength(InventoryRules.MaxTags)]
+    public List<int> TagIds { get; set; } = [];
+
+    /// <summary>Tag names to attach, created when no tag has their slug yet.</summary>
+    [MaxLength(InventoryRules.MaxTags)]
+    public List<string> NewTags { get; set; } = [];
+
     /// <summary>The base unit's own defaults (when no pack is the default).</summary>
     public bool BaseIsPurchaseDefault { get; set; } = true;
     public bool BaseIsSaleDefault { get; set; } = true;
@@ -426,6 +475,8 @@ public sealed class InventoryOptions
     public IReadOnlyList<Brand> Brands { get; set; } = [];
     public IReadOnlyList<Warehouse> Warehouses { get; set; } = [];
     public IReadOnlyList<TaxGroupOption> TaxGroups { get; set; } = [];
+    /// <summary>The website badges and the tags this organization's products use.</summary>
+    public IReadOnlyList<TagOption> Tags { get; set; } = [];
 }
 
 /// <summary>A tax group with its total rate, for price and tax calculations on forms.</summary>
