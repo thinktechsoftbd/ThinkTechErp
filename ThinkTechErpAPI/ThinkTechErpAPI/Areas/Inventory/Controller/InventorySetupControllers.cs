@@ -13,12 +13,18 @@ namespace ThinkTechErpAPI.Areas.Inventory.Controller;
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryUnitsController(IInventorySetupService setup) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of units; <c>sort</c> is code, name, type, decimals, products, status or updated (default: by code),
+    /// <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Unit>>> GetUnits(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive,
+        [FromQuery, RegularExpression("^(code|name|type|decimals|products|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetUnitsAsync(OrganizationId, search, isActive, limit, offset, cancellationToken));
+        => Ok(await setup.GetUnitsAsync(OrganizationId, search, isActive, sort, direction == "desc", limit, offset, cancellationToken));
 
     [HttpGet("{unitId:int}")]
     public async Task<ActionResult<Unit>> GetUnit(int unitId, CancellationToken cancellationToken)
@@ -48,12 +54,18 @@ public sealed class InventoryUnitsController(IInventorySetupService setup) : Org
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryCategoriesController(IInventorySetupService setup) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of categories; <c>sort</c> is category (its path), code, sort, products, status or updated (default: tree
+    /// order), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Category>>> GetCategories(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive, [FromQuery] int? parentId,
+        [FromQuery, RegularExpression("^(category|code|sort|products|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetCategoriesAsync(OrganizationId, search, isActive, parentId, limit, offset, cancellationToken));
+        => Ok(await setup.GetCategoriesAsync(OrganizationId, search, isActive, parentId, sort, direction == "desc", limit, offset, cancellationToken));
 
     [HttpGet("{categoryId:int}")]
     public async Task<ActionResult<Category>> GetCategory(int categoryId, CancellationToken cancellationToken)
@@ -83,12 +95,17 @@ public sealed class InventoryCategoriesController(IInventorySetupService setup) 
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryBrandsController(IInventorySetupService setup) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of brands; <c>sort</c> is brand, products, status or updated (default: by name), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Brand>>> GetBrands(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive,
+        [FromQuery, RegularExpression("^(brand|products|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetBrandsAsync(OrganizationId, search, isActive, limit, offset, cancellationToken));
+        => Ok(await setup.GetBrandsAsync(OrganizationId, search, isActive, sort, direction == "desc", limit, offset, cancellationToken));
 
     [HttpGet("{brandId:int}")]
     public async Task<ActionResult<Brand>> GetBrand(int brandId, CancellationToken cancellationToken)
@@ -118,12 +135,19 @@ public sealed class InventoryBrandsController(IInventorySetupService setup) : Or
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryWarehousesController(IInventorySetupService setup) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of warehouses; <c>warehouseType</c> is Store or Warehouse (default: both); <c>sort</c> is code, name,
+    /// type, stock, status or updated (default: by name), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Warehouse>>> GetWarehouses(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive,
+        [FromQuery, RegularExpression("^(Store|Warehouse)$")] string? warehouseType = null,
+        [FromQuery, RegularExpression("^(code|name|type|stock|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetWarehousesAsync(OrganizationId, search, isActive, limit, offset, cancellationToken));
+        => Ok(await setup.GetWarehousesAsync(OrganizationId, search, isActive, warehouseType, sort, direction == "desc", limit, offset, cancellationToken));
 
     [HttpGet("{warehouseId:int}")]
     public async Task<ActionResult<Warehouse>> GetWarehouse(int warehouseId, CancellationToken cancellationToken)
@@ -153,10 +177,16 @@ public sealed class InventoryWarehousesController(IInventorySetupService setup) 
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryProductsController(IProductService products) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of products; <c>sort</c> is code, name, category, unit, tracking, stock, cost, price, status or
+    /// updated (default: by name), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Product>>> GetProducts(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive, [FromQuery] int? categoryId,
         [FromQuery] int? brandId, [FromQuery] string? productType,
+        [FromQuery, RegularExpression("^(code|name|category|unit|tracking|stock|cost|price|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
         => Ok(await products.GetProductsAsync(OrganizationId, new ProductQuery
@@ -166,6 +196,8 @@ public sealed class InventoryProductsController(IProductService products) : Orga
             CategoryId = categoryId,
             BrandId = brandId,
             ProductType = productType,
+            Sort = sort,
+            Descending = direction == "desc",
             Limit = limit,
             Offset = offset
         }, cancellationToken));

@@ -9,13 +9,15 @@ namespace ThinkTechErpRepository.Inventory;
 
 public interface IInventorySetupRepository
 {
-    Task<PagedResult<Unit>> GetUnitsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="sort">code, name, type, decimals, products, status or updated; null = by code (any letter case).</param>
+    Task<PagedResult<Unit>> GetUnitsAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Unit?> GetUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default);
     Task<int> CreateUnitAsync(int organizationId, UnitUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<bool> UpdateUnitAsync(int organizationId, int unitId, UnitUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default);
 
-    Task<PagedResult<Category>> GetCategoriesAsync(int organizationId, string? search, bool? isActive, int? parentId, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="sort">category, code, sort, products, status or updated; null = tree order (path, then sort order).</param>
+    Task<PagedResult<Category>> GetCategoriesAsync(int organizationId, string? search, bool? isActive, int? parentId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Category?> GetCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default);
     /// <summary>The category and every category below it.</summary>
     Task<IReadOnlyList<int>> GetCategoryTreeIdsAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default);
@@ -23,13 +25,16 @@ public interface IInventorySetupRepository
     Task<bool> UpdateCategoryAsync(int organizationId, int categoryId, CategoryUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default);
 
-    Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="sort">brand, products, status or updated; null = by name (any letter case).</param>
+    Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Brand?> GetBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default);
     Task<int> CreateBrandAsync(int organizationId, BrandUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<bool> UpdateBrandAsync(int organizationId, int brandId, BrandUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default);
 
-    Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="warehouseType">Store or Warehouse; null = both.</param>
+    /// <param name="sort">code, name, type, stock, status or updated; null = by name.</param>
+    Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, string? warehouseType, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Warehouse?> GetWarehouseAsync(int organizationId, int warehouseId, CancellationToken cancellationToken = default);
     Task<int> CreateWarehouseAsync(int organizationId, WarehouseUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<bool> UpdateWarehouseAsync(int organizationId, int warehouseId, WarehouseUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -62,13 +67,29 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
           AND (CAST(@IsActive AS boolean) IS NULL OR u.is_active = @IsActive)
         """;
 
-    public async Task<PagedResult<Unit>> GetUnitsAsync(
-        int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the unit list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> UnitSorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["code"] = "lower(u.unit_code)",
+        ["name"] = "lower(u.unit_name)",
+        ["type"] = "u.unit_type",
+        ["decimals"] = "u.allow_decimal",
+        ["products"] = "(SELECT count(*) FROM public.product p WHERE p.base_unit_id = u.unit_id)",
+        ["status"] = "u.is_active",
+        ["updated"] = "coalesce(u.updated_at, u.created_at)"
+    };
+
+    public async Task<PagedResult<Unit>> GetUnitsAsync(
+        int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        var order = sort is not null && UnitSorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(u.unit_code), u.unit_id"
+            : "lower(u.unit_code), u.unit_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Unit>(connection,
             $"SELECT count(*) FROM public.unit u {UnitFilter}",
-            $"{UnitSelect} {UnitFilter} ORDER BY u.unit_code, u.unit_id",
+            $"{UnitSelect} {UnitFilter} ORDER BY {order}",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
             limit, offset, cancellationToken);
     }
@@ -152,14 +173,28 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
           AND (CAST(@ParentId AS int) IS NULL OR c.parent_category_id = @ParentId)
         """;
 
+    // The columns the category list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> CategorySorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["category"] = "lower(coalesce(tree.path, c.category_name))",
+        ["code"] = "lower(c.category_code)",
+        ["sort"] = "c.sort_order",
+        ["products"] = "(SELECT count(*) FROM public.product p WHERE p.category_id = c.category_id)",
+        ["status"] = "c.is_active",
+        ["updated"] = "coalesce(c.updated_at, c.created_at)"
+    };
+
     public async Task<PagedResult<Category>> GetCategoriesAsync(
-        int organizationId, string? search, bool? isActive, int? parentId, int limit, int offset,
+        int organizationId, string? search, bool? isActive, int? parentId, string? sort, bool descending, int limit, int offset,
         CancellationToken cancellationToken = default)
     {
+        var order = sort is not null && CategorySorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")} NULLS LAST, lower(coalesce(tree.path, c.category_name)), c.category_id"
+            : "Path, c.sort_order, c.category_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Category>(connection,
             $"SELECT count(*) FROM public.category c {CategoryFilter}",
-            $"{CategoryTree} {CategorySelect} {CategoryFilter} ORDER BY Path, c.sort_order, c.category_id",
+            $"{CategoryTree} {CategorySelect} {CategoryFilter} ORDER BY {order}",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, ParentId = parentId },
             limit, offset, cancellationToken);
     }
@@ -234,12 +269,27 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
           AND (CAST(@IsActive AS boolean) IS NULL OR b.is_active = @IsActive)
         """;
 
-    public async Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the brand list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> BrandSorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["brand"] = "lower(b.brand_name)",
+        ["products"] = "(SELECT count(*) FROM public.product p WHERE p.brand_id = b.brand_id)",
+        ["status"] = "b.is_active",
+        ["updated"] = "coalesce(b.updated_at, b.created_at)"
+    };
+
+    public async Task<PagedResult<Brand>> GetBrandsAsync(
+        int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        // By name whatever the letter case ("Acer" between "ASUS" and "Anker", not after every capital).
+        var order = sort is not null && BrandSorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(b.brand_name), b.brand_id"
+            : "lower(b.brand_name), b.brand_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Brand>(connection,
             $"SELECT count(*) FROM public.brand b {BrandFilter}",
-            $"{BrandSelect} {BrandFilter} ORDER BY b.brand_name, b.brand_id",
+            $"{BrandSelect} {BrandFilter} ORDER BY {order}",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
             limit, offset, cancellationToken);
     }
@@ -304,13 +354,32 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
           AND (CAST(@IsActive AS boolean) IS NULL OR w.is_active = @IsActive)
         """;
 
-    public async Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the warehouse list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> WarehouseSorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["code"] = "lower(w.warehouse_code)",
+        ["name"] = "lower(w.warehouse_name)",
+        ["type"] = "w.warehouse_type",
+        ["stock"] = "StockValue",
+        ["status"] = "w.is_active",
+        ["updated"] = "coalesce(w.updated_at, w.created_at)"
+    };
+
+    // The list's own filter on top of WarehouseFilter (which the options query shares).
+    private const string WarehouseTypeFilter = "AND (CAST(@WarehouseType AS text) IS NULL OR w.warehouse_type = @WarehouseType)";
+
+    public async Task<PagedResult<Warehouse>> GetWarehousesAsync(
+        int organizationId, string? search, bool? isActive, string? warehouseType, string? sort, bool descending, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        var order = sort is not null && WarehouseSorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(w.warehouse_name), w.warehouse_id"
+            : "lower(w.warehouse_name), w.warehouse_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Warehouse>(connection,
-            $"SELECT count(*) FROM public.warehouse w {WarehouseFilter}",
-            $"{WarehouseSelect} {WarehouseFilter} ORDER BY w.warehouse_name, w.warehouse_id",
-            new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
+            $"SELECT count(*) FROM public.warehouse w {WarehouseFilter} {WarehouseTypeFilter}",
+            $"{WarehouseSelect} {WarehouseFilter} {WarehouseTypeFilter} ORDER BY {order}",
+            new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, WarehouseType = warehouseType },
             limit, offset, cancellationToken);
     }
 

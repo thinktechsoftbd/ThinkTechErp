@@ -8,26 +8,26 @@ namespace ThinkTechErpService.Inventory;
 
 public interface IInventorySetupService
 {
-    Task<PagedResult<Unit>> GetUnitsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<Unit>> GetUnitsAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Unit?> GetUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default);
     Task<Unit> CreateUnitAsync(int organizationId, UnitUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<Unit?> UpdateUnitAsync(int organizationId, int unitId, UnitUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default);
 
-    Task<PagedResult<Category>> GetCategoriesAsync(int organizationId, string? search, bool? isActive, int? parentId, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<Category>> GetCategoriesAsync(int organizationId, string? search, bool? isActive, int? parentId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Category?> GetCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default);
     Task<Category> CreateCategoryAsync(int organizationId, CategoryUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<Category?> UpdateCategoryAsync(int organizationId, int categoryId, CategoryUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<int>?> GetCategoryTreeIdsAsync(int organizationId, int? categoryId, CancellationToken cancellationToken = default);
 
-    Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Brand?> GetBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default);
     Task<Brand> CreateBrandAsync(int organizationId, BrandUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<Brand?> UpdateBrandAsync(int organizationId, int brandId, BrandUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default);
 
-    Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, string? warehouseType, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Warehouse?> GetWarehouseAsync(int organizationId, int warehouseId, CancellationToken cancellationToken = default);
     Task<Warehouse> CreateWarehouseAsync(int organizationId, WarehouseUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<Warehouse?> UpdateWarehouseAsync(int organizationId, int warehouseId, WarehouseUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -43,8 +43,8 @@ public sealed class InventorySetupService(IInventorySetupRepository repository) 
 {
     // ---- Units
 
-    public Task<PagedResult<Unit>> GetUnitsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetUnitsAsync(organizationId, Text.Clean(search), isActive, limit, offset, cancellationToken);
+    public Task<PagedResult<Unit>> GetUnitsAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetUnitsAsync(organizationId, Text.Clean(search), isActive, sort, descending, limit, offset, cancellationToken);
 
     public Task<Unit?> GetUnitAsync(int organizationId, int unitId, CancellationToken cancellationToken = default)
         => repository.GetUnitAsync(organizationId, unitId, cancellationToken);
@@ -79,8 +79,8 @@ public sealed class InventorySetupService(IInventorySetupRepository repository) 
 
     // ---- Categories
 
-    public Task<PagedResult<Category>> GetCategoriesAsync(int organizationId, string? search, bool? isActive, int? parentId, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetCategoriesAsync(organizationId, Text.Clean(search), isActive, parentId, limit, offset, cancellationToken);
+    public Task<PagedResult<Category>> GetCategoriesAsync(int organizationId, string? search, bool? isActive, int? parentId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetCategoriesAsync(organizationId, Text.Clean(search), isActive, parentId, sort, descending, limit, offset, cancellationToken);
 
     public Task<Category?> GetCategoryAsync(int organizationId, int categoryId, CancellationToken cancellationToken = default)
         => repository.GetCategoryAsync(organizationId, categoryId, cancellationToken);
@@ -123,8 +123,8 @@ public sealed class InventorySetupService(IInventorySetupRepository repository) 
 
     // ---- Brands
 
-    public Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetBrandsAsync(organizationId, Text.Clean(search), isActive, limit, offset, cancellationToken);
+    public Task<PagedResult<Brand>> GetBrandsAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetBrandsAsync(organizationId, Text.Clean(search), isActive, sort, descending, limit, offset, cancellationToken);
 
     public Task<Brand?> GetBrandAsync(int organizationId, int brandId, CancellationToken cancellationToken = default)
         => repository.GetBrandAsync(organizationId, brandId, cancellationToken);
@@ -155,8 +155,8 @@ public sealed class InventorySetupService(IInventorySetupRepository repository) 
 
     // ---- Warehouses
 
-    public Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetWarehousesAsync(organizationId, Text.Clean(search), isActive, limit, offset, cancellationToken);
+    public Task<PagedResult<Warehouse>> GetWarehousesAsync(int organizationId, string? search, bool? isActive, string? warehouseType, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetWarehousesAsync(organizationId, Text.Clean(search), isActive, warehouseType, sort, descending, limit, offset, cancellationToken);
 
     public Task<Warehouse?> GetWarehouseAsync(int organizationId, int warehouseId, CancellationToken cancellationToken = default)
         => repository.GetWarehouseAsync(organizationId, warehouseId, cancellationToken);

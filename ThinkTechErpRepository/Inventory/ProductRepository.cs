@@ -56,6 +56,9 @@ public sealed class ProductQuery
     public int? CategoryId { get; set; }
     public int? BrandId { get; set; }
     public string? ProductType { get; set; }
+    /// <summary>code, name, category, unit, tracking, stock, cost, price, status or updated; null = by name.</summary>
+    public string? Sort { get; set; }
+    public bool Descending { get; set; }
     public int Limit { get; set; } = 20;
     public int Offset { get; set; }
 }
@@ -119,12 +122,30 @@ public sealed class ProductRepository(IDbConnectionFactory connectionFactory) : 
           AND (CAST(@ProductType AS text) IS NULL OR p.product_type = @ProductType)
         """;
 
+    // The columns the product list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> ProductSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["code"] = "lower(p.product_code)",
+        ["name"] = "lower(p.product_name)",
+        ["category"] = "lower(c.category_name)",
+        ["unit"] = "lower(u.unit_code)",
+        ["tracking"] = "p.tracking_type",
+        ["stock"] = "StockQuantity",
+        ["cost"] = "p.last_purchase_cost",
+        ["price"] = "p.sale_price",
+        ["status"] = "p.is_active",
+        ["updated"] = "coalesce(p.updated_at, p.created_at)"
+    };
+
     public async Task<PagedResult<Product>> GetProductsAsync(int organizationId, ProductQuery query, CancellationToken cancellationToken = default)
     {
+        var order = query.Sort is not null && ProductSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, lower(p.product_name), p.product_id"
+            : "lower(p.product_name), p.product_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Product>(connection,
             $"SELECT count(*) FROM public.product p {ProductFilter}",
-            $"{ProductSelect} {ProductFilter} ORDER BY p.product_name, p.product_id",
+            $"{ProductSelect} {ProductFilter} ORDER BY {order}",
             new
             {
                 Org = organizationId,
