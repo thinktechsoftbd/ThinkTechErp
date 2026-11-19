@@ -10,7 +10,8 @@ namespace ThinkTechErpRepository.Warranty;
 
 public interface IWarrantySetupRepository
 {
-    Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="sort">name, period, products, status or updated; null = period, then name.</param>
+    Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<WarrantyPolicy?> GetPolicyAsync(int organizationId, int id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<WarrantyPolicyOption>> GetPolicyOptionsAsync(int organizationId, bool includeInactive, CancellationToken cancellationToken = default);
     Task<int> CreatePolicyAsync(int organizationId, WarrantyPolicyUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -47,13 +48,27 @@ public sealed class WarrantySetupRepository(IDbConnectionFactory connectionFacto
           AND (CAST(@IsActive AS boolean) IS NULL OR p.is_active = @IsActive)
         """;
 
-    public async Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(
-        int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the policy list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> PolicySorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["name"] = "lower(p.policy_name)",
+        ["period"] = "p.warranty_months",
+        ["products"] = "(SELECT count(*) FROM public.product pr WHERE pr.warranty_policy_id = p.warranty_policy_id)",
+        ["status"] = "p.is_active",
+        ["updated"] = "coalesce(p.updated_at, p.created_at)"
+    };
+
+    public async Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(
+        int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        var order = sort is not null && PolicySorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(p.policy_name), p.warranty_policy_id"
+            : "p.warranty_months, p.policy_name";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<WarrantyPolicy>(connection,
             $"SELECT count(*) FROM public.warranty_policy p {PolicyFilter}",
-            $"{PolicySelect} {PolicyFilter} ORDER BY p.warranty_months, p.policy_name",
+            $"{PolicySelect} {PolicyFilter} ORDER BY {order}",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive },
             limit, offset, cancellationToken);
     }

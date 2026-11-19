@@ -19,8 +19,7 @@ public sealed class SecurityUserService(
     public async Task<SecurityUser> CreateUserAsync(UserCreateRequest request, CancellationToken cancellationToken = default)
     {
         PasswordPolicy.Validate(request.Password);
-        request.Name = request.Name.Trim();
-        request.Email = request.Email.Trim();
+        Normalize(request);
         if (await users.EmailExistsAsync(request.Email, null, cancellationToken))
             throw new SecurityConflictException("A user with this email already exists.");
 
@@ -35,21 +34,58 @@ public sealed class SecurityUserService(
     {
         if (userId == actingUserId && request.Status != UserStatuses.Active)
             throw new SecurityValidationException("You cannot deactivate your own account.");
+        if (userId == actingUserId && request.IsLocked)
+            throw new SecurityValidationException("You cannot lock your own account.");
 
-        request.Name = request.Name.Trim();
-        request.Email = request.Email.Trim();
+        Normalize(request);
         if (await users.EmailExistsAsync(request.Email, userId, cancellationToken))
             throw new SecurityConflictException("A user with this email already exists.");
 
         if (!await SecurityDbErrors.ExecuteAsync(() => users.UpdateUserAsync(userId, request, cancellationToken)))
             return null;
 
-        // A deactivated user can't refresh any more; their access token lapses within minutes.
-        // The user is already saved as inactive, so finish the revocation even if the caller hangs up.
-        if (request.Status == UserStatuses.Inactive)
+        // A deactivated or locked user can't refresh any more; their access token lapses within minutes.
+        // The user is already saved, so finish the revocation even if the caller hangs up.
+        if (request.Status == UserStatuses.Inactive || request.IsLocked)
             await tokens.RevokeAllRefreshTokensAsync(userId, CancellationToken.None);
 
         return await users.GetUserAsync(userId, cancellationToken);
+    }
+
+    public async Task<SecurityUser?> SetStatusAsync(
+        int userId, string status, int actingUserId, CancellationToken cancellationToken = default)
+    {
+        if (userId == actingUserId && status != UserStatuses.Active)
+            throw new SecurityValidationException("You cannot deactivate your own account.");
+
+        if (!await users.UpdateStatusAsync(userId, status, cancellationToken))
+            return null;
+
+        // Like a profile save: an inactive user's sessions end even if the caller hangs up.
+        if (status == UserStatuses.Inactive)
+            await tokens.RevokeAllRefreshTokensAsync(userId, CancellationToken.None);
+
+        return await users.GetUserAsync(userId, cancellationToken);
+    }
+
+    /// <summary>Trims the fields, empties blank optional ones, and fills the full name from first and last name.</summary>
+    private static void Normalize(UserProfileRequest request)
+    {
+        static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        request.Name = request.Name.Trim();
+        request.LastName = Clean(request.LastName);
+        request.Email = request.Email.Trim();
+        request.CellphoneNo = request.CellphoneNo.Trim();
+        if (request.CellphoneNo.Length == 0)
+            throw new SecurityValidationException("Enter the phone number.");
+        request.PhotoUrl = Clean(request.PhotoUrl);
+        request.AddressLine1 = Clean(request.AddressLine1);
+        request.AddressLine2 = Clean(request.AddressLine2);
+        request.ShortBio = Clean(request.ShortBio);
+        request.FullName = Clean(request.FullName) ?? string.Join(' ', new[] { request.Name, request.LastName }.Where(part => part is not null));
+        if (request.FullName.Length > 300)
+            request.FullName = request.FullName[..300];
     }
 
     public async Task<bool> SetPasswordAsync(int userId, string newPassword, CancellationToken cancellationToken = default)

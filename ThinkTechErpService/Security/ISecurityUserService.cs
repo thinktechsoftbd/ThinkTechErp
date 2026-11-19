@@ -8,6 +8,9 @@ public interface ISecurityUserService
     Task<SecurityUser?> GetUserAsync(int userId, CancellationToken cancellationToken = default);
     Task<SecurityUser> CreateUserAsync(UserCreateRequest request, CancellationToken cancellationToken = default);
     Task<SecurityUser?> UpdateUserAsync(int userId, UserUpdateRequest request, int actingUserId, CancellationToken cancellationToken = default);
+
+    /// <returns>The user, or null when there is none with that id.</returns>
+    Task<SecurityUser?> SetStatusAsync(int userId, string status, int actingUserId, CancellationToken cancellationToken = default);
     Task<bool> SetPasswordAsync(int userId, string newPassword, CancellationToken cancellationToken = default);
     Task<UserPermissionSet?> GetPermissionsAsync(int userId, CancellationToken cancellationToken = default);
     Task<UserPermissionSet?> SetPermissionsAsync(int userId, int[] permissionIds, CancellationToken cancellationToken = default);

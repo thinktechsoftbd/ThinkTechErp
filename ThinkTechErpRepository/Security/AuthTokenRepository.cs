@@ -112,7 +112,7 @@ public sealed class AuthTokenRepository(IDbConnectionFactory connectionFactory) 
 
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public."User"
-            SET "passwordHash" = @PasswordHash, "updatedAt" = {SecurityDb.NowUtc}
+            SET "passwordHash" = @PasswordHash, "updatedAt" = {SecurityDb.NowUtc}, password_changed_at = now()
             WHERE id = @UserId AND status = 'ACTIVE'
             """, new { UserId = userId, PasswordHash = newPasswordHash }, transaction, cancellationToken: cancellationToken));
         if (updated == 0)

@@ -7,6 +7,8 @@ public static class SecurityRules
     public const string EmailPattern = @"^[^\s@]+@[^\s@]+\.[^\s@]+$";
     public const string PermissionCodePattern = @"^[A-Z][A-Z0-9_]*(\.[A-Z0-9_]+)*$";
     public const string UserStatusPattern = "^(ACTIVE|INACTIVE)$";
+    /// <summary>A phone number: an optional +, then 6–20 digits, spaces, hyphens or brackets.</summary>
+    public const string PhonePattern = @"^\+?[0-9][0-9 ()-]{5,19}$";
     public const int MinPasswordLength = 8;
 
     /// <summary>bcrypt only reads the first 72 bytes, so longer passwords are rejected instead of silently truncated.</summary>
@@ -110,6 +112,12 @@ public sealed class SecurityUserCredentials
     public string? PhotoUrl { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     public string Status { get; set; } = UserStatuses.Active;
+
+    /// <summary>A locked user can't sign in or refresh, whatever the status.</summary>
+    public bool IsLocked { get; set; }
+
+    /// <summary>Active and not locked: allowed to sign in.</summary>
+    public bool CanSignIn => Status == UserStatuses.Active && !IsLocked;
 }
 
 public sealed class UserAccess
@@ -155,51 +163,89 @@ public sealed class RoleSummary
 public sealed class SecurityUser
 {
     public int Id { get; set; }
+    /// <summary>The first name (column "name").</summary>
     public string Name { get; set; } = string.Empty;
+    public string? LastName { get; set; }
+    /// <summary>As shown on documents; first and last name when not set.</summary>
+    public string? FullName { get; set; }
     public string Email { get; set; } = string.Empty;
+    public string? CellphoneNo { get; set; }
     public string? PhotoUrl { get; set; }
+    public string? AddressLine1 { get; set; }
+    public string? AddressLine2 { get; set; }
+    public string? ShortBio { get; set; }
     public string Status { get; set; } = UserStatuses.Active;
+    public bool IsEmailVerified { get; set; }
+    public bool IsPhoneVerified { get; set; }
+    public bool IsLocked { get; set; }
+    public DateTime? LastLoginAt { get; set; }
+    public DateTime? PasswordChangedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public RoleSummary[] Roles { get; set; } = [];
 }
 
-public sealed class UserCreateRequest
+/// <summary>The profile fields a user is created and edited with.</summary>
+public abstract class UserProfileRequest
 {
+    /// <summary>The first name.</summary>
     [Required, StringLength(200, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;
+
+    [StringLength(150)]
+    public string? LastName { get; set; }
+
+    /// <summary>Empty = first and last name.</summary>
+    [StringLength(300)]
+    public string? FullName { get; set; }
 
     [Required, StringLength(256), RegularExpression(SecurityRules.EmailPattern, ErrorMessage = "Enter a valid email address.")]
     public string Email { get; set; } = string.Empty;
 
-    [Required, StringLength(256, MinimumLength = SecurityRules.MinPasswordLength)]
-    public string Password { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Enter the phone number."), StringLength(20),
+     RegularExpression(SecurityRules.PhonePattern, ErrorMessage = "Enter a valid phone number, e.g. 01711-000000 or +8801711000000.")]
+    public string CellphoneNo { get; set; } = string.Empty;
 
     [StringLength(500)]
     public string? PhotoUrl { get; set; }
 
+    [StringLength(255)]
+    public string? AddressLine1 { get; set; }
+
+    [StringLength(255)]
+    public string? AddressLine2 { get; set; }
+
+    [StringLength(500)]
+    public string? ShortBio { get; set; }
+
     [Required, RegularExpression(SecurityRules.UserStatusPattern, ErrorMessage = "Status must be ACTIVE or INACTIVE.")]
     public string Status { get; set; } = UserStatuses.Active;
+
+    public bool IsEmailVerified { get; set; }
+    public bool IsPhoneVerified { get; set; }
+
+    /// <summary>Locked users can't sign in (their sessions end), whatever the status.</summary>
+    public bool IsLocked { get; set; }
+}
+
+public sealed class UserCreateRequest : UserProfileRequest
+{
+    [Required, StringLength(256, MinimumLength = SecurityRules.MinPasswordLength)]
+    public string Password { get; set; } = string.Empty;
 
     public int[] RoleIds { get; set; } = [];
 }
 
-public sealed class UserUpdateRequest
+public sealed class UserUpdateRequest : UserProfileRequest
 {
-    [Required, StringLength(200, MinimumLength = 1)]
-    public string Name { get; set; } = string.Empty;
-
-    [Required, StringLength(256), RegularExpression(SecurityRules.EmailPattern, ErrorMessage = "Enter a valid email address.")]
-    public string Email { get; set; } = string.Empty;
-
-    [StringLength(500)]
-    public string? PhotoUrl { get; set; }
-
-    [Required, RegularExpression(SecurityRules.UserStatusPattern, ErrorMessage = "Status must be ACTIVE or INACTIVE.")]
-    public string Status { get; set; } = UserStatuses.Active;
-
     /// <summary>Null keeps the current roles; an array (even empty) replaces them.</summary>
     public int[]? RoleIds { get; set; }
+}
+
+public sealed class SetUserStatusRequest
+{
+    [Required, RegularExpression(SecurityRules.UserStatusPattern, ErrorMessage = "Status must be ACTIVE or INACTIVE.")]
+    public string Status { get; set; } = UserStatuses.Active;
 }
 
 public sealed class SetPasswordRequest
@@ -305,7 +351,8 @@ public sealed class SecurityMenu
     public string? Icon { get; set; }
     public int SortOrder { get; set; }
     public int? ParentId { get; set; }
-    public int? RoleId { get; set; }
+    /// <summary>The roles that see the menu (public."MenuRole", plus the legacy "roleId"); empty = everyone.</summary>
+    public int[] RoleIds { get; set; } = [];
     public bool IsActive { get; set; }
 }
 
@@ -326,9 +373,15 @@ public sealed class MenuUpsertRequest
     [Range(1, int.MaxValue)]
     public int? ParentId { get; set; }
 
-    /// <summary>Limits the menu to one role; null shows it to every signed-in user.</summary>
+    /// <summary>The roles that see the menu; empty shows it to every signed-in user.</summary>
+    public int[] RoleIds { get; set; } = [];
+
+    /// <summary>Older clients: one role, added to <see cref="RoleIds"/>.</summary>
     [Range(1, int.MaxValue)]
     public int? RoleId { get; set; }
+
+    /// <summary>RoleIds and RoleId together, each once.</summary>
+    public int[] AllRoleIds() => RoleIds.Append(RoleId ?? 0).Where(id => id > 0).Distinct().Order().ToArray();
 
     public bool IsActive { get; set; } = true;
 }

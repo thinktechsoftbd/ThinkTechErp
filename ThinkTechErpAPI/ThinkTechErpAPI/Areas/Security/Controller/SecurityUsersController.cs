@@ -63,6 +63,24 @@ public sealed class SecurityUsersController(ISecurityUserService userService) : 
         return user is null ? NotFound() : Ok(user);
     }
 
+    /// <summary>Activates or deactivates a user without touching the rest of the profile (the users list's toggle).</summary>
+    [HttpPut("{userId:int}/status")]
+    [Authorize(Policy = SecurityPolicies.Manage)]
+    [ProducesResponseType(typeof(SecurityUser), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SecurityUser>> SetStatus(
+        int userId,
+        [FromBody] SetUserStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!User.TryGetUserId(out var actingUserId))
+            return Unauthorized();
+
+        var user = await userService.SetStatusAsync(userId, request.Status, actingUserId, cancellationToken);
+        return user is null ? NotFound() : Ok(user);
+    }
+
     [HttpPut("{userId:int}/password")]
     [Authorize(Policy = SecurityPolicies.Manage)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

@@ -13,23 +13,36 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
                email AS Email,
                "photoUrl" AS PhotoUrl,
                "passwordHash" AS PasswordHash,
-               status::text AS Status
+               status::text AS Status,
+               is_locked AS IsLocked
         FROM public."User"
         """;
 
     private const string UserSelect = """
         SELECT u.id AS Id,
                u.name AS Name,
+               u.last_name AS LastName,
+               u.full_name AS FullName,
                u.email AS Email,
+               u.cellphone_no AS CellphoneNo,
                u."photoUrl" AS PhotoUrl,
+               u.address_line1 AS AddressLine1,
+               u.address_line2 AS AddressLine2,
+               u.short_bio AS ShortBio,
                u.status::text AS Status,
+               u.is_email_verified AS IsEmailVerified,
+               u.is_phone_verified AS IsPhoneVerified,
+               u.is_locked AS IsLocked,
+               u.last_login_at AT TIME ZONE 'utc' AS LastLoginAt,
+               u.password_changed_at AT TIME ZONE 'utc' AS PasswordChangedAt,
                u."createdAt" AT TIME ZONE 'utc' AS CreatedAt,
                u."updatedAt" AT TIME ZONE 'utc' AS UpdatedAt
         FROM public."User" u
         """;
 
     private const string UserFilter = """
-        WHERE (CAST(@Pattern AS text) IS NULL OR u.name ILIKE @Pattern OR u.email ILIKE @Pattern)
+        WHERE (CAST(@Pattern AS text) IS NULL OR u.name ILIKE @Pattern OR u.email ILIKE @Pattern
+               OR u.last_name ILIKE @Pattern OR u.full_name ILIKE @Pattern OR u.cellphone_no ILIKE @Pattern)
           AND (CAST(@Status AS text) IS NULL OR u.status::text = @Status)
         """;
 
@@ -89,7 +102,7 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         int userId, CancellationToken cancellationToken = default)
     {
         // A per-user UserMenu row decides visibility when present; otherwise the menu is shown
-        // when it has no role or the user holds that role.
+        // when it has no role or the user holds one of its roles.
         await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<MenuNode>(new CommandDefinition("""
             SELECT m.id AS Id,
@@ -106,8 +119,12 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
             WHERE m."isActive"
               AND CASE
                       WHEN um."userId" IS NOT NULL THEN um."canView"
-                      ELSE m."roleId" IS NULL
+                      -- No role (neither MenuRole rows nor the legacy roleId): everyone. Else any of its roles.
+                      ELSE (m."roleId" IS NULL AND NOT EXISTS (SELECT 1 FROM public."MenuRole" mr WHERE mr."menuId" = m.id))
                            OR m."roleId" IN (SELECT ur."roleId" FROM public."UserRole" ur WHERE ur."userId" = @UserId)
+                           OR EXISTS (SELECT 1 FROM public."MenuRole" mr
+                                      JOIN public."UserRole" ur ON ur."roleId" = mr."roleId"
+                                      WHERE mr."menuId" = m.id AND ur."userId" = @UserId)
                   END
             ORDER BY m."sortOrder", m.id
             """, new { UserId = userId }, cancellationToken: cancellationToken));
@@ -120,9 +137,17 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         await using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public."User"
-            SET "passwordHash" = @PasswordHash, "updatedAt" = {SecurityDb.NowUtc}
+            SET "passwordHash" = @PasswordHash, "updatedAt" = {SecurityDb.NowUtc}, password_changed_at = now()
             WHERE id = @UserId
             """, new { UserId = userId, PasswordHash = passwordHash }, cancellationToken: cancellationToken)) > 0;
+    }
+
+    public async Task TouchLastLoginAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(new CommandDefinition(
+            """UPDATE public."User" SET last_login_at = now() WHERE id = @UserId""",
+            new { UserId = userId }, cancellationToken: cancellationToken));
     }
 
     public async Task<PagedResult<SecurityUser>> GetUsersAsync(
@@ -182,11 +207,20 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var userId = await connection.QuerySingleAsync<int>(new CommandDefinition($"""
-            INSERT INTO public."User" (name, email, "passwordHash", "photoUrl", status, "createdAt", "updatedAt")
-            VALUES (@Name, @Email, @PasswordHash, @PhotoUrl, CAST(@Status AS public."UserStatus"),
+            INSERT INTO public."User"
+                (name, last_name, full_name, email, cellphone_no, "passwordHash", "photoUrl", address_line1, address_line2,
+                 short_bio, status, is_email_verified, is_phone_verified, is_locked, password_changed_at,
+                 "createdAt", "updatedAt")
+            VALUES (@Name, @LastName, @FullName, @Email, @CellphoneNo, @PasswordHash, @PhotoUrl, @AddressLine1, @AddressLine2,
+                    @ShortBio, CAST(@Status AS public."UserStatus"), @IsEmailVerified, @IsPhoneVerified, @IsLocked, now(),
                     {SecurityDb.NowUtc}, {SecurityDb.NowUtc})
             RETURNING id
-            """, new { request.Name, request.Email, PasswordHash = passwordHash, request.PhotoUrl, request.Status },
+            """, new
+            {
+                request.Name, request.LastName, request.FullName, request.Email, request.CellphoneNo,
+                PasswordHash = passwordHash, request.PhotoUrl, request.AddressLine1, request.AddressLine2, request.ShortBio,
+                request.Status, request.IsEmailVerified, request.IsPhoneVerified, request.IsLocked
+            },
             transaction, cancellationToken: cancellationToken));
         await ReplaceRolesAsync(connection, transaction, userId, request.RoleIds, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -202,12 +236,26 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
         var updated = await connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public."User"
             SET name = @Name,
+                last_name = @LastName,
+                full_name = @FullName,
                 email = @Email,
+                cellphone_no = @CellphoneNo,
                 "photoUrl" = @PhotoUrl,
+                address_line1 = @AddressLine1,
+                address_line2 = @AddressLine2,
+                short_bio = @ShortBio,
                 status = CAST(@Status AS public."UserStatus"),
+                is_email_verified = @IsEmailVerified,
+                is_phone_verified = @IsPhoneVerified,
+                is_locked = @IsLocked,
                 "updatedAt" = {SecurityDb.NowUtc}
             WHERE id = @UserId
-            """, new { UserId = userId, request.Name, request.Email, request.PhotoUrl, request.Status },
+            """, new
+            {
+                UserId = userId, request.Name, request.LastName, request.FullName, request.Email, request.CellphoneNo,
+                request.PhotoUrl, request.AddressLine1, request.AddressLine2, request.ShortBio, request.Status,
+                request.IsEmailVerified, request.IsPhoneVerified, request.IsLocked
+            },
             transaction, cancellationToken: cancellationToken));
         if (updated == 0)
             return false;
@@ -217,6 +265,16 @@ public sealed class SecurityUserRepository(IDbConnectionFactory connectionFactor
 
         await transaction.CommitAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<bool> UpdateStatusAsync(int userId, string status, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE public."User"
+            SET status = CAST(@Status AS public."UserStatus"), "updatedAt" = {SecurityDb.NowUtc}
+            WHERE id = @UserId
+            """, new { UserId = userId, Status = status }, cancellationToken: cancellationToken)) > 0;
     }
 
     public async Task<UserPermissionSet?> GetUserPermissionsAsync(

@@ -28,6 +28,8 @@ public sealed class SecurityAuthController(IAuthService authService) : Controlle
         {
             LoginStatus.Succeeded => Ok(result.Response),
             LoginStatus.Inactive => StatusCode(StatusCodes.Status403Forbidden, new { error = "This account is inactive." }),
+            LoginStatus.Locked => StatusCode(StatusCodes.Status403Forbidden,
+                new { error = "This account is locked. Contact your administrator." }),
             _ => Unauthorized(new { error = "Invalid email or password." })
         };
     }

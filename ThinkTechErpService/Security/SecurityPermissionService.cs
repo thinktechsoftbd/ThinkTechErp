@@ -8,6 +8,11 @@ public sealed class SecurityPermissionService(ISecurityPermissionRepository perm
     public Task<IReadOnlyList<SecurityPermission>> GetPermissionsAsync(CancellationToken cancellationToken = default)
         => permissions.GetPermissionsAsync(cancellationToken);
 
+    public Task<PagedResult<SecurityPermission>> SearchPermissionsAsync(
+        string? search, string sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => permissions.SearchPermissionsAsync(
+            string.IsNullOrWhiteSpace(search) ? null : search.Trim(), sort, descending, limit, offset, cancellationToken);
+
     public Task<SecurityPermission?> GetPermissionAsync(int permissionId, CancellationToken cancellationToken = default)
         => permissions.GetPermissionAsync(permissionId, cancellationToken);
 

@@ -22,6 +22,35 @@ public sealed class SecurityPermissionRepository(IDbConnectionFactory connection
         return rows.AsList();
     }
 
+    // The columns a page may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> SortColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["code"] = "code",
+        ["name"] = "name",
+        ["description"] = "description"
+    };
+
+    public async Task<PagedResult<SecurityPermission>> SearchPermissionsAsync(
+        string? search, string sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        var column = SortColumns.GetValueOrDefault(sort, "code");
+        var direction = descending ? "DESC" : "ASC";
+        const string filter = """
+            WHERE CAST(@Pattern AS text) IS NULL OR code ILIKE @Pattern OR name ILIKE @Pattern
+            """;
+        await using var connection = connectionFactory.CreateConnection();
+        await using var results = await connection.QueryMultipleAsync(new CommandDefinition($"""
+            SELECT count(*) FROM public."Permission" {filter};
+            {PermissionSelect} {filter}
+            ORDER BY {column} {direction} NULLS LAST, id
+            LIMIT @Limit OFFSET @Offset;
+            """, new { Pattern = search is null ? null : SecurityDb.ContainsPattern(search), Limit = limit, Offset = offset },
+            cancellationToken: cancellationToken));
+        var total = await results.ReadSingleAsync<long>();
+        var items = (await results.ReadAsync<SecurityPermission>()).AsList();
+        return new PagedResult<SecurityPermission> { Items = items, TotalCount = (int)total, Limit = limit, Offset = offset };
+    }
+
     public async Task<SecurityPermission?> GetPermissionAsync(int permissionId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();

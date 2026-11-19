@@ -12,7 +12,7 @@ namespace ThinkTechErpService.Warranty;
 
 public interface IWarrantySetupService
 {
-    Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<WarrantyPolicy?> GetPolicyAsync(int organizationId, int id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<WarrantyPolicyOption>> GetPolicyOptionsAsync(int organizationId, bool includeInactive, CancellationToken cancellationToken = default);
     Task<WarrantyPolicy> CreatePolicyAsync(int organizationId, WarrantyPolicyUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -34,8 +34,8 @@ public sealed class WarrantySetupService(
     ISalesSetupService salesSetup,
     IPurchaseSetupService purchaseSetup) : IWarrantySetupService
 {
-    public Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(int organizationId, string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetPoliciesAsync(organizationId, Text.Clean(search), isActive, limit, offset, cancellationToken);
+    public Task<PagedResult<WarrantyPolicy>> GetPoliciesAsync(int organizationId, string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetPoliciesAsync(organizationId, Text.Clean(search), isActive, sort, descending, limit, offset, cancellationToken);
 
     public Task<WarrantyPolicy?> GetPolicyAsync(int organizationId, int id, CancellationToken cancellationToken = default)
         => repository.GetPolicyAsync(organizationId, id, cancellationToken);

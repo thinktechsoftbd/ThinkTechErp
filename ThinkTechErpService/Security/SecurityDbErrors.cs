@@ -8,6 +8,7 @@ internal static class SecurityDbErrors
     {
         ["User_email_key"] = "A user with this email already exists.",
         ["Role_name_key"] = "A role with this name already exists.",
+        ["MenuRole_roleId_fkey"] = "One of the chosen roles doesn't exist any more. Reload and choose again.",
         ["Permission_code_key"] = "A permission with this code already exists.",
         ["organization_organization_code_key"] = "An organization with this code already exists.",
         ["ux_organization_object_id"] = "Another organization already uses this Organization Id.",

@@ -6,7 +6,9 @@ public enum LoginStatus
 {
     Succeeded,
     InvalidCredentials,
-    Inactive
+    Inactive,
+    /// <summary>The password was right but the account is locked (User.is_locked).</summary>
+    Locked
 }
 
 public sealed record LoginResult(LoginStatus Status, AuthResponse? Response = null);

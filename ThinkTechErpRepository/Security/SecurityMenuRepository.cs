@@ -6,23 +6,27 @@ namespace ThinkTechErpRepository.Security;
 
 public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactory) : ISecurityMenuRepository
 {
+    // A menu's roles: its MenuRole rows plus the legacy single "roleId" (set by older scripts), each once.
     private const string MenuSelect = """
-        SELECT id AS Id,
-               title AS Title,
-               path AS Path,
-               icon AS Icon,
-               "sortOrder" AS SortOrder,
-               "parentId" AS ParentId,
-               "roleId" AS RoleId,
-               "isActive" AS IsActive
-        FROM public."Menu"
+        SELECT m.id AS Id,
+               m.title AS Title,
+               m.path AS Path,
+               m.icon AS Icon,
+               m."sortOrder" AS SortOrder,
+               m."parentId" AS ParentId,
+               ARRAY(SELECT mr."roleId" FROM public."MenuRole" mr WHERE mr."menuId" = m.id
+                     UNION
+                     SELECT m."roleId" WHERE m."roleId" IS NOT NULL
+                     ORDER BY 1) AS RoleIds,
+               m."isActive" AS IsActive
+        FROM public."Menu" m
         """;
 
     public async Task<IReadOnlyList<SecurityMenu>> GetMenusAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
         var rows = await connection.QueryAsync<SecurityMenu>(new CommandDefinition(
-            $"""{MenuSelect} ORDER BY "parentId" NULLS FIRST, "sortOrder", id""",
+            $"""{MenuSelect} ORDER BY m."parentId" NULLS FIRST, m."sortOrder", m.id""",
             cancellationToken: cancellationToken));
         return rows.AsList();
     }
@@ -31,30 +35,38 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SecurityMenu>(new CommandDefinition(
-            $"{MenuSelect} WHERE id = @MenuId", new { MenuId = menuId }, cancellationToken: cancellationToken));
+            $"{MenuSelect} WHERE m.id = @MenuId", new { MenuId = menuId }, cancellationToken: cancellationToken));
     }
 
+    // The legacy "roleId" is cleared on save: the menu's roles then live in MenuRole only.
     public async Task<int> CreateMenuAsync(MenuUpsertRequest request, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
-        return await connection.QuerySingleAsync<int>(new CommandDefinition("""
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var menuId = await connection.QuerySingleAsync<int>(new CommandDefinition("""
             INSERT INTO public."Menu" (title, path, icon, "sortOrder", "parentId", "roleId", "isActive")
-            VALUES (@Title, @Path, @Icon, @SortOrder, @ParentId, @RoleId, @IsActive)
+            VALUES (@Title, @Path, @Icon, @SortOrder, @ParentId, NULL, @IsActive)
             RETURNING id
-            """, request, cancellationToken: cancellationToken));
+            """, request, transaction, cancellationToken: cancellationToken));
+        await ReplaceRolesAsync(connection, transaction, menuId, request.AllRoleIds(), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return menuId;
     }
 
     public async Task<bool> UpdateMenuAsync(int menuId, MenuUpsertRequest request, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteAsync(new CommandDefinition("""
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var updated = await connection.ExecuteAsync(new CommandDefinition("""
             UPDATE public."Menu"
             SET title = @Title,
                 path = @Path,
                 icon = @Icon,
                 "sortOrder" = @SortOrder,
                 "parentId" = @ParentId,
-                "roleId" = @RoleId,
+                "roleId" = NULL,
                 "isActive" = @IsActive
             WHERE id = @MenuId
             """, new
@@ -65,10 +77,24 @@ public sealed class SecurityMenuRepository(IDbConnectionFactory connectionFactor
                 request.Icon,
                 request.SortOrder,
                 request.ParentId,
-                request.RoleId,
                 request.IsActive
-            }, cancellationToken: cancellationToken)) > 0;
+            }, transaction, cancellationToken: cancellationToken));
+        if (updated == 0)
+            return false;
+
+        await ReplaceRolesAsync(connection, transaction, menuId, request.AllRoleIds(), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
+
+    private static Task ReplaceRolesAsync(
+        System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction transaction, int menuId, int[] roleIds,
+        CancellationToken cancellationToken)
+        => connection.ExecuteAsync(new CommandDefinition("""
+            DELETE FROM public."MenuRole" WHERE "menuId" = @MenuId;
+            INSERT INTO public."MenuRole" ("menuId", "roleId")
+            SELECT @MenuId, role_id FROM unnest(@RoleIds) AS role_id;
+            """, new { MenuId = menuId, RoleIds = roleIds }, transaction, cancellationToken: cancellationToken));
 
     public async Task<DeleteOutcome> DeleteMenuAsync(int menuId, CancellationToken cancellationToken = default)
     {

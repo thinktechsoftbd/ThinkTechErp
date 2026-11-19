@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ThinkTechErpAPI.Security;
@@ -16,6 +17,21 @@ public sealed class SecurityPermissionsController(ISecurityPermissionService per
     [ProducesResponseType(typeof(IReadOnlyList<SecurityPermission>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SecurityPermission>>> GetPermissions(CancellationToken cancellationToken)
         => Ok(await permissionService.GetPermissionsAsync(cancellationToken));
+
+    /// <summary>
+    /// One page of the permissions whose code or name contains <c>search</c>, sorted by <c>sort</c> (code, name or
+    /// description) in <c>direction</c> (asc or desc). The full list above stays for the role and user pickers.
+    /// </summary>
+    [HttpGet("page")]
+    [ProducesResponseType(typeof(PagedResult<SecurityPermission>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SecurityPermission>>> SearchPermissions(
+        [FromQuery, StringLength(100)] string? search,
+        [FromQuery, RegularExpression("^(code|name|description)$")] string sort = "code",
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
+        [FromQuery, Range(1, 200)] int limit = 30,
+        [FromQuery, Range(0, int.MaxValue)] int offset = 0,
+        CancellationToken cancellationToken = default)
+        => Ok(await permissionService.SearchPermissionsAsync(search, sort, direction == "desc", limit, offset, cancellationToken));
 
     [HttpGet("{permissionId:int}")]
     [ProducesResponseType(typeof(SecurityPermission), StatusCodes.Status200OK)]

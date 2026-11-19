@@ -24,8 +24,12 @@ public sealed class AuthService(
 
         if (user.Status != UserStatuses.Active)
             return new LoginResult(LoginStatus.Inactive);
+        if (user.IsLocked)
+            return new LoginResult(LoginStatus.Locked);
 
-        return new LoginResult(LoginStatus.Succeeded, await StartSessionAsync(user, clientIp, cancellationToken));
+        var session = await StartSessionAsync(user, clientIp, cancellationToken);
+        await users.TouchLastLoginAsync(user.Id, CancellationToken.None);
+        return new LoginResult(LoginStatus.Succeeded, session);
     }
 
     public async Task<AuthResponse?> RefreshAsync(
@@ -46,7 +50,7 @@ public sealed class AuthService(
         }
 
         var user = await users.GetCredentialsByIdAsync(record.UserId, cancellationToken);
-        if (user is null || user.Status != UserStatuses.Active)
+        if (user is null || !user.CanSignIn)
         {
             await tokens.RevokeAllRefreshTokensAsync(record.UserId, CancellationToken.None);
             return null;
@@ -77,7 +81,7 @@ public sealed class AuthService(
     public async Task<CurrentUser?> GetCurrentUserAsync(int userId, CancellationToken cancellationToken = default)
     {
         var user = await users.GetCredentialsByIdAsync(userId, cancellationToken);
-        return user is null || user.Status != UserStatuses.Active
+        return user is null || !user.CanSignIn
             ? null
             : await BuildCurrentUserAsync(user, cancellationToken);
     }
@@ -104,7 +108,7 @@ public sealed class AuthService(
     {
         PasswordPolicy.Validate(request.NewPassword);
         var user = await users.GetCredentialsByIdAsync(userId, cancellationToken);
-        if (user is null || user.Status != UserStatuses.Active ||
+        if (user is null || !user.CanSignIn ||
             !passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
             return null;
 

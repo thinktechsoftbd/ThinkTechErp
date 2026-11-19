@@ -16,12 +16,18 @@ namespace ThinkTechErpAPI.Areas.Warranty.Controller;
 [Authorize(Policy = WarrantyPolicies.View)]
 public sealed class WarrantyPoliciesController(IWarrantySetupService setup) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of policies; <c>sort</c> is name, period, products, status or updated (default: period, then name),
+    /// <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<WarrantyPolicy>>> GetPolicies(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive,
+        [FromQuery, RegularExpression("^(name|period|products|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetPoliciesAsync(OrganizationId, search, isActive, limit, offset, cancellationToken));
+        => Ok(await setup.GetPoliciesAsync(OrganizationId, search, isActive, sort, direction == "desc", limit, offset, cancellationToken));
 
     /// <summary>Policies for a picker (active ones unless includeInactive).</summary>
     [HttpGet("options")]
