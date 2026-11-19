@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ThinkTechErpDomain.Models.Common;
 using ThinkTechErpDomain.Models.Inventory;
 using ThinkTechErpDomain.Models.Security;
@@ -93,6 +94,41 @@ public sealed class ProductService(IProductRepository products, IOwnershipReposi
         request.Attributes = request.Attributes?
             .Where(a => !string.IsNullOrWhiteSpace(a.Key) && !string.IsNullOrWhiteSpace(a.Value))
             .ToDictionary(a => a.Key.Trim(), a => a.Value.Trim());
+
+        // Related pictures: no blanks, repeats or copies of the main picture.
+        request.RelatedImageUrls = request.RelatedImageUrls
+            .Select(Text.Clean).OfType<string>()
+            .Where(url => url != request.ImageUrl)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (request.RelatedImageUrls.Count > InventoryRules.MaxRelatedImages)
+            throw new BusinessRuleException($"A product can have up to {InventoryRules.MaxRelatedImages} related images.");
+        if (request.RelatedImageUrls.Any(url => url.Length > 500))
+            throw new BusinessRuleException("An image address is longer than 500 characters.");
+
+        // Tags: new names are matched to existing tags by slug when saved.
+        request.TagIds = request.TagIds.Distinct().ToList();
+        var newTags = new List<string>();
+        foreach (var raw in request.NewTags)
+        {
+            var name = Regex.Replace(raw ?? string.Empty, @"\s+", " ").Trim();
+            if (name.Length == 0)
+                continue;
+            if (name.Length > InventoryRules.MaxTagNameLength)
+                throw new BusinessRuleException($"A tag can be at most {InventoryRules.MaxTagNameLength} characters.");
+            var slug = InventoryRules.TagSlug(name);
+            if (slug.Length == 0)
+                throw new BusinessRuleException($"The tag \"{name}\" needs at least one letter or digit.");
+            if (!newTags.Any(tag => InventoryRules.TagSlug(tag) == slug))
+                newTags.Add(name);
+        }
+        request.NewTags = newTags;
+        if (request.TagIds.Count + request.NewTags.Count > InventoryRules.MaxTags)
+            throw new BusinessRuleException($"A product can have up to {InventoryRules.MaxTags} tags.");
+        if (request.TagIds.Count > 0 &&
+            (request.TagIds.Any(id => id <= 0) ||
+             (await products.GetVisibleTagIdsAsync(organizationId, request.TagIds, cancellationToken)).Count != request.TagIds.Count))
+            throw new BusinessRuleException("A tag was not found. Reload the page and try again.");
 
         if (request.Units.Any(u => u.UnitId == request.BaseUnitId))
             throw new BusinessRuleException("The base unit is always included; list only the other packs.");
