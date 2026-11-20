@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\ThinkTechErpCore\ThinkTechErpCore.csproj" />
     <ProjectReference Include="..\ThinkTechErpDomain\ThinkTechErpDomain.csproj" />
     <ProjectReference Include="..\ThinkTechErpRepository\ThinkTechErpRepository.csproj" />
   </ItemGroup>

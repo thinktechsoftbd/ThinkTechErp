@@ -50,6 +50,15 @@ public static class DependencyInjection
         services.AddScoped<ISmsRepository, SmsRepository>();
         services.AddScoped<ISmsService, SmsService>();
 
+        // SMS gateways (api/sms/gateway/{providerId}): one client per provider, picked by sms_provider_id at runtime
+        // (SmsProviderConstants). Each call reads the provider's api_base_url and api_key from public.sms_provider.
+        // To add a provider (e.g. ADN), write its ISmsGatewayClient and register it the same way.
+        services.AddScoped<ISmsGatewayRepository, SmsGatewayRepository>();
+        services.AddScoped<ISmsGatewayService, SmsGatewayService>();
+        services.AddHttpClient<CdcSmsGatewayClient>(client => client.Timeout = TimeSpan.FromSeconds(30))
+            .RedactLoggedHeaders(_ => true);
+        services.AddTransient<ISmsGatewayClient>(provider => provider.GetRequiredService<CdcSmsGatewayClient>());
+
         // Security. The host must also register IAccessTokenIssuer and SecurityTokenSettings.
         services.AddScoped<ISecurityUserRepository, SecurityUserRepository>();
         services.AddScoped<ISecurityRoleRepository, SecurityRoleRepository>();
