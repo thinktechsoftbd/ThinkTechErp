@@ -12,7 +12,11 @@ namespace ThinkTechErpAPI.Security;
 /// organizations created under it are the only ones the client may change.
 /// </summary>
 public sealed record IntegrationClient(
-    string ClientId, byte[] SecretSha256, int? ActingUserId, IReadOnlySet<string> Scopes);
+    string ClientId, byte[] SecretSha256, int? ActingUserId, IReadOnlySet<string> Scopes)
+{
+    /// <summary>The organization the client works for (security_organization_client.org_object_id).</summary>
+    public Guid? OrgObjectId { get; init; }
+}
 
 /// <summary>
 /// Reads integration clients from PostgreSQL for each credential check and protected request, so
@@ -104,7 +108,10 @@ public sealed partial class IntegrationClientStore
             return null;
 
         return new IntegrationClient(
-            stored.ClientName, expectedHash, stored.ActingUserId, stored.Scopes.ToHashSet(StringComparer.Ordinal));
+            stored.ClientName, expectedHash, stored.ActingUserId, stored.Scopes.ToHashSet(StringComparer.Ordinal))
+        {
+            OrgObjectId = stored.OrgObjectId
+        };
     }
 
     /// <summary>The configured client with this ID, or null when it was removed.</summary>
@@ -126,7 +133,10 @@ public sealed partial class IntegrationClientStore
             return null;
 
         return new IntegrationClient(
-            stored.ClientName, secretHash, stored.ActingUserId, stored.Scopes.ToHashSet(StringComparer.Ordinal));
+            stored.ClientName, secretHash, stored.ActingUserId, stored.Scopes.ToHashSet(StringComparer.Ordinal))
+        {
+            OrgObjectId = stored.OrgObjectId
+        };
     }
 
     private static bool HasValidScopes(IEnumerable<string> scopes)

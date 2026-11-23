@@ -37,6 +37,8 @@ public interface ISmsService
     Task<SmsBalance?> GetClientBalanceAsync(Guid objectId, int clientUserId, CancellationToken cancellationToken = default);
     /// <summary>Records SMS an integration client sent; null unless the client created the organization.</summary>
     Task<SmsBalance?> AddClientUsageAsync(Guid objectId, long smsCount, int clientUserId, CancellationToken cancellationToken = default);
+    /// <summary>Adds SMS the gateway sent for the organization to its sms_usage (no limit: they are already sent).</summary>
+    Task<bool> AddSentSmsAsync(Guid objectId, long smsCount, CancellationToken cancellationToken = default);
 }
 
 public sealed class SmsService(ISmsRepository repository) : ISmsService
@@ -202,6 +204,9 @@ public sealed class SmsService(ISmsRepository repository) : ISmsService
             return null;
         return ToClientBalance(await repository.AddUsageAsync(objectId, smsCount, cancellationToken));
     }
+
+    public Task<bool> AddSentSmsAsync(Guid objectId, long smsCount, CancellationToken cancellationToken = default)
+        => smsCount > 0 ? repository.AddSentSmsAsync(objectId, smsCount, cancellationToken) : Task.FromResult(true);
 
     private static SmsBalance ToClientBalance(SmsOrganizationBalance balance) => new()
     {

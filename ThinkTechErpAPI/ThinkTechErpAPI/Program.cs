@@ -387,6 +387,22 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(SmsPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, SmsRules.ManageSmsPermission));
+
+    // The provider gateway takes a user's token or an integration client's (scope sms.usage, e.g. MediDesk).
+    options.AddPolicy(SmsPolicies.Gateway, policy => policy
+        .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme, IntegrationPolicies.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            context.User.HasClaim(claim => claim.Type == SecurityPolicies.PermissionClaim &&
+                                           (claim.Value == SmsRules.ViewSmsPermission || claim.Value == SmsRules.ManageSmsPermission)) ||
+            context.User.HasClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.SmsUsage)));
+
+    options.AddPolicy(SmsPolicies.GatewaySend, policy => policy
+        .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme, IntegrationPolicies.Scheme)
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            context.User.HasClaim(SecurityPolicies.PermissionClaim, SmsRules.ManageSmsPermission) ||
+            context.User.HasClaim(IntegrationPolicies.ScopeClaim, IntegrationScopes.SmsUsage)));
 });
 builder.Services.AddRateLimiter(options =>
 {

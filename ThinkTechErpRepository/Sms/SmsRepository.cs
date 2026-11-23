@@ -37,6 +37,8 @@ public interface ISmsRepository
     Task<SmsOrganizationBalance> SetUsageAsync(Guid objectId, long smsUsage, CancellationToken cancellationToken = default);
     /// <summary>Whether the integration client's acting user created the organization (it may use its SMS).</summary>
     Task<bool> IsOrganizationCreatedByAsync(Guid objectId, int userId, CancellationToken cancellationToken = default);
+    /// <summary>Adds SMS already sent to the organization's usage, without a limit (they are gone); false: no such organization.</summary>
+    Task<bool> AddSentSmsAsync(Guid objectId, long smsCount, CancellationToken cancellationToken = default);
 
     Task<SmsOverview> GetOverviewAsync(CancellationToken cancellationToken = default);
     Task<string?> GetCurrencyCodeAsync(int currencyId, string currencyLookupTable, CancellationToken cancellationToken = default);
@@ -570,6 +572,14 @@ public sealed class SmsRepository(IDbConnectionFactory connectionFactory) : ISms
         return await connection.QuerySingleAsync<bool>(new CommandDefinition(
             "SELECT EXISTS (SELECT 1 FROM public.organization WHERE object_id = @ObjectId AND created_by = @UserId)",
             new { ObjectId = objectId, UserId = userId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<bool> AddSentSmsAsync(Guid objectId, long smsCount, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE public.organization SET sms_usage = sms_usage + @SmsCount WHERE object_id = @ObjectId",
+            new { ObjectId = objectId, SmsCount = smsCount }, cancellationToken: cancellationToken)) > 0;
     }
 
     // =====================================================================

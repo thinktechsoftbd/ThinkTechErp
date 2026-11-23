@@ -108,7 +108,8 @@ public sealed class OrganizationClientRepository(IDbConnectionFactory connection
                    secret_sha256_hash AS SecretSha256Hash,
                    acting_user_id AS ActingUserId,
                    scopes AS Scopes,
-                   is_active AS IsActive
+                   is_active AS IsActive,
+                   org_object_id AS OrgObjectId
             FROM public.security_organization_client
             WHERE client_name = @ClientName
             """, new { ClientName = clientName }, cancellationToken: cancellationToken));

@@ -45,7 +45,10 @@ public sealed class SmsSendResult
     public decimal? RemainingBalance { get; set; }
 }
 
-/// <summary>The account balance at the provider (not the SMS bought and allocated in this ERP).</summary>
+/// <summary>
+/// For a user: the account balance at the provider. For an integration client: its organization's SMS instead
+/// (bought and allocated to it in this ERP, used, left), and the provider's wallet stays empty.
+/// </summary>
 public sealed class SmsGatewayBalance
 {
     public int ProviderId { get; set; }
@@ -53,6 +56,14 @@ public sealed class SmsGatewayBalance
     public decimal? WalletBalance { get; set; }
     public decimal? CreditLimit { get; set; }
     public decimal? AvailableCredit { get; set; }
+
+    public Guid? OrganizationObjectId { get; set; }
+    /// <summary>The SMS the organization bought (allocated to it).</summary>
+    public long? AllocatedSms { get; set; }
+    /// <summary>organization.sms_usage</summary>
+    public long? SmsUsage { get; set; }
+    /// <summary>AllocatedSms − SmsUsage</summary>
+    public long? SmsBalance { get; set; }
 }
 
 public sealed class SmsMessageStatus

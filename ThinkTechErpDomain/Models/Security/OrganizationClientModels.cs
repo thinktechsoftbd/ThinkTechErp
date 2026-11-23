@@ -61,6 +61,8 @@ public sealed class OrganizationClientCredentials
     public int? ActingUserId { get; set; }
     public string[] Scopes { get; set; } = [];
     public bool IsActive { get; set; }
+    /// <summary>The organization the client works for (org_object_id), e.g. whose SMS balance it uses.</summary>
+    public Guid? OrgObjectId { get; set; }
 }
 
 public static class OrganizationClientScopeRules
