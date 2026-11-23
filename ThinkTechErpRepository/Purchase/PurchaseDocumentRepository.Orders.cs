@@ -41,12 +41,28 @@ public sealed partial class PurchaseDocumentRepository
           AND (CAST(@To AS date) IS NULL OR o.order_date <= @To)
         """;
 
+    // The columns the order list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> OrderSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "o.order_no",
+        ["date"] = "o.order_date",
+        ["supplier"] = "lower(s.supplier_name)",
+        ["warehouse"] = "lower(w.warehouse_name)",
+        ["expected"] = "o.expected_date",
+        ["total"] = "o.total_amount",
+        ["status"] = "o.status"
+    };
+
     public async Task<PagedResult<PurchaseOrder>> GetOrdersAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && OrderSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, o.order_date DESC, o.purchase_order_id DESC"
+            : "o.order_date DESC, o.purchase_order_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseOrder>(connection,
             $"SELECT count(*) FROM public.purchase_order o JOIN public.supplier s ON s.supplier_id = o.supplier_id {OrderFilter}",
-            $"{OrderSelect} {OrderFilter} ORDER BY o.order_date DESC, o.purchase_order_id DESC",
+            $"{OrderSelect} {OrderFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

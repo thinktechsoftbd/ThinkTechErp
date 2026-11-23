@@ -10,7 +10,8 @@ namespace ThinkTechErpRepository.Purchase;
 
 public interface IPurchaseSetupRepository
 {
-    Task<PagedResult<Supplier>> GetSuppliersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="sort">code, name, group, ledger, terms, balance, status or updated; null = by name.</param>
+    Task<PagedResult<Supplier>> GetSuppliersAsync(int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Supplier?> GetSupplierAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SupplierOption>> GetSupplierOptionsAsync(int organizationId, string? search, int limit, CancellationToken cancellationToken = default);
     Task<int> CreateSupplierAsync(int organizationId, SupplierUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -75,13 +76,30 @@ public sealed class PurchaseSetupRepository(IDbConnectionFactory connectionFacto
           AND (CAST(@GroupId AS bigint) IS NULL OR s.supplier_group_lookup_data_id = @GroupId)
         """;
 
-    public async Task<PagedResult<Supplier>> GetSuppliersAsync(
-        int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the supplier list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> SupplierSorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["code"] = "lower(s.supplier_code)",
+        ["name"] = "lower(s.supplier_name)",
+        ["group"] = "lower(g.lookup_data_name)",
+        ["ledger"] = "lower(lh.sub_name)",
+        ["terms"] = "s.payment_terms_days",
+        ["balance"] = "Balance",
+        ["status"] = "s.is_active",
+        ["updated"] = "coalesce(s.updated_at, s.created_at)"
+    };
+
+    public async Task<PagedResult<Supplier>> GetSuppliersAsync(
+        int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        var order = sort is not null && SupplierSorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(s.supplier_name), s.supplier_id"
+            : "lower(s.supplier_name), s.supplier_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Supplier>(connection,
             $"SELECT count(*) FROM public.supplier s {SupplierFilter}",
-            $"{SupplierSelect} {SupplierFilter} ORDER BY s.supplier_name, s.supplier_id",
+            $"{SupplierSelect} {SupplierFilter} ORDER BY {order}",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, GroupId = groupId },
             limit, offset, cancellationToken);
     }

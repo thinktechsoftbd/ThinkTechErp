@@ -12,8 +12,9 @@ namespace ThinkTechErpRepository.Inventory;
 public interface IPaymentSourceRepository
 {
     /// <summary>A page of sources, each with its lines; search matches the names and the lines' "payment for".</summary>
+    /// <param name="sort">name, lines, status or updated; null = by name.</param>
     Task<PagedResult<PaymentSource>> GetPaymentSourcesAsync(
-        string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+        string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<PaymentSource?> GetPaymentSourceAsync(int id, CancellationToken cancellationToken = default);
     Task<int> CreatePaymentSourceAsync(PaymentSourceUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     /// <summary>
@@ -47,13 +48,25 @@ public sealed class PaymentSourceRepository(IDbConnectionFactory connectionFacto
           AND (CAST(@IsActive AS boolean) IS NULL OR h.is_active = @IsActive)
         """;
 
-    public async Task<PagedResult<PaymentSource>> GetPaymentSourcesAsync(
-        string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the source list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> SourceSorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["name"] = "lower(h.source_name_en)",
+        ["lines"] = "(SELECT count(*) FROM public.inv_payment_source_d d WHERE d.inv_payment_source_h_id = h.id)",
+        ["status"] = "h.is_active",
+        ["updated"] = "coalesce(h.updated_at, h.created_at)"
+    };
+
+    public async Task<PagedResult<PaymentSource>> GetPaymentSourcesAsync(
+        string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+    {
+        var order = sort is not null && SourceSorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(h.source_name_en), h.id"
+            : "lower(h.source_name_en), h.id";
         await using var connection = connectionFactory.CreateConnection();
         var page = await RepositoryHelpers.PagedAsync<PaymentSource>(connection,
             $"SELECT count(*) FROM public.inv_payment_source_h h {SourceFilter}",
-            $"{SourceSelect} {SourceFilter} ORDER BY h.source_name_en, h.id",
+            $"{SourceSelect} {SourceFilter} ORDER BY {order}",
             new { Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive }, limit, offset, cancellationToken);
         await AttachLinesAsync(connection, page.Items, cancellationToken);
         return page;

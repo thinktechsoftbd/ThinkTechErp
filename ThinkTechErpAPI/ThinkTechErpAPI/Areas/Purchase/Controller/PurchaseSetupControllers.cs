@@ -23,12 +23,18 @@ public sealed class PurchaseSuppliersController(
             ? NoContent()
             : NotFound();
 
+    /// <summary>
+    /// A page of suppliers; <c>sort</c> is code, name, group, ledger, terms, balance, status or updated (default:
+    /// by name), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Supplier>>> GetSuppliers(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive, [FromQuery] long? groupId,
+        [FromQuery, RegularExpression("^(code|name|group|ledger|terms|balance|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetSuppliersAsync(OrganizationId, search, isActive, groupId, limit, offset, cancellationToken));
+        => Ok(await setup.GetSuppliersAsync(OrganizationId, search, isActive, groupId, sort, direction == "desc", limit, offset, cancellationToken));
 
     /// <summary>Suppliers for a picker: code, name, terms and balance.</summary>
     [HttpGet("options")]

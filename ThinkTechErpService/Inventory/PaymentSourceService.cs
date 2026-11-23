@@ -10,7 +10,7 @@ namespace ThinkTechErpService.Inventory;
 public interface IPaymentSourceService
 {
     Task<PagedResult<PaymentSource>> GetPaymentSourcesAsync(
-        string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default);
+        string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<PaymentSource?> GetPaymentSourceAsync(int id, CancellationToken cancellationToken = default);
     Task<PaymentSource> CreatePaymentSourceAsync(PaymentSourceUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<PaymentSource?> UpdatePaymentSourceAsync(int id, PaymentSourceUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -21,8 +21,8 @@ public sealed class PaymentSourceService(IPaymentSourceRepository repository, IL
     : IPaymentSourceService
 {
     public Task<PagedResult<PaymentSource>> GetPaymentSourcesAsync(
-        string? search, bool? isActive, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetPaymentSourcesAsync(Text.Clean(search), isActive, limit, offset, cancellationToken);
+        string? search, bool? isActive, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetPaymentSourcesAsync(Text.Clean(search), isActive, sort, descending, limit, offset, cancellationToken);
 
     public Task<PaymentSource?> GetPaymentSourceAsync(int id, CancellationToken cancellationToken = default)
         => repository.GetPaymentSourceAsync(id, cancellationToken);

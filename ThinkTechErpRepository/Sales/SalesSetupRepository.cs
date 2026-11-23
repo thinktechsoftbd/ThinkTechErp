@@ -10,7 +10,8 @@ namespace ThinkTechErpRepository.Sales;
 
 public interface ISalesSetupRepository
 {
-    Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default);
+    /// <param name="sort">code, name, mobile, group, credit, balance, status or updated; null = by name.</param>
+    Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
     /// <param name="includeSuppliers">Suppliers that aren't customers yet too (the sales screen sells to any party).</param>
     Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
@@ -62,13 +63,30 @@ public sealed class SalesSetupRepository(IDbConnectionFactory connectionFactory)
           AND (CAST(@GroupId AS bigint) IS NULL OR c.customer_group_lookup_data_id = @GroupId)
         """;
 
-    public async Task<PagedResult<Customer>> GetCustomersAsync(
-        int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default)
+    // The columns the customer list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> CustomerSorts = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["code"] = "lower(c.supplier_code)",
+        ["name"] = "lower(c.supplier_name)",
+        ["mobile"] = "c.mobile",
+        ["group"] = "lower(g.lookup_data_name)",
+        ["credit"] = "c.customer_credit_limit",
+        ["balance"] = "Balance",
+        ["status"] = "c.is_active",
+        ["updated"] = "coalesce(c.updated_at, c.created_at)"
+    };
+
+    public async Task<PagedResult<Customer>> GetCustomersAsync(
+        int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset,
+        CancellationToken cancellationToken = default)
+    {
+        var order = sort is not null && CustomerSorts.TryGetValue(sort, out var column)
+            ? $"{column} {(descending ? "DESC" : "ASC")}, lower(c.supplier_name), c.supplier_id"
+            : "lower(c.supplier_name), c.supplier_id";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<Customer>(connection,
             $"SELECT count(*) FROM public.supplier c {CustomerFilter}",
-            $"{CustomerSelect} {CustomerFilter} ORDER BY c.supplier_name, c.supplier_id",
+            $"{CustomerSelect} {CustomerFilter} ORDER BY {order}",
             new { Org = organizationId, Pattern = RepositoryHelpers.Pattern(search), IsActive = isActive, GroupId = groupId },
             limit, offset, cancellationToken);
     }

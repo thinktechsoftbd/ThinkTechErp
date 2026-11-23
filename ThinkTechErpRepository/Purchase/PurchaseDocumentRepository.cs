@@ -371,12 +371,29 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
           AND (CAST(@PaymentStatus AS text) IS NULL OR i.payment_status = @PaymentStatus)
         """;
 
+    // The columns the invoice list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> InvoiceSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "i.invoice_no",
+        ["date"] = "i.invoice_date",
+        ["supplier"] = "lower(coalesce(s.supplier_name, i.supplier_name))",
+        ["type"] = "i.purchase_type",
+        ["total"] = "i.total_amount",
+        ["due"] = "(i.total_amount - i.settled_amount)",
+        ["payment"] = "i.payment_status",
+        ["status"] = "i.status"
+    };
+
     public async Task<PagedResult<PurchaseInvoice>> GetInvoicesAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && InvoiceSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, i.invoice_date DESC, i.purchase_invoice_id DESC"
+            : "i.invoice_date DESC, i.purchase_invoice_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseInvoice>(connection,
             $"SELECT count(*) FROM public.purchase_invoice i LEFT JOIN public.supplier s ON s.supplier_id = i.supplier_id {InvoiceFilter}",
-            $"{InvoiceSelect} {InvoiceFilter} ORDER BY i.invoice_date DESC, i.purchase_invoice_id DESC",
+            $"{InvoiceSelect} {InvoiceFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

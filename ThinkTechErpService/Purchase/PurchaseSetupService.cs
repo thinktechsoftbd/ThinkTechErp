@@ -9,7 +9,7 @@ namespace ThinkTechErpService.Purchase;
 
 public interface IPurchaseSetupService
 {
-    Task<PagedResult<Supplier>> GetSuppliersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<Supplier>> GetSuppliersAsync(int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Supplier?> GetSupplierAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SupplierOption>> GetSupplierOptionsAsync(int organizationId, string? search, int limit, CancellationToken cancellationToken = default);
     Task<Supplier> CreateSupplierAsync(int organizationId, SupplierUpsertRequest request, int userId, CancellationToken cancellationToken = default);
@@ -33,8 +33,8 @@ public sealed class PurchaseSetupService(IPurchaseSetupRepository repository) : 
 {
     // ---- Suppliers
 
-    public Task<PagedResult<Supplier>> GetSuppliersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetSuppliersAsync(organizationId, Text.Clean(search), isActive, groupId, limit, offset, cancellationToken);
+    public Task<PagedResult<Supplier>> GetSuppliersAsync(int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetSuppliersAsync(organizationId, Text.Clean(search), isActive, groupId, sort, descending, limit, offset, cancellationToken);
 
     public Task<Supplier?> GetSupplierAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)
         => repository.GetSupplierAsync(organizationId, supplierId, cancellationToken);

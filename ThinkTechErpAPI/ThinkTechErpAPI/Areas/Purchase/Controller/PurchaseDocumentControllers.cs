@@ -21,6 +21,12 @@ public sealed class PurchaseListQuery
     public DateOnly? To { get; set; }
     public string? PurchaseType { get; set; }
     public string? PaymentStatus { get; set; }
+    /// <summary>
+    /// The column to sort by: invoices number, date, supplier, type, total, due, payment or status; orders number,
+    /// date, supplier, warehouse, expected, total or status. Others are ignored (newest first).
+    /// </summary>
+    [RegularExpression("^[a-z]{1,20}$")] public string? Sort { get; set; }
+    [RegularExpression("^(asc|desc)$")] public string? Direction { get; set; }
     [Range(1, 500)] public int Limit { get; set; } = 20;
     [Range(0, int.MaxValue)] public int Offset { get; set; }
 
@@ -33,6 +39,8 @@ public sealed class PurchaseListQuery
         To = To,
         PurchaseType = PurchaseType,
         PaymentStatus = PaymentStatus,
+        Sort = Sort,
+        Descending = Direction == "desc",
         Limit = Limit,
         Offset = Offset
     };

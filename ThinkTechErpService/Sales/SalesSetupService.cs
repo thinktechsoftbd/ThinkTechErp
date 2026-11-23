@@ -8,7 +8,7 @@ namespace ThinkTechErpService.Sales;
 
 public interface ISalesSetupService
 {
-    Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default);
+    Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default);
     Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
     /// <param name="includeSuppliers">Suppliers that aren't customers yet too (the sales screen sells to any party).</param>
     Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
@@ -20,8 +20,8 @@ public interface ISalesSetupService
 
 public sealed class SalesSetupService(ISalesSetupRepository repository) : ISalesSetupService
 {
-    public Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, int limit, int offset, CancellationToken cancellationToken = default)
-        => repository.GetCustomersAsync(organizationId, Text.Clean(search), isActive, groupId, limit, offset, cancellationToken);
+    public Task<PagedResult<Customer>> GetCustomersAsync(int organizationId, string? search, bool? isActive, long? groupId, string? sort, bool descending, int limit, int offset, CancellationToken cancellationToken = default)
+        => repository.GetCustomersAsync(organizationId, Text.Clean(search), isActive, groupId, sort, descending, limit, offset, cancellationToken);
 
     public Task<Customer?> GetCustomerAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
         => repository.GetCustomerAsync(organizationId, customerId, cancellationToken);

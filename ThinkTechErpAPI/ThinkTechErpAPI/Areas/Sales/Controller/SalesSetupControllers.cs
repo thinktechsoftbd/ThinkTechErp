@@ -15,12 +15,18 @@ namespace ThinkTechErpAPI.Areas.Sales.Controller;
 public sealed class SalesCustomersController(
     ISalesSetupService setup, ISalesDocumentService documents, IInvoiceVoucherService vouchers) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of customers; <c>sort</c> is code, name, mobile, group, credit, balance, status or updated (default:
+    /// by name), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<Customer>>> GetCustomers(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive, [FromQuery] long? groupId,
+        [FromQuery, RegularExpression("^(code|name|mobile|group|credit|balance|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await setup.GetCustomersAsync(OrganizationId, search, isActive, groupId, limit, offset, cancellationToken));
+        => Ok(await setup.GetCustomersAsync(OrganizationId, search, isActive, groupId, sort, direction == "desc", limit, offset, cancellationToken));
 
     /// <summary>
     /// Customers for the sales screen's picker (by code, name, mobile, phone or address), with what they owe and

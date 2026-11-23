@@ -234,13 +234,18 @@ public sealed class InventoryProductsController(IProductService products) : Orga
 [Authorize(Policy = InventoryPolicies.Lookup)]
 public sealed class InventoryPaymentSourcesController(IPaymentSourceService paymentSources) : ErpControllerBase
 {
-    /// <summary>A page of sources, each with its lines; search matches the names and what the lines are for.</summary>
+    /// <summary>
+    /// A page of sources, each with its lines; search matches the names and what the lines are for. <c>sort</c> is
+    /// name, lines, status or updated (default: by name), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<PaymentSource>>> GetPaymentSources(
         [FromQuery, StringLength(100)] string? search, [FromQuery] bool? isActive,
+        [FromQuery, RegularExpression("^(name|lines|status|updated)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 50, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
-        => Ok(await paymentSources.GetPaymentSourcesAsync(search, isActive, limit, offset, cancellationToken));
+        => Ok(await paymentSources.GetPaymentSourcesAsync(search, isActive, sort, direction == "desc", limit, offset, cancellationToken));
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<PaymentSource>> GetPaymentSource(int id, CancellationToken cancellationToken)
