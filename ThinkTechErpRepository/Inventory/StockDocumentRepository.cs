@@ -19,6 +19,9 @@ public sealed class StockDocumentQuery
     public bool ExcludeOpening { get; set; }
     public DateOnly? From { get; set; }
     public DateOnly? To { get; set; }
+    /// <summary>A column of the list (each list says which it sorts by; others are ignored); null = newest first.</summary>
+    public string? Sort { get; set; }
+    public bool Descending { get; set; }
     public int Limit { get; set; } = 20;
     public int Offset { get; set; }
 }
@@ -115,12 +118,28 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
         query.To
     };
 
+    // The columns the adjustment list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> AdjustmentSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "a.adjustment_no",
+        ["date"] = "a.adjustment_date",
+        ["warehouse"] = "lower(w.warehouse_name)",
+        ["reason"] = "a.reason",
+        ["lines"] = "(SELECT count(*) FROM public.stock_adjustment_line l WHERE l.stock_adjustment_id = a.stock_adjustment_id)",
+        ["value"] = "a.total_value",
+        ["status"] = "a.status"
+    };
+
     public async Task<PagedResult<StockAdjustment>> GetAdjustmentsAsync(int organizationId, StockDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && AdjustmentSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, a.adjustment_date DESC, a.stock_adjustment_id DESC"
+            : "a.adjustment_date DESC, a.stock_adjustment_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockAdjustment>(connection,
             $"SELECT count(*) FROM public.stock_adjustment a {AdjustmentFilter}",
-            $"{AdjustmentSelect} {AdjustmentFilter} ORDER BY a.adjustment_date DESC, a.stock_adjustment_id DESC",
+            $"{AdjustmentSelect} {AdjustmentFilter} ORDER BY {order}",
             QueryParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 
@@ -378,12 +397,28 @@ public sealed class StockDocumentRepository(IDbConnectionFactory connectionFacto
           AND (CAST(@To AS date) IS NULL OR t.transfer_date <= @To)
         """;
 
+    // The columns the transfer list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> TransferSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "t.transfer_no",
+        ["date"] = "t.transfer_date",
+        ["from"] = "lower(fw.warehouse_name)",
+        ["to"] = "lower(tw.warehouse_name)",
+        ["lines"] = "(SELECT count(*) FROM public.stock_transfer_line l WHERE l.stock_transfer_id = t.stock_transfer_id)",
+        ["value"] = "TotalValue",
+        ["status"] = "t.status"
+    };
+
     public async Task<PagedResult<StockTransfer>> GetTransfersAsync(int organizationId, StockDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && TransferSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, t.transfer_date DESC, t.stock_transfer_id DESC"
+            : "t.transfer_date DESC, t.stock_transfer_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<StockTransfer>(connection,
             $"SELECT count(*) FROM public.stock_transfer t {TransferFilter}",
-            $"{TransferSelect} {TransferFilter} ORDER BY t.transfer_date DESC, t.stock_transfer_id DESC",
+            $"{TransferSelect} {TransferFilter} ORDER BY {order}",
             QueryParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

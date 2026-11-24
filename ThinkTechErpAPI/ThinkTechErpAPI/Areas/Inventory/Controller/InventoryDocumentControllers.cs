@@ -14,11 +14,18 @@ namespace ThinkTechErpAPI.Areas.Inventory.Controller;
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryAdjustmentsController(IStockDocumentService documents) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of adjustments (opening stock: reason Opening); <c>sort</c> is number, date, warehouse, reason, lines,
+    /// value or status (default: newest first), <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockAdjustment>>> GetAdjustments(
         [FromQuery, StringLength(100)] string? search, [FromQuery] string? status, [FromQuery] int? warehouseId,
         [FromQuery] string? reason, [FromQuery] bool excludeOpening = false, [FromQuery] DateOnly? from = null,
-        [FromQuery] DateOnly? to = null, [FromQuery, Range(1, 500)] int limit = 20, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery, RegularExpression("^(number|date|warehouse|reason|lines|value|status)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
+        [FromQuery, Range(1, 500)] int limit = 20, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
         => Ok(await documents.GetAdjustmentsAsync(OrganizationId, new StockDocumentQuery
         {
@@ -29,6 +36,8 @@ public sealed class InventoryAdjustmentsController(IStockDocumentService documen
             ExcludeOpening = excludeOpening,
             From = from,
             To = to,
+            Sort = sort,
+            Descending = direction == "desc",
             Limit = limit,
             Offset = offset
         }, cancellationToken));
@@ -72,10 +81,16 @@ public sealed class InventoryAdjustmentsController(IStockDocumentService documen
 [Authorize(Policy = InventoryPolicies.View)]
 public sealed class InventoryTransfersController(IStockDocumentService documents) : OrganizationControllerBase
 {
+    /// <summary>
+    /// A page of transfers; <c>sort</c> is number, date, from, to, lines, value or status (default: newest first),
+    /// <c>direction</c> asc or desc.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockTransfer>>> GetTransfers(
         [FromQuery, StringLength(100)] string? search, [FromQuery] string? status, [FromQuery] int? warehouseId,
         [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null,
+        [FromQuery, RegularExpression("^(number|date|from|to|lines|value|status)$")] string? sort = null,
+        [FromQuery, RegularExpression("^(asc|desc)$")] string direction = "asc",
         [FromQuery, Range(1, 500)] int limit = 20, [FromQuery, Range(0, int.MaxValue)] int offset = 0,
         CancellationToken cancellationToken = default)
         => Ok(await documents.GetTransfersAsync(OrganizationId, new StockDocumentQuery
@@ -85,6 +100,8 @@ public sealed class InventoryTransfersController(IStockDocumentService documents
             WarehouseId = warehouseId,
             From = from,
             To = to,
+            Sort = sort,
+            Descending = direction == "desc",
             Limit = limit,
             Offset = offset
         }, cancellationToken));

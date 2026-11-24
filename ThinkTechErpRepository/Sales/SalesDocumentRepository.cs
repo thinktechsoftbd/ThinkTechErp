@@ -138,12 +138,29 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
           AND (CAST(@PaymentStatus AS text) IS NULL OR i.payment_status = @PaymentStatus)
         """;
 
+    // The columns the invoice list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> InvoiceSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "i.invoice_no",
+        ["date"] = "i.invoice_date",
+        ["customer"] = "lower(coalesce(c.supplier_name, i.customer_name))",
+        ["type"] = "i.sale_type",
+        ["total"] = "i.total_amount",
+        ["due"] = "(i.total_amount - i.settled_amount)",
+        ["payment"] = "i.payment_status",
+        ["status"] = "i.status"
+    };
+
     public async Task<PagedResult<SalesInvoice>> GetInvoicesAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && InvoiceSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, i.invoice_date DESC, i.sales_invoice_id DESC"
+            : "i.invoice_date DESC, i.sales_invoice_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SalesInvoice>(connection,
             $"SELECT count(*) FROM public.sales_invoice i LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id {InvoiceFilter}",
-            $"{InvoiceSelect} {InvoiceFilter} ORDER BY i.invoice_date DESC, i.sales_invoice_id DESC",
+            $"{InvoiceSelect} {InvoiceFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 
@@ -637,12 +654,28 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
           AND (CAST(@To AS date) IS NULL OR r.receipt_date <= @To)
         """;
 
+    // The columns the receipt list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> ReceiptSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "r.receipt_no",
+        ["date"] = "r.receipt_date",
+        ["customer"] = "lower(c.supplier_name)",
+        ["method"] = "r.payment_method",
+        ["amount"] = "r.amount",
+        ["allocated"] = "r.allocated_amount",
+        ["status"] = "r.status"
+    };
+
     public async Task<PagedResult<CustomerReceipt>> GetReceiptsAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && ReceiptSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, r.receipt_date DESC, r.customer_receipt_id DESC"
+            : "r.receipt_date DESC, r.customer_receipt_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<CustomerReceipt>(connection,
             $"SELECT count(*) FROM public.customer_receipt r JOIN public.supplier c ON c.supplier_id = r.customer_id {ReceiptFilter}",
-            $"{ReceiptSelect} {ReceiptFilter} ORDER BY r.receipt_date DESC, r.customer_receipt_id DESC",
+            $"{ReceiptSelect} {ReceiptFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

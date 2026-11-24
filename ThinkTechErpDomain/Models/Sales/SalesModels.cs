@@ -200,6 +200,9 @@ public sealed class SalesDocumentQuery
     public DateOnly? To { get; set; }
     public string? SaleType { get; set; }
     public string? PaymentStatus { get; set; }
+    /// <summary>A column of the list (each list says which it sorts by; others are ignored); null = its default order.</summary>
+    public string? Sort { get; set; }
+    public bool Descending { get; set; }
     public int Limit { get; set; } = 20;
     public int Offset { get; set; }
 }

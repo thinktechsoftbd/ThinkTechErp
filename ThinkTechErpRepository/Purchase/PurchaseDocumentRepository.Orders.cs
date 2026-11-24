@@ -257,12 +257,28 @@ public sealed partial class PurchaseDocumentRepository
           AND (CAST(@To AS date) IS NULL OR g.receipt_date <= @To)
         """;
 
+    // The columns the receipt list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> ReceiptSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "g.receipt_no",
+        ["date"] = "g.receipt_date",
+        ["supplier"] = "lower(s.supplier_name)",
+        ["warehouse"] = "lower(w.warehouse_name)",
+        ["value"] = "TotalValue",
+        ["billed"] = "IsFullyInvoiced",
+        ["status"] = "g.status"
+    };
+
     public async Task<PagedResult<GoodsReceipt>> GetReceiptsAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && ReceiptSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, g.receipt_date DESC, g.goods_receipt_id DESC"
+            : "g.receipt_date DESC, g.goods_receipt_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<GoodsReceipt>(connection,
             $"SELECT count(*) FROM public.goods_receipt g LEFT JOIN public.supplier s ON s.supplier_id = g.supplier_id {ReceiptFilter}",
-            $"{ReceiptSelect} {ReceiptFilter} ORDER BY g.receipt_date DESC, g.goods_receipt_id DESC",
+            $"{ReceiptSelect} {ReceiptFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

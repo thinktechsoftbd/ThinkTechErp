@@ -48,8 +48,24 @@ public sealed partial class SalesDocumentRepository
           AND (CAST(@To AS date) IS NULL OR r.return_date <= @To)
         """;
 
+    // The columns the return list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> ReturnSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "r.return_no",
+        ["date"] = "r.return_date",
+        ["sale"] = "i.invoice_no",
+        ["customer"] = "lower(coalesce(c.supplier_name, r.customer_name))",
+        ["settlement"] = "r.settlement_type",
+        ["total"] = "r.total_amount",
+        ["status"] = "r.status"
+    };
+
     public async Task<PagedResult<SalesReturn>> GetReturnsAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && ReturnSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, r.return_date DESC, r.sales_return_id DESC"
+            : "r.return_date DESC, r.sales_return_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SalesReturn>(connection, $"""
             SELECT count(*) FROM public.sales_return r
@@ -57,7 +73,7 @@ public sealed partial class SalesDocumentRepository
             LEFT JOIN public.sales_invoice i ON i.sales_invoice_id = r.sales_invoice_id
             {ReturnFilter}
             """,
-            $"{ReturnSelect} {ReturnFilter} ORDER BY r.return_date DESC, r.sales_return_id DESC",
+            $"{ReturnSelect} {ReturnFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

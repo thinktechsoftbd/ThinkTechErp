@@ -45,12 +45,28 @@ public sealed partial class PurchaseDocumentRepository
           AND (CAST(@To AS date) IS NULL OR r.return_date <= @To)
         """;
 
+    // The columns the return list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> ReturnSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "r.return_no",
+        ["date"] = "r.return_date",
+        ["supplier"] = "lower(coalesce(s.supplier_name, r.supplier_name))",
+        ["reason"] = "r.reason",
+        ["settlement"] = "r.settlement_type",
+        ["total"] = "r.total_amount",
+        ["status"] = "r.status"
+    };
+
     public async Task<PagedResult<PurchaseReturn>> GetReturnsAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && ReturnSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, r.return_date DESC, r.purchase_return_id DESC"
+            : "r.return_date DESC, r.purchase_return_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<PurchaseReturn>(connection,
             $"SELECT count(*) FROM public.purchase_return r LEFT JOIN public.supplier s ON s.supplier_id = r.supplier_id {ReturnFilter}",
-            $"{ReturnSelect} {ReturnFilter} ORDER BY r.return_date DESC, r.purchase_return_id DESC",
+            $"{ReturnSelect} {ReturnFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 
@@ -386,12 +402,28 @@ public sealed partial class PurchaseDocumentRepository
           AND (CAST(@To AS date) IS NULL OR p.payment_date <= @To)
         """;
 
+    // The columns the payment list may be sorted by (never interpolate anything else into ORDER BY).
+    private static readonly Dictionary<string, string> PaymentSorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["number"] = "p.payment_no",
+        ["date"] = "p.payment_date",
+        ["supplier"] = "lower(s.supplier_name)",
+        ["method"] = "p.payment_method",
+        ["amount"] = "p.amount",
+        ["unallocated"] = "(p.amount + p.tax_deducted_amount - p.allocated_amount)",
+        ["status"] = "p.status"
+    };
+
     public async Task<PagedResult<SupplierPayment>> GetPaymentsAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default)
     {
+        // Newest first by default, and after the chosen column.
+        var order = query.Sort is not null && PaymentSorts.TryGetValue(query.Sort, out var column)
+            ? $"{column} {(query.Descending ? "DESC" : "ASC")}, p.payment_date DESC, p.supplier_payment_id DESC"
+            : "p.payment_date DESC, p.supplier_payment_id DESC";
         await using var connection = connectionFactory.CreateConnection();
         return await RepositoryHelpers.PagedAsync<SupplierPayment>(connection,
             $"SELECT count(*) FROM public.supplier_payment p JOIN public.supplier s ON s.supplier_id = p.supplier_id {PaymentFilter}",
-            $"{PaymentSelect} {PaymentFilter} ORDER BY p.payment_date DESC, p.supplier_payment_id DESC",
+            $"{PaymentSelect} {PaymentFilter} ORDER BY {order}",
             ListParams(organizationId, query), query.Limit, query.Offset, cancellationToken);
     }
 

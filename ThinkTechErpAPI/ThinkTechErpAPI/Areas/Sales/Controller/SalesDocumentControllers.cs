@@ -22,6 +22,13 @@ public sealed class SalesListQuery
     public DateOnly? To { get; set; }
     public string? SaleType { get; set; }
     public string? PaymentStatus { get; set; }
+    /// <summary>
+    /// The column to sort by: invoices number, date, customer, type, total, due, payment or status; receipts
+    /// number, date, customer, method, amount, allocated or status; returns number, date, sale, customer,
+    /// settlement, total or status. Others are ignored (newest first).
+    /// </summary>
+    [RegularExpression("^[a-z]{1,20}$")] public string? Sort { get; set; }
+    [RegularExpression("^(asc|desc)$")] public string? Direction { get; set; }
     [Range(1, 500)] public int Limit { get; set; } = 20;
     [Range(0, int.MaxValue)] public int Offset { get; set; }
 
@@ -34,6 +41,8 @@ public sealed class SalesListQuery
         To = To,
         SaleType = SaleType,
         PaymentStatus = PaymentStatus,
+        Sort = Sort,
+        Descending = Direction == "desc",
         Limit = Limit,
         Offset = Offset
     };

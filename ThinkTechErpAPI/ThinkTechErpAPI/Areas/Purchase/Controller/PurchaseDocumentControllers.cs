@@ -23,7 +23,9 @@ public sealed class PurchaseListQuery
     public string? PaymentStatus { get; set; }
     /// <summary>
     /// The column to sort by: invoices number, date, supplier, type, total, due, payment or status; orders number,
-    /// date, supplier, warehouse, expected, total or status. Others are ignored (newest first).
+    /// date, supplier, warehouse, expected, total or status; goods receipts number, date, supplier, warehouse, value,
+    /// billed or status; returns number, date, supplier, reason, settlement, total or status; payments number, date,
+    /// supplier, method, amount, unallocated or status. Others are ignored (newest first).
     /// </summary>
     [RegularExpression("^[a-z]{1,20}$")] public string? Sort { get; set; }
     [RegularExpression("^(asc|desc)$")] public string? Direction { get; set; }
