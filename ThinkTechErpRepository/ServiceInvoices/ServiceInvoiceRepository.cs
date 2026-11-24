@@ -31,6 +31,8 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
                i.service_amount AS ServiceAmount, i.round_off_amount AS RoundOffAmount, i.total_amount AS TotalAmount,
                i.paid_amount AS PaidAmount, i.payment_method AS PaymentMethod, i.payment_provider AS PaymentProvider,
                i.payment_reference_no AS PaymentReferenceNo, i.settled_amount AS SettledAmount,
+               i.inv_payment_source_d_id AS InvPaymentSourceDId,
+               psh.id AS PaymentSourceId, psh.source_name_en AS PaymentSourceName, psd.payment_for AS PaymentSourceType,
                i.total_amount - i.settled_amount AS DueAmount, i.status AS Status, i.payment_status AS PaymentStatus,
                (SELECT count(*) FROM public.service_invoice_line l WHERE l.service_invoice_id = i.service_invoice_id)::int AS LineCount,
                i.posted_at AT TIME ZONE 'utc' AS PostedAt, i.posted_by AS PostedBy, i.service_note AS ServiceNote,
@@ -39,6 +41,8 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
         FROM public.service_invoice i
         LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id
         JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
+        LEFT JOIN public.inv_payment_source_d psd ON psd.id = i.inv_payment_source_d_id
+        LEFT JOIN public.inv_payment_source_h psh ON psh.id = psd.inv_payment_source_h_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
         """;
 
@@ -151,6 +155,7 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
             invoice.PaymentMethod,
             invoice.PaymentProvider,
             invoice.PaymentReferenceNo,
+            invoice.InvPaymentSourceDId,
             SettledAmount = invoice.PaidAmount,
             invoice.PaymentStatus,
             invoice.ServiceNote,
@@ -161,20 +166,24 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
         long id;
         if (invoice.Id == 0)
         {
-            parameters.Add("Number", await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.ServiceInvoice, cancellationToken));
+            // FC/Srv/2026-11-0001: restarts each month (by the invoice date); SVI-00001 when the organization has no code.
+            parameters.Add("Number",
+                await DocumentNumbers.NextMonthlyAsync(connection, transaction, organizationId, DocumentType.ServiceInvoice, "Srv",
+                    invoice.InvoiceDate, cancellationToken)
+                ?? await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.ServiceInvoice, cancellationToken));
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
                 INSERT INTO public.service_invoice (
                     organization_id, invoice_no, invoice_date, sale_type, due_date, customer_id, customer_name,
                     customer_mobile, warehouse_id, currency_lookup_data_id, exchange_rate, subtotal_amount,
                     discount_amount, extra_discount_amount, tax_amount, charge_amount, service_amount, round_off_amount,
-                    total_amount, paid_amount, payment_method, payment_provider, payment_reference_no, settled_amount,
-                    status, payment_status, service_note, remarks, created_at, created_by)
+                    total_amount, paid_amount, payment_method, payment_provider, payment_reference_no,
+                    inv_payment_source_d_id, settled_amount, status, payment_status, service_note, remarks, created_at, created_by)
                 VALUES (
                     @Org, @Number, @InvoiceDate, @SaleType, @DueDate, @CustomerId, @CustomerName,
                     @CustomerMobile, @WarehouseId, @CurrencyLookupDataId, @ExchangeRate, @SubtotalAmount,
                     @DiscountAmount, @ExtraDiscountAmount, @TaxAmount, @ChargeAmount, @ServiceAmount, @RoundOffAmount,
-                    @TotalAmount, @PaidAmount, @PaymentMethod, @PaymentProvider, @PaymentReferenceNo, @SettledAmount,
-                    'Draft', @PaymentStatus, @ServiceNote, @Remarks, {SecurityDb.NowUtc}, @UserId)
+                    @TotalAmount, @PaidAmount, @PaymentMethod, @PaymentProvider, @PaymentReferenceNo,
+                    @InvPaymentSourceDId, @SettledAmount, 'Draft', @PaymentStatus, @ServiceNote, @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING service_invoice_id
                 """, parameters, transaction, cancellationToken: cancellationToken));
         }
@@ -198,8 +207,8 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
                     extra_discount_amount = @ExtraDiscountAmount, tax_amount = @TaxAmount, charge_amount = @ChargeAmount,
                     service_amount = @ServiceAmount, round_off_amount = @RoundOffAmount, total_amount = @TotalAmount,
                     paid_amount = @PaidAmount, payment_method = @PaymentMethod, payment_provider = @PaymentProvider,
-                    payment_reference_no = @PaymentReferenceNo, settled_amount = @SettledAmount,
-                    payment_status = @PaymentStatus, service_note = @ServiceNote, remarks = @Remarks,
+                    payment_reference_no = @PaymentReferenceNo, inv_payment_source_d_id = @InvPaymentSourceDId,
+                    settled_amount = @SettledAmount, payment_status = @PaymentStatus, service_note = @ServiceNote, remarks = @Remarks,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE service_invoice_id = @Id;
                 DELETE FROM public.service_invoice_line WHERE service_invoice_id = @Id;

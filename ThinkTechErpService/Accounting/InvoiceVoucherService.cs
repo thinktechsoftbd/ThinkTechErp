@@ -15,8 +15,9 @@ namespace ThinkTechErpService.Accounting;
 /// <list type="bullet">
 /// <item>Purchase: Dr each item category's head; Cr the supplier's head for the unpaid part (credit) and the
 /// payment source type's head for what was paid now (all of a cash purchase).</item>
-/// <item>Sales: Dr the customer's head for the unpaid part (credit) and the fixed cash sales head for what was paid
-/// now (all of a cash sale); Cr each item category's head.</item>
+/// <item>Sales: Dr the customer's head for the unpaid part (credit) and the payment source type's head for what was
+/// paid now (all of a cash sale; the fixed cash sales head when the invoice has no source, as one billed from a
+/// service job); Cr each item category's head.</item>
 /// </list>
 /// The invoice total (in BDT) is shared out over the categories in proportion to their line totals, so tax,
 /// charges, round-off and discounts are carried with the goods and the voucher always balances.
@@ -159,7 +160,14 @@ public sealed class InvoiceVoucherService(
             else if (customer.AccSubClassId is null)
                 problems.Add($"The customer {customer.Name} has no ledger head: map one under Sales → Customers.");
         }
-        if (paid > 0 && !await mappings.LedgerHeadExistsAsync(VoucherLookups.CashSalesHeadId, cancellationToken))
+        PaymentSourceLedgerHead? source = null;
+        if (paid > 0 && invoice.InvPaymentSourceDId is int lineId)
+        {
+            source = await mappings.GetPaymentSourceHeadAsync(lineId, cancellationToken);
+            if (source is null)
+                problems.Add("Choose the payment source and its type on the invoice.");
+        }
+        else if (paid > 0 && !await mappings.LedgerHeadExistsAsync(VoucherLookups.CashSalesHeadId, cancellationToken))
             problems.Add($"The cash sales ledger head (id {VoucherLookups.CashSalesHeadId}) isn't in the chart of accounts.");
         ThrowIfAny(problems);
 
@@ -167,7 +175,10 @@ public sealed class InvoiceVoucherService(
         if (due > 0)
             lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, customer!.AccSubClassId!.Value, customer.Id, due, 0,
                 $"Receivable from {customer.Name}"));
-        if (paid > 0)
+        if (paid > 0 && source is not null)
+            lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, source.AccSubClassId, null, paid, 0,
+                $"Received in {source.SourceName} · {source.PaymentFor}"));
+        else if (paid > 0)
             lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, VoucherLookups.CashSalesHeadId, null, paid, 0,
                 invoice.SaleType == SaleTypes.Credit ? "Paid now" : "Cash sale"));
         foreach (var (head, names, amount) in Share(categories, total))

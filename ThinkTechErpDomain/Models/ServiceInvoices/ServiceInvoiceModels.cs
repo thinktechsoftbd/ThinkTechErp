@@ -131,6 +131,11 @@ public sealed class ServiceInvoice
     public string? PaymentMethod { get; set; }
     public string? PaymentProvider { get; set; }
     public string? PaymentReferenceNo { get; set; }
+    /// <summary>The chosen payment source line (inv_payment_source_d); its ledger head is where the money taken now goes.</summary>
+    public int? InvPaymentSourceDId { get; set; }
+    public int? PaymentSourceId { get; set; }
+    public string? PaymentSourceName { get; set; }
+    public string? PaymentSourceType { get; set; }
     public decimal SettledAmount { get; set; }
     public decimal DueAmount { get; set; }
     public string Status { get; set; } = "Draft";
@@ -181,6 +186,8 @@ public sealed class ServiceInvoiceUpsertRequest
     public string? PaymentMethod { get; set; }
     [StringLength(100)] public string? PaymentProvider { get; set; }
     [StringLength(100)] public string? PaymentReferenceNo { get; set; }
+    /// <summary>The payment source line (inv_payment_source_d). Required: where the money taken now goes.</summary>
+    [Range(1, int.MaxValue)] public int? InvPaymentSourceDId { get; set; }
     [StringLength(2000)] public string? ServiceNote { get; set; }
     [StringLength(1000)] public string? Remarks { get; set; }
 

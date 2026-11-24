@@ -32,6 +32,7 @@ public sealed class ServiceInvoiceService(
     ISalesSetupRepository salesSetup,
     IProductRepository products,
     IInventorySetupRepository inventorySetup,
+    IPaymentSourceRepository paymentSources,
     IOwnershipRepository ownership) : IServiceInvoiceService
 {
     public Task<PagedResult<ServiceInvoice>> GetInvoicesAsync(int organizationId, ServiceInvoiceQuery query, CancellationToken cancellationToken = default)
@@ -83,6 +84,11 @@ public sealed class ServiceInvoiceService(
               ?? throw new BusinessRuleException("The customer doesn't exist.");
         if (customer is { IsActive: false })
             throw new BusinessRuleException($"{customer.Name} is inactive. Activate the customer to bill them.");
+
+        // Required, as on a purchase invoice: the payment source line whose ledger head the money taken goes to.
+        var paymentSourceLineId = request.InvPaymentSourceDId;
+        if (paymentSourceLineId is null || !await paymentSources.ActiveLineExistsAsync(paymentSourceLineId.Value, cancellationToken))
+            throw new BusinessRuleException("Choose the payment source and its type.");
 
         var serviceAmount = TaxCalculator.Round(request.ServiceAmount);
         if (request.Lines.Count == 0 && serviceAmount == 0)
@@ -164,6 +170,7 @@ public sealed class ServiceInvoiceService(
             PaymentMethod = method,
             PaymentProvider = paid > 0 ? Text.Clean(request.PaymentProvider) : null,
             PaymentReferenceNo = paid > 0 ? Text.Clean(request.PaymentReferenceNo) : null,
+            InvPaymentSourceDId = paymentSourceLineId,
             // Nothing settles a service invoice later yet, so what was paid on it is all that is settled.
             PaymentStatus = paid >= total ? "Paid" : paid > 0 ? "PartiallyPaid" : "Unpaid",
             ServiceNote = Text.Clean(request.ServiceNote),

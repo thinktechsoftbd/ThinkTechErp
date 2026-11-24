@@ -241,6 +241,11 @@ public sealed class SalesInvoice
     public string? PaymentMethod { get; set; }
     public string? PaymentProvider { get; set; }
     public string? PaymentReferenceNo { get; set; }
+    /// <summary>The chosen payment source line (inv_payment_source_d); its ledger head is where the money taken now goes.</summary>
+    public int? InvPaymentSourceDId { get; set; }
+    public int? PaymentSourceId { get; set; }
+    public string? PaymentSourceName { get; set; }
+    public string? PaymentSourceType { get; set; }
     public decimal SettledAmount { get; set; }
     public decimal DueAmount { get; set; }
     /// <summary>Cost of the goods sold (base currency), known once posted.</summary>
@@ -307,6 +312,14 @@ public sealed class SalesInvoiceUpsertRequest
     public string? PaymentMethod { get; set; }
     [StringLength(100)] public string? PaymentProvider { get; set; }
     [StringLength(100)] public string? PaymentReferenceNo { get; set; }
+
+    /// <summary>
+    /// The payment source line (inv_payment_source_d) the money taken now goes to. Required from the invoice screen;
+    /// an invoice billed from a service job is made without one (its paid part goes to the cash sales head).
+    /// </summary>
+    [Required(ErrorMessage = "Choose the payment source and its type.")]
+    [Range(1, int.MaxValue)] public int? InvPaymentSourceDId { get; set; }
+
     [StringLength(1000)] public string? Remarks { get; set; }
 
     [MinLength(1, ErrorMessage = "Add at least one line.")]

@@ -41,6 +41,7 @@ public sealed class SalesDocumentService(
     ISalesSetupRepository setup,
     IProductRepository products,
     IInventorySetupRepository inventorySetup,
+    IPaymentSourceRepository paymentSources,
     IOwnershipRepository ownership) : ISalesDocumentService
 {
     private async Task<(long CurrencyId, decimal Rate)> CurrencyAsync(InventorySetting settings, long? currencyId, decimal rate, CancellationToken cancellationToken)
@@ -175,6 +176,11 @@ public sealed class SalesDocumentService(
         if (method is not null && !PaymentMethod.OnTheSpot.Contains(method))
             throw new BusinessRuleException("Take payment by cash, bank, mobile wallet or card. Record a cheque as a customer receipt.");
 
+        // The invoice screen always sends one (the request requires it); a service job's invoice has none.
+        var paymentSourceLineId = request.InvPaymentSourceDId;
+        if (paymentSourceLineId is int lineId && !await paymentSources.ActiveLineExistsAsync(lineId, cancellationToken))
+            throw new BusinessRuleException("Choose the payment source and its type.");
+
         var invoice = new SalesInvoice
         {
             InvoiceDate = request.InvoiceDate,
@@ -197,6 +203,7 @@ public sealed class SalesDocumentService(
             PaymentMethod = method,
             PaymentProvider = paid > 0 ? Text.Clean(request.PaymentProvider) : null,
             PaymentReferenceNo = paid > 0 ? Text.Clean(request.PaymentReferenceNo) : null,
+            InvPaymentSourceDId = paymentSourceLineId,
             Remarks = Text.Clean(request.Remarks),
             Lines = lines
         };

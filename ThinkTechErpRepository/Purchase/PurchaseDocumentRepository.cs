@@ -509,7 +509,11 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
         long id;
         if (invoice.Id == 0)
         {
-            parameters.Add("Number", await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.PurchaseInvoice, cancellationToken));
+            // FC/Pur/2026-11-0001: restarts each month (by the invoice date); PINV-00001 when the organization has no code.
+            parameters.Add("Number",
+                await DocumentNumbers.NextMonthlyAsync(connection, transaction, organizationId, DocumentType.PurchaseInvoice, "Pur",
+                    invoice.InvoiceDate, cancellationToken)
+                ?? await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.PurchaseInvoice, cancellationToken));
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
                 INSERT INTO public.purchase_invoice (
                     organization_id, invoice_no, invoice_date, purchase_type, due_date, supplier_id, supplier_name,

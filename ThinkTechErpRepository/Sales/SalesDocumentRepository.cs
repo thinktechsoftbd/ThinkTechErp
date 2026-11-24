@@ -110,6 +110,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                i.round_off_amount AS RoundOffAmount, i.total_amount AS TotalAmount, i.paid_amount AS PaidAmount,
                i.payment_method AS PaymentMethod, i.payment_provider AS PaymentProvider,
                i.payment_reference_no AS PaymentReferenceNo, i.settled_amount AS SettledAmount,
+               i.inv_payment_source_d_id AS InvPaymentSourceDId,
+               psh.id AS PaymentSourceId, psh.source_name_en AS PaymentSourceName, psd.payment_for AS PaymentSourceType,
                i.total_amount - i.settled_amount AS DueAmount,
                coalesce((SELECT round(sum(l.unit_cost * l.base_quantity), 4) FROM public.sales_invoice_line l
                          WHERE l.sales_invoice_id = i.sales_invoice_id), 0) AS CostAmount,
@@ -122,6 +124,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         LEFT JOIN public.voucher bv ON bv.sales_invoice_id = i.sales_invoice_id AND NOT bv.is_deleted AND bv.status <> 'Cancelled'
         LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id
         JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
+        LEFT JOIN public.inv_payment_source_d psd ON psd.id = i.inv_payment_source_d_id
+        LEFT JOIN public.inv_payment_source_h psh ON psh.id = psd.inv_payment_source_h_id
         JOIN public.lookup_data cur ON cur.lookup_data_id = i.currency_lookup_data_id
         """;
 
@@ -280,6 +284,7 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
             invoice.PaymentMethod,
             invoice.PaymentProvider,
             invoice.PaymentReferenceNo,
+            invoice.InvPaymentSourceDId,
             SettledAmount = invoice.PaidAmount,
             invoice.Remarks,
             UserId = userId
@@ -288,20 +293,24 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
         long id;
         if (invoice.Id == 0)
         {
-            parameters.Add("Number", await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.SalesInvoice, cancellationToken));
+            // FC/Sal/2026-11-0001: restarts each month (by the invoice date); INV-00001 when the organization has no code.
+            parameters.Add("Number",
+                await DocumentNumbers.NextMonthlyAsync(connection, transaction, organizationId, DocumentType.SalesInvoice, "Sal",
+                    invoice.InvoiceDate, cancellationToken)
+                ?? await DocumentNumbers.NextAsync(connection, transaction, organizationId, DocumentType.SalesInvoice, cancellationToken));
             id = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
                 INSERT INTO public.sales_invoice (
                     organization_id, invoice_no, invoice_date, sale_type, due_date, customer_id, customer_name,
                     customer_mobile, warehouse_id, currency_lookup_data_id, exchange_rate, subtotal_amount,
                     discount_amount, extra_discount_amount, tax_amount, charge_amount, round_off_amount, total_amount,
-                    paid_amount, payment_method, payment_provider, payment_reference_no, settled_amount, status,
-                    payment_status, remarks, created_at, created_by)
+                    paid_amount, payment_method, payment_provider, payment_reference_no, inv_payment_source_d_id,
+                    settled_amount, status, payment_status, remarks, created_at, created_by)
                 VALUES (
                     @Org, @Number, @InvoiceDate, @SaleType, @DueDate, @CustomerId, @CustomerName,
                     @CustomerMobile, @WarehouseId, @CurrencyLookupDataId, @ExchangeRate, @SubtotalAmount,
                     @DiscountAmount, @ExtraDiscountAmount, @TaxAmount, @ChargeAmount, @RoundOffAmount, @TotalAmount,
-                    @PaidAmount, @PaymentMethod, @PaymentProvider, @PaymentReferenceNo, @SettledAmount, 'Draft',
-                    'Unpaid', @Remarks, {SecurityDb.NowUtc}, @UserId)
+                    @PaidAmount, @PaymentMethod, @PaymentProvider, @PaymentReferenceNo, @InvPaymentSourceDId,
+                    @SettledAmount, 'Draft', 'Unpaid', @Remarks, {SecurityDb.NowUtc}, @UserId)
                 RETURNING sales_invoice_id
                 """, parameters, transaction, cancellationToken: cancellationToken));
         }
@@ -321,7 +330,8 @@ public sealed partial class SalesDocumentRepository(IDbConnectionFactory connect
                     extra_discount_amount = @ExtraDiscountAmount, tax_amount = @TaxAmount, charge_amount = @ChargeAmount,
                     round_off_amount = @RoundOffAmount, total_amount = @TotalAmount, paid_amount = @PaidAmount,
                     payment_method = @PaymentMethod, payment_provider = @PaymentProvider,
-                    payment_reference_no = @PaymentReferenceNo, settled_amount = @SettledAmount, remarks = @Remarks,
+                    payment_reference_no = @PaymentReferenceNo, inv_payment_source_d_id = @InvPaymentSourceDId,
+                    settled_amount = @SettledAmount, remarks = @Remarks,
                     updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
                 WHERE sales_invoice_id = @Id;
                 DELETE FROM public.sales_invoice_line WHERE sales_invoice_id = @Id;

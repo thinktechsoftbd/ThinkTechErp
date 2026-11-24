@@ -36,6 +36,39 @@ internal static class DocumentNumbers
     }
 
     /// <summary>
+    /// A number that starts again every month, built with the organization's code: {code}/{label}/{yyyy}-{MM}-{0001},
+    /// e.g. FC/Pur/2026-11-0001, then FC/Pur/2026-12-0001 in December. The month is the document's own date. Each
+    /// month has its own document_sequence row (fiscal_year = yyyyMM; the plain series uses 0), whose row lock keeps
+    /// numbers from repeating. Null when the organization has no code: the caller keeps its plain series.
+    /// </summary>
+    public static async Task<string?> NextMonthlyAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, string documentType, string label,
+        DateOnly date, CancellationToken cancellationToken)
+    {
+        var code = await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
+            "SELECT nullif(btrim(organization_code), '') FROM public.organization WHERE organization_id = @Org",
+            new { Org = organizationId }, transaction, cancellationToken: cancellationToken));
+        if (code is null)
+            return null;
+
+        const short padding = 4;
+        var parameters = new { Org = organizationId, Type = documentType, Period = date.Year * 100 + date.Month, Prefix = label, Padding = padding };
+        await connection.ExecuteAsync(new CommandDefinition("""
+            INSERT INTO public.document_sequence (organization_id, document_type, fiscal_year, prefix, number_padding)
+            VALUES (@Org, @Type, @Period, @Prefix, @Padding)
+            ON CONFLICT ON CONSTRAINT ux_document_sequence DO NOTHING
+            """, parameters, transaction, cancellationToken: cancellationToken));
+        var number = await connection.QuerySingleAsync<long>(new CommandDefinition($"""
+            UPDATE public.document_sequence
+            SET next_number = next_number + 1, updated_at = {SecurityDb.NowUtc}
+            WHERE organization_id = @Org AND document_type = @Type AND fiscal_year = @Period
+            RETURNING next_number - 1
+            """, parameters, transaction, cancellationToken: cancellationToken));
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        return $"{code}/{label}/{date.ToString("yyyy-MM", culture)}-{number.ToString(culture).PadLeft(padding, '0')}";
+    }
+
+    /// <summary>
     /// The next supplier code in the series (S-00001), skipping codes already typed by hand: suppliers and customers
     /// share public.supplier and one list of codes.
     /// </summary>
