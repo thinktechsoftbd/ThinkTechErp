@@ -59,7 +59,11 @@ internal static class BusinessDbErrors
         ["fk_service_job_technician"] = "The technician doesn't exist.",
         ["fk_service_job_device_type"] = "Choose a device type from the list.",
         ["ux_service_job_invoice"] = "This invoice already bills another service job.",
-        ["ck_service_supplier_claim_dates"] = "The return date can't be before the date the unit was sent."
+        ["ck_service_supplier_claim_dates"] = "The return date can't be before the date the unit was sent.",
+        ["ck_service_invoice_credit_customer"] = "A credit service invoice needs a customer on file.",
+        ["ck_service_invoice_cash_paid"] = "A cash service invoice must be paid in full.",
+        ["ck_service_invoice_paid"] = "The amount paid must be between 0 and the total, with how it was paid.",
+        ["ck_service_invoice_service_amount"] = "The service amount can't be negative."
     };
 
     public static async Task<T> ExecuteAsync<T>(Func<Task<T>> operation)

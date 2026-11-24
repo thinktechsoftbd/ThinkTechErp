@@ -44,6 +44,8 @@ public static class DocumentType
     public const string WarrantyCard = "WarrantyCard";
     /// <summary>A faulty unit sent back to the supplier (RMA).</summary>
     public const string SupplierClaim = "SupplierClaim";
+    /// <summary>A bill for service work: parts used plus the service charge (Warranty -> Service Invoice).</summary>
+    public const string ServiceInvoice = "ServiceInvoice";
 
     /// <summary>The number prefix a new organization's series starts with, e.g. PINV-00001.</summary>
     public static string DefaultPrefix(string documentType) => documentType switch
@@ -68,6 +70,7 @@ public static class DocumentType
         ServiceJob => "SJ-",
         WarrantyCard => "WC-",
         SupplierClaim => "RMA-",
+        ServiceInvoice => "SVI-",
         _ => "DOC-"
     };
 

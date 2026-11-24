@@ -13,6 +13,7 @@ using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Sms;
 using ThinkTechErpDomain.Models.Security;
+using ThinkTechErpDomain.Models.ServiceInvoices;
 using ThinkTechErpDomain.Models.Settings;
 using ThinkTechErpDomain.Models.Warranty;
 using ThinkTechErpService;
@@ -325,7 +326,8 @@ builder.Services.AddAuthorization(options =>
             InventoryRules.ViewInventoryPermission, InventoryRules.ManageInventoryPermission,
             PurchaseRules.ViewPurchasePermission, PurchaseRules.ManagePurchasePermission,
             SalesRules.ViewSalesPermission, SalesRules.ManageSalesPermission,
-            WarrantyRules.ViewWarrantyPermission, WarrantyRules.ManageWarrantyPermission));
+            WarrantyRules.ViewWarrantyPermission, WarrantyRules.ManageWarrantyPermission,
+            ServiceInvoiceRules.ViewServiceInvoicePermission, ServiceInvoiceRules.ManageServiceInvoicePermission));
 
     options.AddPolicy(InventoryPolicies.SharedManage, policy => policy
         .RequireAuthenticatedUser()
@@ -358,6 +360,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(WarrantyPolicies.Manage, policy => policy
         .RequireAuthenticatedUser()
         .RequireClaim(SecurityPolicies.PermissionClaim, WarrantyRules.ManageWarrantyPermission));
+
+    options.AddPolicy(ServiceInvoicePolicies.View, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim,
+            ServiceInvoiceRules.ViewServiceInvoicePermission, ServiceInvoiceRules.ManageServiceInvoicePermission));
+
+    options.AddPolicy(ServiceInvoicePolicies.Manage, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim(SecurityPolicies.PermissionClaim, ServiceInvoiceRules.ManageServiceInvoicePermission));
 
     options.AddPolicy(AccountingPolicies.View, policy => policy
         .RequireAuthenticatedUser()

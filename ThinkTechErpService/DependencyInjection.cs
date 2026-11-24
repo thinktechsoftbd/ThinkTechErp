@@ -10,6 +10,7 @@ using ThinkTechErpRepository.Inventory;
 using ThinkTechErpRepository.Purchase;
 using ThinkTechErpRepository.Sales;
 using ThinkTechErpRepository.Security;
+using ThinkTechErpRepository.ServiceInvoices;
 using ThinkTechErpRepository.Settings;
 using ThinkTechErpRepository.ThinkCart;
 using ThinkTechErpRepository.Website;
@@ -21,6 +22,7 @@ using ThinkTechErpService.Inventory;
 using ThinkTechErpService.Purchase;
 using ThinkTechErpService.Sales;
 using ThinkTechErpService.Security;
+using ThinkTechErpService.ServiceInvoices;
 using ThinkTechErpService.Settings;
 using ThinkTechErpService.Sms;
 using ThinkTechErpService.Storage;
@@ -141,6 +143,10 @@ public static class DependencyInjection
         services.AddScoped<IWarrantySetupService, WarrantySetupService>();
         services.AddScoped<IWarrantyCardService, WarrantyCardService>();
         services.AddScoped<IServiceJobService, ServiceJobService>();
+
+        // Service invoices (Warranty -> Transactions)
+        services.AddScoped<IServiceInvoiceRepository, ServiceInvoiceRepository>();
+        services.AddScoped<IServiceInvoiceService, ServiceInvoiceService>();
 
         // Accounting
         services.AddScoped<ILedgerLookupRepository, LedgerLookupRepository>();
