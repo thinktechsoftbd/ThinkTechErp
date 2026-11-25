@@ -7,50 +7,52 @@ using ThinkTechErpService.Common;
 namespace ThinkTechErpService.Sms;
 
 /// <summary>
-/// Sends SMS and reads the account at a provider's gateway. Every call names the provider (sms_provider_id); its
-/// endpoint and credentials are read from public.sms_provider each time, so a provider's settings take effect at once.
+/// Sends SMS and reads the account at an organization's provider's gateway. Every call names the organization (its
+/// Object Id); its provider (organization.sms_provider_id), the provider's endpoint, credentials and sender ID are read
+/// from the database each time, so changed settings take effect at once.
 /// </summary>
 public interface ISmsGatewayService
 {
-    Task<SmsSendResult> SendAsync(int providerId, SmsSendRequest request, CancellationToken cancellationToken = default);
-    Task<SmsGatewayBalance> GetBalanceAsync(int providerId, CancellationToken cancellationToken = default);
-    Task<SmsMessageStatus> GetMessageStatusAsync(int providerId, string messageId, CancellationToken cancellationToken = default);
-    Task<SmsMessageHistory> GetMessageHistoryAsync(int providerId, int page, int limit, CancellationToken cancellationToken = default);
+    Task<SmsSendResult> SendAsync(Guid organizationObjectId, SmsSendRequest request, CancellationToken cancellationToken = default);
+    Task<SmsGatewayBalance> GetBalanceAsync(Guid organizationObjectId, CancellationToken cancellationToken = default);
+    Task<SmsMessageStatus> GetMessageStatusAsync(Guid organizationObjectId, string messageId, CancellationToken cancellationToken = default);
+    Task<SmsMessageHistory> GetMessageHistoryAsync(Guid organizationObjectId, int page, int limit, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Errors: BusinessRuleException (400) when the request or the provider's settings need correcting, the provider
-/// isn't active or has no client yet, or the gateway refused the request with a reason; SmsGatewayException (502)
-/// when the gateway can't be reached, refuses the key or answers unexpectedly.
+/// Errors: BusinessRuleException (400) when the request or the settings need correcting (the organization has no
+/// provider, the provider isn't active, has no client yet, no endpoint or, to send, no sender ID), or the gateway
+/// refused the request with a reason; SmsGatewayException (502) when the gateway can't be reached, refuses the key or
+/// answers unexpectedly.
 /// </summary>
 public sealed partial class SmsGatewayService(ISmsGatewayRepository repository, IEnumerable<ISmsGatewayClient> clients)
     : ISmsGatewayService
 {
-    public async Task<SmsSendResult> SendAsync(int providerId, SmsSendRequest request, CancellationToken cancellationToken = default)
+    public async Task<SmsSendResult> SendAsync(Guid organizationObjectId, SmsSendRequest request, CancellationToken cancellationToken = default)
     {
         var message = Normalize(request);
-        var (client, connection) = await ConnectAsync(providerId, cancellationToken);
+        var (client, connection) = await ConnectAsync(organizationObjectId, sending: true, cancellationToken);
         var result = await client.SendAsync(connection, message, cancellationToken);
         result.ProviderId = connection.ProviderId;
         result.ProviderCode = connection.Code;
         return result;
     }
 
-    public async Task<SmsGatewayBalance> GetBalanceAsync(int providerId, CancellationToken cancellationToken = default)
+    public async Task<SmsGatewayBalance> GetBalanceAsync(Guid organizationObjectId, CancellationToken cancellationToken = default)
     {
-        var (client, connection) = await ConnectAsync(providerId, cancellationToken);
+        var (client, connection) = await ConnectAsync(organizationObjectId, sending: false, cancellationToken);
         var balance = await client.GetBalanceAsync(connection, cancellationToken);
         balance.ProviderId = connection.ProviderId;
         balance.ProviderCode = connection.Code;
         return balance;
     }
 
-    public async Task<SmsMessageStatus> GetMessageStatusAsync(int providerId, string messageId, CancellationToken cancellationToken = default)
+    public async Task<SmsMessageStatus> GetMessageStatusAsync(Guid organizationObjectId, string messageId, CancellationToken cancellationToken = default)
     {
         var id = Text.Clean(messageId) ?? throw new BusinessRuleException("Enter the message id the provider gave when it was sent.");
         if (id.Length > 100)
             throw new BusinessRuleException("The message id is too long.");
-        var (client, connection) = await ConnectAsync(providerId, cancellationToken);
+        var (client, connection) = await ConnectAsync(organizationObjectId, sending: false, cancellationToken);
         var status = await client.GetMessageStatusAsync(connection, id, cancellationToken);
         status.ProviderId = connection.ProviderId;
         status.ProviderCode = connection.Code;
@@ -59,24 +61,34 @@ public sealed partial class SmsGatewayService(ISmsGatewayRepository repository, 
         return status;
     }
 
-    public async Task<SmsMessageHistory> GetMessageHistoryAsync(int providerId, int page, int limit, CancellationToken cancellationToken = default)
+    public async Task<SmsMessageHistory> GetMessageHistoryAsync(Guid organizationObjectId, int page, int limit, CancellationToken cancellationToken = default)
     {
         page = Math.Max(page, 1);
         limit = limit < 1 ? SmsHistoryRules.DefaultLimit : Math.Min(limit, SmsHistoryRules.MaxLimit);
-        var (client, connection) = await ConnectAsync(providerId, cancellationToken);
+        var (client, connection) = await ConnectAsync(organizationObjectId, sending: false, cancellationToken);
         var history = await client.GetMessageHistoryAsync(connection, page, limit, cancellationToken);
         history.ProviderId = connection.ProviderId;
         history.ProviderCode = connection.Code;
         return history;
     }
 
+    /// <summary>The organization's provider, its gateway client and settings, checked (the sender ID only to send).</summary>
     private async Task<(ISmsGatewayClient Client, SmsGatewayConnection Connection)> ConnectAsync(
-        int providerId, CancellationToken cancellationToken)
+        Guid organizationObjectId, bool sending, CancellationToken cancellationToken)
     {
+        var organization = await repository.GetOrganizationAsync(organizationObjectId, cancellationToken)
+            ?? throw new BusinessRuleException("The organization doesn't exist.");
+        if (organization.ProviderId is not int providerId)
+            throw new BusinessRuleException(
+                $"{organization.Name} has no SMS provider, so it can't send SMS. Choose its provider in Security → Organizations.");
         var provider = await repository.GetProviderAsync(providerId, cancellationToken)
             ?? throw new BusinessRuleException($"There is no SMS provider {providerId}.");
         if (!provider.IsActive)
             throw new BusinessRuleException($"The SMS provider {provider.Name} isn't active. Activate it in its settings first.");
+        var senderId = Text.Clean(provider.SenderId);
+        if (sending && senderId is null)
+            throw new BusinessRuleException(
+                $"The SMS provider {provider.Name} has no sender ID, so SMS can't be sent through it. Set it in SMS → Providers.");
 
         var client = clients.FirstOrDefault(c => c.ProviderId == provider.ProviderId)
             ?? throw new BusinessRuleException($"Sending SMS through {provider.Name} ({provider.Code}) isn't supported yet.");
@@ -94,7 +106,8 @@ public sealed partial class SmsGatewayService(ISmsGatewayRepository repository, 
             Endpoint = endpoint,
             ApiKey = Text.Clean(provider.ApiKey),
             ApiUsername = Text.Clean(provider.ApiUsername),
-            ApiPassword = Text.Clean(provider.ApiPassword)
+            ApiPassword = Text.Clean(provider.ApiPassword),
+            SenderId = senderId
         });
     }
 
@@ -131,8 +144,7 @@ public sealed partial class SmsGatewayService(ISmsGatewayRepository repository, 
         {
             ServiceType = serviceType,
             Message = message,
-            Recipients = recipients,
-            SenderId = Text.Clean(request.SenderId)
+            Recipients = recipients
         };
     }
 

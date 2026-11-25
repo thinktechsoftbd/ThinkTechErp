@@ -426,10 +426,29 @@ public sealed class Organization
     /// <summary>Finalized: its SMS allocations are locked (none can be added, changed or deleted).</summary>
     public bool IsFinalized { get; set; }
 
+    /// <summary>
+    /// The SMS provider the organization sends through (sms_provider_id); null: none yet. The SMS gateway uses it and
+    /// its sender ID, and the organization's SMS allocations come from its stock.
+    /// </summary>
+    public int? SmsProviderId { get; set; }
+    public string? SmsProviderName { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public int? CreatedBy { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public int? UpdatedBy { get; set; }
+}
+
+/// <summary>An SMS provider an organization can send through (the SMS provider picker of an organization).</summary>
+public sealed class OrganizationSmsProviderOption
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    /// <summary>Inactive providers can't be newly chosen, only kept.</summary>
+    public bool IsActive { get; set; }
+    /// <summary>Without a sender ID the gateway refuses to send through it.</summary>
+    public bool HasSenderId { get; set; }
 }
 
 /// <summary>
@@ -499,6 +518,13 @@ public sealed class OrganizationUpsertRequest : OrganizationDetails
 
     /// <summary>Locks the organization's SMS allocations while true.</summary>
     public bool IsFinalized { get; set; }
+
+    /// <summary>
+    /// The SMS provider it sends through; null: none. A newly chosen provider must be active, and when the organization
+    /// has SMS allocated they move to the new provider's stock, which must have them left. Kept by the ERP (sync leaves it).
+    /// </summary>
+    [Range(1, int.MaxValue)]
+    public int? SmsProviderId { get; set; }
 }
 
 // ---- Integration clients (server-to-server)

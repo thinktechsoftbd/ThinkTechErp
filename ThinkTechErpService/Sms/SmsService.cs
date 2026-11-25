@@ -85,6 +85,7 @@ public sealed class SmsService(ISmsRepository repository) : ISmsService
         request.Code = request.Code.Trim().ToUpperInvariant();
         request.ApiBaseUrl = Text.Clean(request.ApiBaseUrl);
         request.ApiUsername = Text.Clean(request.ApiUsername);
+        request.SenderId = Text.Clean(request.SenderId);
         if (request.Name.Length == 0 || request.Code.Length == 0)
             throw new BusinessRuleException("Enter the provider's name and code.");
     }

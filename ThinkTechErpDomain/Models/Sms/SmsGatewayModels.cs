@@ -3,8 +3,9 @@ using System.Text.Json;
 
 namespace ThinkTechErpDomain.Models.Sms;
 
-// Sending SMS through a provider's gateway (api/sms/gateway/{providerId}). The provider's endpoint and
-// credentials are read from public.sms_provider on every call, so nothing about a provider is configured in code.
+// Sending SMS through a provider's gateway (api/sms/gateway). The provider is the caller's organization's
+// (organization.sms_provider_id); its endpoint, credentials and sender ID are read from public.sms_provider on every
+// call, so nothing about a provider is configured in code and callers name neither the provider nor the sender.
 
 public static class SmsServiceTypes
 {
@@ -14,7 +15,10 @@ public static class SmsServiceTypes
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal) { NonMasking, Masking };
 }
 
-/// <summary>An SMS to send to one or more mobile numbers.</summary>
+/// <summary>
+/// An SMS to send to one or more mobile numbers. It is sent from the provider's sender ID; a senderId in the body
+/// (sent by older callers) is ignored.
+/// </summary>
 public sealed class SmsSendRequest
 {
     /// <summary>non_masking_sms (sent from a number) or masking_sms (sent under a brand name).</summary>
@@ -27,10 +31,6 @@ public sealed class SmsSendRequest
     /// <summary>Mobile numbers, e.g. 01712345678 or 8801712345678.</summary>
     [Required, MinLength(1, ErrorMessage = "Add at least one recipient."), MaxLength(1000)]
     public List<string> Recipients { get; set; } = [];
-
-    /// <summary>The number or brand to send from; empty: the provider's default.</summary>
-    [StringLength(50)]
-    public string? SenderId { get; set; }
 }
 
 public sealed class SmsSendResult
@@ -51,8 +51,9 @@ public sealed class SmsSendResult
 /// </summary>
 public sealed class SmsGatewayBalance
 {
-    public int ProviderId { get; set; }
-    public string ProviderCode { get; set; } = string.Empty;
+    /// <summary>The organization's provider; null (integration clients only) when it has none yet.</summary>
+    public int? ProviderId { get; set; }
+    public string? ProviderCode { get; set; }
     public decimal? WalletBalance { get; set; }
     public decimal? CreditLimit { get; set; }
     public decimal? AvailableCredit { get; set; }
@@ -107,9 +108,19 @@ public sealed class SmsGatewayProvider
     public string? ApiUsername { get; set; }
     public string? ApiPassword { get; set; }
     public string? ApiKey { get; set; }
+    /// <summary>sms_sender_id: the number or brand name SMS are sent from.</summary>
+    public string? SenderId { get; set; }
     public bool IsActive { get; set; }
 
     public override string ToString() => $"{Name} ({Code}, id {ProviderId})";
+}
+
+/// <summary>An organization a gateway call is for, and the provider it sends through (null: none chosen yet).</summary>
+public sealed class SmsGatewayOrganization
+{
+    public Guid ObjectId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int? ProviderId { get; set; }
 }
 
 /// <summary>

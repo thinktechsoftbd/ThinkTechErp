@@ -17,6 +17,15 @@ public sealed class SecurityOrganizationsController(IOrganizationService organiz
     public async Task<ActionResult<IReadOnlyList<Organization>>> GetOrganizations(CancellationToken cancellationToken)
         => Ok(await organizationService.GetOrganizationsAsync(cancellationToken));
 
+    /// <summary>
+    /// The SMS providers an organization can send through, active first, for the organization form's SMS provider
+    /// picker. Under the organizations' permission, so choosing one doesn't need SMS.V.
+    /// </summary>
+    [HttpGet("sms-providers")]
+    [ProducesResponseType(typeof(IReadOnlyList<OrganizationSmsProviderOption>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<OrganizationSmsProviderOption>>> GetSmsProviders(CancellationToken cancellationToken)
+        => Ok(await organizationService.GetSmsProviderOptionsAsync(cancellationToken));
+
     [HttpGet("{organizationId:int}")]
     [ProducesResponseType(typeof(Organization), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

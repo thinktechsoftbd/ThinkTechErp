@@ -21,21 +21,33 @@ public sealed class OrganizationScopeFilter(IUserOrganizationService organizatio
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var user = context.HttpContext.User;
-        if (!user.TryGetUserId(out var userId))
+        var (organizationId, refusal) = await ResolveAsync(context.HttpContext, organizations);
+        if (refusal is not null)
         {
-            context.Result = new UnauthorizedResult();
+            context.Result = refusal;
             return;
         }
 
+        context.HttpContext.Items[ItemKey] = organizationId!.Value;
+        await next();
+    }
+
+    /// <summary>
+    /// The organization the signed-in user works in: the X-Organization-Id header's, or their default. Otherwise the
+    /// answer to give: 401 without a user, 400 for a header that isn't an id, 403 when they can't use it or have none.
+    /// </summary>
+    public static async Task<(int? OrganizationId, ActionResult? Refusal)> ResolveAsync(
+        HttpContext httpContext, IUserOrganizationService organizations)
+    {
+        var user = httpContext.User;
+        if (!user.TryGetUserId(out var userId))
+            return (null, new UnauthorizedResult());
+
         int? requested = null;
-        if (context.HttpContext.Request.Headers.TryGetValue(HeaderName, out var header) && !string.IsNullOrWhiteSpace(header))
+        if (httpContext.Request.Headers.TryGetValue(HeaderName, out var header) && !string.IsNullOrWhiteSpace(header))
         {
             if (!int.TryParse(header, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
-            {
-                context.Result = new BadRequestObjectResult(new { error = $"{HeaderName} must be an organization id." });
-                return;
-            }
+                return (null, new BadRequestObjectResult(new { error = $"{HeaderName} must be an organization id." }));
             requested = parsed;
         }
 
@@ -44,26 +56,21 @@ public sealed class OrganizationScopeFilter(IUserOrganizationService organizatio
         try
         {
             organizationId = await organizations.ResolveAsync(userId, canManageOrganizations, requested,
-                context.HttpContext.RequestAborted);
+                httpContext.RequestAborted);
         }
         catch (BusinessRuleException exception)
         {
-            context.Result = new ObjectResult(new { error = exception.Message }) { StatusCode = StatusCodes.Status403Forbidden };
-            return;
+            return (null, new ObjectResult(new { error = exception.Message }) { StatusCode = StatusCodes.Status403Forbidden });
         }
 
         if (organizationId is null)
-        {
-            context.Result = new ObjectResult(new
+            return (null, new ObjectResult(new
             {
                 error = "Your account isn't linked to an organization yet. Ask an administrator to add you to one."
             })
-            { StatusCode = StatusCodes.Status403Forbidden };
-            return;
-        }
+            { StatusCode = StatusCodes.Status403Forbidden });
 
-        context.HttpContext.Items[ItemKey] = organizationId.Value;
-        await next();
+        return (organizationId, null);
     }
 
     public static int Get(HttpContext httpContext)

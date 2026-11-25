@@ -32,7 +32,7 @@ public sealed class CdcSmsGatewayClient(HttpClient http, ILogger<CdcSmsGatewayCl
             ServiceType = request.ServiceType,
             Message = request.Message,
             Recipients = request.Recipients,
-            SenderId = request.SenderId
+            SenderId = connection.SenderId
         }, cancellationToken);
         return new SmsSendResult
         {

@@ -24,8 +24,11 @@ public sealed class SmsProvider
     public string? ApiUsername { get; set; }
     public bool HasApiPassword { get; set; }
     public bool HasApiKey { get; set; }
+    /// <summary>The number or brand name SMS are sent from (sms_sender_id); the gateway needs it to send.</summary>
+    public string? SenderId { get; set; }
     public bool IsActive { get; set; }
     public long PurchasedSms { get; set; }
+    /// <summary>Allocated to the organizations that send through this provider (organization.sms_provider_id).</summary>
     public long AllocatedSms { get; set; }
     /// <summary>Bought from the provider and not yet allocated to an organization.</summary>
     public long AvailableSms { get; set; }
@@ -54,6 +57,10 @@ public sealed class SmsProviderUpsertRequest
     /// <summary>Null keeps the stored key; an empty string removes it.</summary>
     [StringLength(2000)]
     public string? ApiKey { get; set; }
+
+    /// <summary>The number or brand name to send from, e.g. 8809648909301; empty: none (sending is refused).</summary>
+    [StringLength(50)]
+    public string? SenderId { get; set; }
 
     public bool IsActive { get; set; } = true;
 }
@@ -117,13 +124,11 @@ public sealed class SmsPurchaseUpsertRequest
 
 // ---- Allocations
 
+/// <summary>SMS given to an organization from the stock of its provider (organization.sms_provider_id).</summary>
 public sealed class SmsAllocation
 {
     public long Id { get; set; }
     public Guid ObjectId { get; set; }
-    public int ProviderId { get; set; }
-    public string ProviderName { get; set; } = string.Empty;
-    public string ProviderCode { get; set; } = string.Empty;
     /// <summary>The organization's Object Id (sms_allocation.organization_id).</summary>
     public Guid OrganizationObjectId { get; set; }
     public int OrganizationId { get; set; }
@@ -136,11 +141,9 @@ public sealed class SmsAllocation
     public DateTime? UpdatedAt { get; set; }
 }
 
+/// <summary>Allocated from the organization's provider; an organization without one is refused.</summary>
 public sealed class SmsAllocationUpsertRequest
 {
-    [Range(1, int.MaxValue)]
-    public int ProviderId { get; set; }
-
     public Guid OrganizationObjectId { get; set; }
 
     [Range(1, long.MaxValue, ErrorMessage = "Enter how many SMS to allocate.")]
@@ -162,6 +165,10 @@ public sealed class SmsOrganizationBalance
     public bool IsActive { get; set; }
     /// <summary>Finalized in Security → Organizations: its allocations are locked.</summary>
     public bool IsFinalized { get; set; }
+    /// <summary>The provider it sends through and is allocated from (organization.sms_provider_id); null: none yet.</summary>
+    public int? ProviderId { get; set; }
+    public string? ProviderName { get; set; }
+    public string? ProviderCode { get; set; }
     public long AllocatedSms { get; set; }
     public long SmsUsage { get; set; }
     public long AvailableSms { get; set; }
@@ -215,6 +222,7 @@ public sealed class SmsOverview
 public sealed class SmsListQuery
 {
     public string? Search { get; set; }
+    /// <summary>Purchases only: allocations have no provider of their own (it is their organization's).</summary>
     public int? ProviderId { get; set; }
     public Guid? OrganizationObjectId { get; set; }
     public DateOnly? From { get; set; }

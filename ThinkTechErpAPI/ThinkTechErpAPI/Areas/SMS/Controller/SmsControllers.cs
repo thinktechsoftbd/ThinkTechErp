@@ -13,6 +13,7 @@ namespace ThinkTechErpAPI.Areas.SMS.Controller;
 public sealed class SmsListQueryString
 {
     [StringLength(100)] public string? Search { get; set; }
+    /// <summary>Purchases only (an allocation's provider is its organization's).</summary>
     public int? ProviderId { get; set; }
     public Guid? OrganizationId { get; set; }
     public DateOnly? From { get; set; }
@@ -73,7 +74,7 @@ public sealed class SmsProvidersController(ISmsService sms) : ErpControllerBase
     [Authorize(Policy = SmsPolicies.Manage)]
     public async Task<IActionResult> DeleteProvider(int id, CancellationToken cancellationToken)
         => DeleteResult(await sms.DeleteProviderAsync(id, cancellationToken),
-            "SMS were bought from or allocated with this provider. Deactivate it instead.");
+            "SMS were bought from this provider or organizations send through it. Deactivate it instead.");
 }
 
 /// <summary>SMS bought from a provider, with the cost in its currency and in BDT.</summary>
@@ -110,7 +111,10 @@ public sealed class SmsPurchasesController(ISmsService sms) : ErpControllerBase
             "These SMS are already allocated to organizations. Reduce the allocations first.");
 }
 
-/// <summary>SMS given to organizations from a provider's unallocated stock.</summary>
+/// <summary>
+/// SMS given to organizations from the unallocated stock of each one's provider (Security → Organizations). An
+/// organization without a provider can't be allocated SMS.
+/// </summary>
 [Route("api/sms/allocations")]
 [Authorize(Policy = SmsPolicies.View)]
 public sealed class SmsAllocationsController(ISmsService sms) : ErpControllerBase
@@ -123,7 +127,7 @@ public sealed class SmsAllocationsController(ISmsService sms) : ErpControllerBas
     public async Task<ActionResult<SmsAllocation>> GetAllocation(long id, CancellationToken cancellationToken)
         => OkOrNotFound(await sms.GetAllocationAsync(id, cancellationToken));
 
-    /// <summary>Refused beyond what the provider has left to allocate.</summary>
+    /// <summary>Refused beyond what the organization's provider has left to allocate.</summary>
     [HttpPost]
     [Authorize(Policy = SmsPolicies.Manage)]
     public async Task<ActionResult<SmsAllocation>> CreateAllocation([FromBody] SmsAllocationUpsertRequest request, CancellationToken cancellationToken)

@@ -176,3 +176,82 @@ BEGIN
 END $$;
 
 COMMIT;
+
+--changes_date: 25-Nov-2026
+--scripts
+-- SMS provider per organization (Security -> Organizations) instead of per SMS allocation:
+--   * public.sms_provider.sms_sender_id: the number or brand name the provider sends from. CDC (id 6, the provider
+--     MediDesk sends through) gets 8809648909301, the sender MediDesk used to pass itself.
+--   * public.organization.sms_provider_id (NULL: none chosen yet): the provider the organization sends SMS through.
+--     The SMS gateway (api/sms/gateway) takes it from the caller's organization and the sender from the provider, so
+--     callers pass neither. An organization's SMS allocations come from this provider's stock.
+--   * public.sms_allocation.sms_provider_id is dropped, with fk_sms_allocation_provider and idx_sms_allocation_provider.
+--     Before that, each organization without a provider gets the one of its latest allocation. An organization whose
+--     allocations come from more than one provider stops the script: set its organization.sms_provider_id by hand
+--     (its allocations then count against that provider) and run the script again.
+
+BEGIN;
+
+ALTER TABLE public.sms_provider ADD COLUMN IF NOT EXISTS sms_sender_id VARCHAR(50) NULL;
+
+COMMENT ON COLUMN public.sms_provider.sms_sender_id IS 'The number or brand name SMS are sent from through this provider.';
+
+UPDATE public.sms_provider
+SET sms_sender_id = '8809648909301'
+WHERE sms_provider_id = 6 AND sms_sender_id IS NULL;
+
+ALTER TABLE public.organization ADD COLUMN IF NOT EXISTS sms_provider_id INT NULL;
+
+COMMENT ON COLUMN public.organization.sms_provider_id IS 'The SMS provider the organization sends SMS through; NULL: none chosen yet.';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conrelid = 'public.organization'::regclass AND conname = 'fk_organization_sms_provider') THEN
+        ALTER TABLE public.organization
+            ADD CONSTRAINT fk_organization_sms_provider
+            FOREIGN KEY (sms_provider_id) REFERENCES public.sms_provider (sms_provider_id);
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_organization_sms_provider
+    ON public.organization (sms_provider_id)
+    WHERE sms_provider_id IS NOT NULL;
+
+-- Each organization keeps the provider its allocations came from, while sms_allocation still says so.
+
+DO $$
+DECLARE
+    mixed TEXT;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'public' AND table_name = 'sms_allocation' AND column_name = 'sms_provider_id') THEN
+        RETURN;
+    END IF;
+
+    SELECT string_agg(format('%s (organization_id %s, providers %s)', name, id, providers), '; ' ORDER BY id)
+    INTO mixed
+    FROM (SELECT o.organization_id AS id, o.organization_name_en AS name,
+                 string_agg(DISTINCT a.sms_provider_id::text, ', ') AS providers
+          FROM public.sms_allocation a
+          JOIN public.organization o ON o.object_id = a.organization_id
+          WHERE o.sms_provider_id IS NULL
+          GROUP BY o.organization_id, o.organization_name_en
+          HAVING count(DISTINCT a.sms_provider_id) > 1) m;
+    IF mixed IS NOT NULL THEN
+        RAISE EXCEPTION 'These organizations have SMS allocations from more than one provider: %. Set their organization.sms_provider_id by hand, then run this script again.', mixed;
+    END IF;
+
+    UPDATE public.organization o
+    SET sms_provider_id = latest.sms_provider_id
+    FROM (SELECT DISTINCT ON (organization_id) organization_id, sms_provider_id
+          FROM public.sms_allocation
+          ORDER BY organization_id, allocation_date DESC, sms_allocation_id DESC) latest
+    WHERE latest.organization_id = o.object_id AND o.sms_provider_id IS NULL;
+END $$;
+
+ALTER TABLE public.sms_allocation DROP CONSTRAINT IF EXISTS fk_sms_allocation_provider;
+DROP INDEX IF EXISTS public.idx_sms_allocation_provider;
+ALTER TABLE public.sms_allocation DROP COLUMN IF EXISTS sms_provider_id;
+
+COMMIT;

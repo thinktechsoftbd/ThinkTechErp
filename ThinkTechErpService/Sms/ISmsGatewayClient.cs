@@ -4,7 +4,7 @@ namespace ThinkTechErpService.Sms;
 
 /// <summary>
 /// Talks to one provider's SMS gateway. Each provider has its own implementation (CDC now; ADN to come), registered
-/// in DependencyInjection.cs; SmsGatewayService picks the one whose ProviderId the caller asked for.
+/// in DependencyInjection.cs; SmsGatewayService picks the one whose ProviderId is the calling organization's provider.
 /// </summary>
 public interface ISmsGatewayClient
 {
@@ -31,6 +31,8 @@ public sealed class SmsGatewayConnection
     public string? ApiKey { get; init; }
     public string? ApiUsername { get; init; }
     public string? ApiPassword { get; init; }
+    /// <summary>sms_sender_id: the number or brand name to send from (always set for a send).</summary>
+    public string? SenderId { get; init; }
 
     public override string ToString() => $"{Name} ({Code}, id {ProviderId})";
 }

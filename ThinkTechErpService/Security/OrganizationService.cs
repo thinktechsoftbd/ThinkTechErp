@@ -34,6 +34,9 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
         return await organizations.GetOrganizationAsync(organizationId, cancellationToken);
     }
 
+    public Task<IReadOnlyList<OrganizationSmsProviderOption>> GetSmsProviderOptionsAsync(CancellationToken cancellationToken = default)
+        => organizations.GetSmsProviderOptionsAsync(cancellationToken);
+
     public async Task<ClientOrganizationSync> SyncClientOrganizationAsync(
         Guid objectId, OrganizationDetails details, int clientUserId, CancellationToken cancellationToken = default)
     {
@@ -41,7 +44,8 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
         if (existing is not null && existing.CreatedBy != clientUserId)
             return new ClientOrganizationSync(ClientOrganizationSyncStatus.NotOwned);
 
-        // Active and External decide subscription validity, and Finalized locks SMS allocations, so they stay with the ERP.
+        // Active and External decide subscription validity, Finalized locks SMS allocations and the SMS provider is the
+        // one the ERP sends through, so they stay with the ERP.
         var request = new OrganizationUpsertRequest
         {
             ObjectId = objectId,
@@ -62,7 +66,8 @@ public sealed class OrganizationService(IOrganizationRepository organizations) :
             Slug = existing?.Slug,
             IsExternal = existing?.IsExternal ?? true,
             IsActive = existing?.IsActive ?? true,
-            IsFinalized = existing?.IsFinalized ?? false
+            IsFinalized = existing?.IsFinalized ?? false,
+            SmsProviderId = existing?.SmsProviderId
         };
 
         if (existing is null)
