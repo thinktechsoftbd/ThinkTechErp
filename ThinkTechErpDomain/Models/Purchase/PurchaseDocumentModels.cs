@@ -306,7 +306,10 @@ public sealed class PurchaseInvoiceUpsertRequest
     [StringLength(100)] public string? PaymentProvider { get; set; }
     [StringLength(100)] public string? PaymentReferenceNo { get; set; }
 
-    /// <summary>The payment source line (inv_payment_source_d). Required: where the payment posts.</summary>
+    /// <summary>
+    /// The payment source line (inv_payment_source_d) the payment posts to: required when something is paid (a cash
+    /// purchase, or something paid now on a credit purchase), ignored otherwise.
+    /// </summary>
     [Range(1, int.MaxValue)] public int? InvPaymentSourceDId { get; set; }
 
     [StringLength(1000)] public string? Remarks { get; set; }

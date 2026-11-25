@@ -85,11 +85,6 @@ public sealed class ServiceInvoiceService(
         if (customer is { IsActive: false })
             throw new BusinessRuleException($"{customer.Name} is inactive. Activate the customer to bill them.");
 
-        // Required, as on a purchase invoice: the payment source line whose ledger head the money taken goes to.
-        var paymentSourceLineId = request.InvPaymentSourceDId;
-        if (paymentSourceLineId is null || !await paymentSources.ActiveLineExistsAsync(paymentSourceLineId.Value, cancellationToken))
-            throw new BusinessRuleException("Choose the payment source and its type.");
-
         var serviceAmount = TaxCalculator.Round(request.ServiceAmount);
         if (request.Lines.Count == 0 && serviceAmount == 0)
             throw new BusinessRuleException("Add the parts used or a service amount.");
@@ -146,6 +141,16 @@ public sealed class ServiceInvoiceService(
         }
         if (method is not null && !PaymentMethod.OnTheSpot.Contains(method))
             throw new BusinessRuleException("Take payment by cash, bank, mobile wallet or card.");
+
+        // Required when money is taken (a cash bill, or something paid now on a credit bill): the payment source line
+        // whose ledger head the money goes to. A credit bill with nothing paid now has none.
+        int? paymentSourceLineId = null;
+        if (paid > 0)
+        {
+            paymentSourceLineId = request.InvPaymentSourceDId;
+            if (paymentSourceLineId is null || !await paymentSources.ActiveLineExistsAsync(paymentSourceLineId.Value, cancellationToken))
+                throw new BusinessRuleException("Choose the payment source and its type.");
+        }
 
         return new ServiceInvoice
         {

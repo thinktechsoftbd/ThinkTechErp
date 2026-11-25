@@ -176,8 +176,9 @@ public sealed class SalesDocumentService(
         if (method is not null && !PaymentMethod.OnTheSpot.Contains(method))
             throw new BusinessRuleException("Take payment by cash, bank, mobile wallet or card. Record a cheque as a customer receipt.");
 
-        // The invoice screen always sends one (the request requires it); a service job's invoice has none.
-        var paymentSourceLineId = request.InvPaymentSourceDId;
+        // Kept only when money is taken. The invoice screen then always sends one (the request requires it); a service
+        // job's invoice has none.
+        var paymentSourceLineId = paid > 0 ? request.InvPaymentSourceDId : null;
         if (paymentSourceLineId is int lineId && !await paymentSources.ActiveLineExistsAsync(lineId, cancellationToken))
             throw new BusinessRuleException("Choose the payment source and its type.");
 

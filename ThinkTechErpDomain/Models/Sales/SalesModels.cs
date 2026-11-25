@@ -279,7 +279,7 @@ public sealed class SalesAllocationItem
     public string SourceNo { get; set; } = string.Empty;
 }
 
-public sealed class SalesInvoiceUpsertRequest
+public sealed class SalesInvoiceUpsertRequest : IValidatableObject
 {
     public DateOnly InvoiceDate { get; set; }
 
@@ -314,16 +314,23 @@ public sealed class SalesInvoiceUpsertRequest
     [StringLength(100)] public string? PaymentReferenceNo { get; set; }
 
     /// <summary>
-    /// The payment source line (inv_payment_source_d) the money taken now goes to. Required from the invoice screen;
-    /// an invoice billed from a service job is made without one (its paid part goes to the cash sales head).
+    /// The payment source line (inv_payment_source_d) the money taken now goes to. From the invoice screen it is
+    /// required when money is taken (a cash sale, or something paid now on a credit sale) and ignored otherwise; an
+    /// invoice billed from a service job is made without one (its paid part goes to the cash sales head).
     /// </summary>
-    [Required(ErrorMessage = "Choose the payment source and its type.")]
     [Range(1, int.MaxValue)] public int? InvPaymentSourceDId { get; set; }
 
     [StringLength(1000)] public string? Remarks { get; set; }
 
     [MinLength(1, ErrorMessage = "Add at least one line.")]
     public List<SalesLineRequest> Lines { get; set; } = [];
+
+    /// <summary>Checked on requests from the invoice screen only (a service job builds its request in code).</summary>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if ((SaleType != SaleTypes.Credit || PaidAmount > 0) && InvPaymentSourceDId is null)
+            yield return new ValidationResult("Choose the payment source and its type.", [nameof(InvPaymentSourceDId)]);
+    }
 }
 
 /// <summary>A posted invoice with something still due, for allocating a receipt.</summary>

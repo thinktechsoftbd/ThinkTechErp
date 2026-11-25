@@ -186,7 +186,10 @@ public sealed class ServiceInvoiceUpsertRequest
     public string? PaymentMethod { get; set; }
     [StringLength(100)] public string? PaymentProvider { get; set; }
     [StringLength(100)] public string? PaymentReferenceNo { get; set; }
-    /// <summary>The payment source line (inv_payment_source_d). Required: where the money taken now goes.</summary>
+    /// <summary>
+    /// The payment source line (inv_payment_source_d) the money taken now goes to: required when money is taken (a cash
+    /// bill, or something paid now on a credit bill), ignored otherwise.
+    /// </summary>
     [Range(1, int.MaxValue)] public int? InvPaymentSourceDId { get; set; }
     [StringLength(2000)] public string? ServiceNote { get; set; }
     [StringLength(1000)] public string? Remarks { get; set; }

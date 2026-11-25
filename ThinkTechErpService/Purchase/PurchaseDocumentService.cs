@@ -318,10 +318,6 @@ public sealed class PurchaseDocumentService(
         if (credit && request.SupplierId is null && newSupplier is null)
             throw new BusinessRuleException("A credit purchase needs a supplier on file, so the due can be tracked.");
 
-        // Required: the payment source line whose ledger head the invoice's payment posts to.
-        var paymentSourceLineId = request.InvPaymentSourceDId;
-        if (paymentSourceLineId is null || !await paymentSources.ActiveLineExistsAsync(paymentSourceLineId.Value, cancellationToken))
-            throw new BusinessRuleException("Choose the payment source and its type.");
         var supplier = request.SupplierId is null ? null : await SupplierAsync(organizationId, request.SupplierId.Value, cancellationToken);
         if (supplier is null && Text.Clean(request.SupplierName) is null && !credit)
             request.SupplierName = "Walk-in supplier";
@@ -370,6 +366,16 @@ public sealed class PurchaseDocumentService(
             method ??= PaymentMethod.Cash;
         }
         CheckPaymentMethod(method, "Pay on the spot by cash, bank, mobile wallet or card. Record a cheque as a supplier payment.");
+
+        // Required when something is paid (a cash purchase, or something paid now on credit): the payment source line
+        // whose ledger head the payment posts to. A credit purchase with nothing paid now has none.
+        int? paymentSourceLineId = null;
+        if (paid > 0)
+        {
+            paymentSourceLineId = request.InvPaymentSourceDId;
+            if (paymentSourceLineId is null || !await paymentSources.ActiveLineExistsAsync(paymentSourceLineId.Value, cancellationToken))
+                throw new BusinessRuleException("Choose the payment source and its type.");
+        }
 
         var supplierInvoiceNo = Text.Clean(request.SupplierInvoiceNo);
         if (supplier is not null && supplierInvoiceNo is not null &&
