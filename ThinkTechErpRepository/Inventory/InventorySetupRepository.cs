@@ -439,10 +439,14 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
                    s.prices_include_tax AS PricesIncludeTax, s.allow_negative_stock AS AllowNegativeStock,
                    s.require_approval AS RequireApproval, s.expiry_alert_days AS ExpiryAlertDays,
                    s.default_warehouse_id AS DefaultWarehouseId, w.warehouse_name AS DefaultWarehouseName,
+                   s.service_charge_acc_sub_class_id AS ServiceChargeAccSubClassId, lh.sub_code AS ServiceChargeHeadCode,
+                   lh.sub_name AS ServiceChargeHeadName,
+                   nullif(concat_ws('/', lh.map_name, lh.main_name, lh.class_name, lh.parent_name), '') AS ServiceChargeHeadPath,
                    coalesce(s.updated_at, s.created_at) AT TIME ZONE 'utc' AS UpdatedAt
             FROM public.inventory_setting s
             LEFT JOIN public.lookup_data d ON d.lookup_data_id = s.base_currency_lookup_data_id
             LEFT JOIN public.warehouse w ON w.warehouse_id = s.default_warehouse_id
+            LEFT JOIN public.ledger_head lh ON lh.acc_sub_class_id = s.service_charge_acc_sub_class_id
             WHERE s.organization_id = @Org
             """, new { Org = organizationId }, cancellationToken: cancellationToken))
             ?? await DefaultSettingAsync(connection, cancellationToken);
@@ -472,9 +476,10 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
         await connection.ExecuteAsync(new CommandDefinition($"""
             INSERT INTO public.inventory_setting (organization_id, base_currency_lookup_data_id, fiscal_year_start_month,
                 prices_include_tax, allow_negative_stock, require_approval, expiry_alert_days, default_warehouse_id,
-                created_at, created_by)
+                service_charge_acc_sub_class_id, created_at, created_by)
             VALUES (@Org, @BaseCurrencyLookupDataId, @FiscalYearStartMonth, @PricesIncludeTax, @AllowNegativeStock,
-                    @RequireApproval, @ExpiryAlertDays, @DefaultWarehouseId, {SecurityDb.NowUtc}, @UserId)
+                    @RequireApproval, @ExpiryAlertDays, @DefaultWarehouseId, @ServiceChargeAccSubClassId,
+                    {SecurityDb.NowUtc}, @UserId)
             ON CONFLICT ON CONSTRAINT pk_inventory_setting DO UPDATE
             SET base_currency_lookup_data_id = EXCLUDED.base_currency_lookup_data_id,
                 fiscal_year_start_month = EXCLUDED.fiscal_year_start_month,
@@ -483,6 +488,7 @@ public sealed class InventorySetupRepository(IDbConnectionFactory connectionFact
                 require_approval = EXCLUDED.require_approval,
                 expiry_alert_days = EXCLUDED.expiry_alert_days,
                 default_warehouse_id = EXCLUDED.default_warehouse_id,
+                service_charge_acc_sub_class_id = EXCLUDED.service_charge_acc_sub_class_id,
                 updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
             """, Params(organizationId, request, userId), cancellationToken: cancellationToken));
     }

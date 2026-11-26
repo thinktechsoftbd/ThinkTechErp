@@ -19,6 +19,11 @@ public interface ISalesDocumentService
     Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
     Task<SalesInvoice?> PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task<SalesInvoice?> CancelInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Back to draft, so it can be changed or deleted: the stock it moved is reversed. Refused while a posted bill voucher,
+    /// payments or returns settle it; <paramref name="billVoucherUnposting"/> is set when its bill voucher is being unposted.
+    /// </summary>
+    Task<SalesInvoice?> UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OpenSalesInvoice>> GetOpenInvoicesAsync(int organizationId, int customerId, CancellationToken cancellationToken = default);
 
     Task<PagedResult<SalesReturn>> GetReturnsAsync(int organizationId, SalesDocumentQuery query, CancellationToken cancellationToken = default);
@@ -282,6 +287,10 @@ public sealed class SalesDocumentService(
     public Task<SalesInvoice?> CancelInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
         => ActAsync(() => documents.GetInvoiceAsync(organizationId, id, cancellationToken),
             () => documents.CancelInvoiceAsync(organizationId, id, userId, cancellationToken));
+
+    public Task<SalesInvoice?> UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting = false, CancellationToken cancellationToken = default)
+        => ActAsync(() => documents.GetInvoiceAsync(organizationId, id, cancellationToken),
+            () => documents.UnpostInvoiceAsync(organizationId, id, userId, billVoucherUnposting, cancellationToken));
 
     public Task<IReadOnlyList<OpenSalesInvoice>> GetOpenInvoicesAsync(int organizationId, int customerId, CancellationToken cancellationToken = default)
         => documents.GetOpenInvoicesAsync(organizationId, customerId, cancellationToken);

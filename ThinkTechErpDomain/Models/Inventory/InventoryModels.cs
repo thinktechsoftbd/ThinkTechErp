@@ -198,6 +198,12 @@ public sealed class InventorySetting
     public int ExpiryAlertDays { get; set; } = 30;
     public int? DefaultWarehouseId { get; set; }
     public string? DefaultWarehouseName { get; set; }
+    /// <summary>The ledger head a finalized service invoice's service charge (labour) posts to.</summary>
+    public int? ServiceChargeAccSubClassId { get; set; }
+    public string? ServiceChargeHeadCode { get; set; }
+    public string? ServiceChargeHeadName { get; set; }
+    /// <summary>The classes above the head: map/main/account/parent class.</summary>
+    public string? ServiceChargeHeadPath { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
 
@@ -218,6 +224,10 @@ public sealed class InventorySettingUpdateRequest
 
     [Range(1, int.MaxValue)]
     public int? DefaultWarehouseId { get; set; }
+
+    /// <summary>The ledger head a finalized service invoice's service charge (labour) posts to; null for none yet.</summary>
+    [Range(1, int.MaxValue)]
+    public int? ServiceChargeAccSubClassId { get; set; }
 }
 
 // ---- Products

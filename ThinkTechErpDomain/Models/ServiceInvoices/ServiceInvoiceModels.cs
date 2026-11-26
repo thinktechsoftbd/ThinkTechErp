@@ -140,6 +140,10 @@ public sealed class ServiceInvoice
     public decimal DueAmount { get; set; }
     public string Status { get; set; } = "Draft";
     public string PaymentStatus { get; set; } = "Unpaid";
+    /// <summary>The Bill Voucher made by finalizing the invoice, while it is there.</summary>
+    public long? BillVoucherId { get; set; }
+    public string? BillVoucherRefNo { get; set; }
+    public string? BillVoucherStatus { get; set; }
     public int LineCount { get; set; }
     public DateTime? PostedAt { get; set; }
     public int? PostedBy { get; set; }

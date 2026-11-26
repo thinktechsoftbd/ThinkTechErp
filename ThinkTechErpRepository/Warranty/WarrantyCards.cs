@@ -218,7 +218,7 @@ internal static class WarrantyCards
     /// </summary>
     public static Task VoidForInvoiceAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, long invoiceId, string invoiceNo, int userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? reason = null)
         => connection.ExecuteAsync(new CommandDefinition($"""
             UPDATE public.warranty_registration r
             SET status = 'Void', void_reason = @Reason, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
@@ -229,7 +229,7 @@ internal static class WarrantyCards
             FROM public.warranty_registration r
             WHERE r.sales_invoice_id = @Id AND r.source = 'Replacement' AND r.void_reason = @Reason
               AND o.warranty_registration_id = r.replaces_registration_id AND o.status = 'Replaced';
-            """, new { Id = invoiceId, Reason = $"Sales invoice {invoiceNo} was cancelled.", UserId = userId },
+            """, new { Id = invoiceId, Reason = reason ?? $"Sales invoice {invoiceNo} was cancelled.", UserId = userId },
             transaction, cancellationToken: cancellationToken));
 
     /// <summary>

@@ -160,6 +160,9 @@ public sealed class Voucher
     /// <summary>The sales invoice this voucher was made from by finalizing it; the invoice stays locked meanwhile.</summary>
     public long? SalesInvoiceId { get; set; }
     public string? SalesInvoiceNo { get; set; }
+    /// <summary>The service invoice this voucher was made from by finalizing it; the invoice stays locked meanwhile.</summary>
+    public long? ServiceInvoiceId { get; set; }
+    public string? ServiceInvoiceNo { get; set; }
     /// <summary>Empty in lists.</summary>
     public IReadOnlyList<VoucherLine> Lines { get; set; } = [];
 }
@@ -255,6 +258,8 @@ public sealed class SourceVoucherRequest
     public long? PurchaseInvoiceId { get; set; }
     /// <summary>The sales invoice the voucher is made from (locks it while the voucher is there).</summary>
     public long? SalesInvoiceId { get; set; }
+    /// <summary>The service invoice the voucher is made from.</summary>
+    public long? ServiceInvoiceId { get; set; }
     public List<VoucherLineRequest> Lines { get; set; } = [];
 }
 

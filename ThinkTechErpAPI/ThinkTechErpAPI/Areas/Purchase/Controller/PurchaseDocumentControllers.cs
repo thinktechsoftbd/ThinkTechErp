@@ -113,6 +113,15 @@ public sealed class PurchaseInvoicesController(IPurchaseDocumentService document
     [Authorize(Policy = PurchasePolicies.Manage)]
     public async Task<ActionResult<PurchaseInvoice>> CancelInvoice(long id, CancellationToken cancellationToken)
         => OkOrNotFound(await documents.CancelInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
+
+    /// <summary>
+    /// Back to draft so it can be changed or deleted (its stock reversed). A finalized invoice that isn't fully paid has
+    /// its bill voucher unposted, which puts it back to draft; a finalized, fully paid one is refused.
+    /// </summary>
+    [HttpPost("{id:long}/unpost")]
+    [Authorize(Policy = PurchasePolicies.Manage)]
+    public async Task<ActionResult<PurchaseInvoice>> UnpostInvoice(long id, CancellationToken cancellationToken)
+        => OkOrNotFound(await finalizer.UnpostPurchaseInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
 }
 
 [Route("api/purchase/orders")]

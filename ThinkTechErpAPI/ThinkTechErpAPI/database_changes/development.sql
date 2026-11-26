@@ -255,3 +255,45 @@ DROP INDEX IF EXISTS public.idx_sms_allocation_provider;
 ALTER TABLE public.sms_allocation DROP COLUMN IF EXISTS sms_provider_id;
 
 COMMIT;
+
+--changes_date: 26-Nov-2026
+--scripts
+-- Finalizing a service invoice (Warranty -> Transactions -> Service Invoice), as a purchase or sales invoice: it is
+-- posted (locked) and its Bill Voucher is posted from the ledger mappings.
+--   * voucher.service_invoice_id: the service invoice a Bill Voucher was made from. A voucher comes from at most one
+--     invoice (purchase, sales or service), and a service invoice has at most one live voucher (deleted and cancelled
+--     vouchers are left out, so it can be finalized again once its voucher is gone).
+--   * inventory_setting.service_charge_acc_sub_class_id: the ledger head a service invoice's service charge (labour)
+--     posts to, chosen under Inventory -> Settings. The parts post to their categories' heads, as on a sale.
+
+BEGIN;
+
+ALTER TABLE public.voucher ADD COLUMN IF NOT EXISTS service_invoice_id INT8 NULL;
+
+ALTER TABLE public.voucher DROP CONSTRAINT IF EXISTS fk_voucher_service_invoice;
+ALTER TABLE public.voucher
+    ADD CONSTRAINT fk_voucher_service_invoice
+        FOREIGN KEY (service_invoice_id) REFERENCES public.service_invoice (service_invoice_id);
+
+ALTER TABLE public.voucher DROP CONSTRAINT IF EXISTS ck_voucher_one_invoice;
+ALTER TABLE public.voucher
+    ADD CONSTRAINT ck_voucher_one_invoice
+        CHECK (num_nonnulls(purchase_invoice_id, sales_invoice_id, service_invoice_id) <= 1);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_voucher_service_invoice
+    ON public.voucher (service_invoice_id)
+    WHERE service_invoice_id IS NOT NULL AND NOT is_deleted AND status <> 'Cancelled';
+
+COMMENT ON COLUMN public.voucher.service_invoice_id IS 'The service invoice this bill voucher was made from (finalize).';
+
+ALTER TABLE public.inventory_setting ADD COLUMN IF NOT EXISTS service_charge_acc_sub_class_id INT4 NULL;
+
+ALTER TABLE public.inventory_setting DROP CONSTRAINT IF EXISTS fk_inventory_setting_service_charge_head;
+ALTER TABLE public.inventory_setting
+    ADD CONSTRAINT fk_inventory_setting_service_charge_head
+        FOREIGN KEY (service_charge_acc_sub_class_id) REFERENCES public.acc_sub_class (acc_sub_class_id);
+
+COMMENT ON COLUMN public.inventory_setting.service_charge_acc_sub_class_id IS
+    'The ledger head a finalized service invoice''s service charge (labour) posts to.';
+
+COMMIT;

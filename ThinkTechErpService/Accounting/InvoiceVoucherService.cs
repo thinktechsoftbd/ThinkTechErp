@@ -2,10 +2,13 @@ using ThinkTechErpDomain.Models.Accounting;
 using ThinkTechErpDomain.Models.Common;
 using ThinkTechErpDomain.Models.Purchase;
 using ThinkTechErpDomain.Models.Sales;
+using ThinkTechErpDomain.Models.ServiceInvoices;
 using ThinkTechErpRepository.Accounting;
+using ThinkTechErpRepository.Inventory;
 using ThinkTechErpService.Common;
 using ThinkTechErpService.Purchase;
 using ThinkTechErpService.Sales;
+using ThinkTechErpService.ServiceInvoices;
 
 namespace ThinkTechErpService.Accounting;
 
@@ -18,6 +21,8 @@ namespace ThinkTechErpService.Accounting;
 /// <item>Sales: Dr the customer's head for the unpaid part (credit) and the payment source type's head for what was
 /// paid now (all of a cash sale; the fixed cash sales head when the invoice has no source, as one billed from a
 /// service job); Cr each item category's head.</item>
+/// <item>Service: as a sale, with the service charge (labour) credited to the service charge head chosen under
+/// Inventory → Settings, beside the parts' category heads.</item>
 /// </list>
 /// The invoice total (in BDT) is shared out over the categories in proportion to their line totals, so tax,
 /// charges, round-off and discounts are carried with the goods and the voucher always balances.
@@ -26,6 +31,16 @@ public interface IInvoiceVoucherService
 {
     Task<PurchaseInvoice?> FinalizePurchaseInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task<SalesInvoice?> FinalizeSalesInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    Task<ServiceInvoice?> FinalizeServiceInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Back to draft so it can be changed or deleted. A finalized invoice that isn't fully paid has its bill voucher
+    /// unposted, which puts it back to draft; a finalized, fully paid one stays locked (its voucher is unposted under
+    /// Accounting instead). Otherwise as the invoice's own unpost: its stock reversed, refused while payments or returns
+    /// settle it.
+    /// </summary>
+    Task<PurchaseInvoice?> UnpostPurchaseInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    Task<SalesInvoice?> UnpostSalesInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    Task<ServiceInvoice?> UnpostServiceInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     /// <summary>Maps a supplier's or customer's ledger head (the Map popup of a failed finalize); false if there's no such party.</summary>
     Task<bool> SetPartyLedgerHeadAsync(int organizationId, int partyId, int? accSubClassId, int userId, CancellationToken cancellationToken = default);
 }
@@ -33,6 +48,8 @@ public interface IInvoiceVoucherService
 public sealed class InvoiceVoucherService(
     IPurchaseDocumentService purchases,
     ISalesDocumentService sales,
+    IServiceInvoiceService serviceInvoices,
+    IInventorySetupRepository inventorySetup,
     IInvoiceVoucherRepository mappings,
     IVoucherService vouchers) : IInvoiceVoucherService
 {
@@ -42,10 +59,13 @@ public sealed class InvoiceVoucherService(
         var invoice = await purchases.GetInvoiceAsync(organizationId, id, cancellationToken);
         if (invoice is null)
             return null;
-        RequireFinalizable(invoice.Status, invoice.BillVoucherRefNo);
+        RequireFinalizable(invoice.Status, invoice.BillVoucherRefNo, invoice.BillVoucherStatus);
 
         // Everything is checked before the invoice is posted, so a missing mapping leaves a draft as it was.
         var request = await BuildPurchaseVoucherAsync(organizationId, invoice, cancellationToken);
+        // An unposted bill voucher from an earlier finalize (the invoice went back to draft) is replaced.
+        if (invoice.BillVoucherId is long staleVoucherId)
+            await vouchers.DeleteVoucherAsync(organizationId, staleVoucherId, userId, cancellationToken);
         var posting = invoice.Status == DocumentStatus.Draft;
         if (posting)
             await purchases.PostInvoiceAsync(organizationId, id, userId, cancellationToken);
@@ -59,9 +79,12 @@ public sealed class InvoiceVoucherService(
         var invoice = await sales.GetInvoiceAsync(organizationId, id, cancellationToken);
         if (invoice is null)
             return null;
-        RequireFinalizable(invoice.Status, invoice.BillVoucherRefNo);
+        RequireFinalizable(invoice.Status, invoice.BillVoucherRefNo, invoice.BillVoucherStatus);
 
         var request = await BuildSalesVoucherAsync(organizationId, invoice, cancellationToken);
+        // An unposted bill voucher from an earlier finalize (the invoice went back to draft) is replaced.
+        if (invoice.BillVoucherId is long staleVoucherId)
+            await vouchers.DeleteVoucherAsync(organizationId, staleVoucherId, userId, cancellationToken);
         var posting = invoice.Status == DocumentStatus.Draft;
         if (posting)
             await sales.PostInvoiceAsync(organizationId, id, userId, cancellationToken);
@@ -69,15 +92,85 @@ public sealed class InvoiceVoucherService(
         return await sales.GetInvoiceAsync(organizationId, id, cancellationToken);
     }
 
+    public async Task<ServiceInvoice?> FinalizeServiceInvoiceAsync(
+        int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await serviceInvoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+        if (invoice is null)
+            return null;
+        RequireFinalizable(invoice.Status, invoice.BillVoucherRefNo, invoice.BillVoucherStatus);
+
+        // Everything is checked before the invoice is posted, so a missing mapping leaves a draft as it was.
+        var request = await BuildServiceVoucherAsync(organizationId, invoice, cancellationToken);
+        // An unposted bill voucher from an earlier finalize (the invoice went back to draft) is replaced.
+        if (invoice.BillVoucherId is long staleVoucherId)
+            await vouchers.DeleteVoucherAsync(organizationId, staleVoucherId, userId, cancellationToken);
+        var posting = invoice.Status == DocumentStatus.Draft;
+        if (posting)
+            await serviceInvoices.PostInvoiceAsync(organizationId, id, userId, cancellationToken);
+        await CreateVoucherAsync(organizationId, request, userId, posting, cancellationToken);
+        return await serviceInvoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+    }
+
+    public async Task<PurchaseInvoice?> UnpostPurchaseInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await purchases.GetInvoiceAsync(organizationId, id, cancellationToken);
+        if (invoice is null)
+            return null;
+        if (await UnpostBillVoucherAsync(organizationId, invoice.BillVoucherId, invoice.BillVoucherStatus, invoice.BillVoucherRefNo,
+                invoice.PaymentStatus, userId, cancellationToken))
+            return await purchases.GetInvoiceAsync(organizationId, id, cancellationToken);
+        return await purchases.UnpostInvoiceAsync(organizationId, id, userId, cancellationToken: cancellationToken);
+    }
+
+    public async Task<SalesInvoice?> UnpostSalesInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await sales.GetInvoiceAsync(organizationId, id, cancellationToken);
+        if (invoice is null)
+            return null;
+        if (await UnpostBillVoucherAsync(organizationId, invoice.BillVoucherId, invoice.BillVoucherStatus, invoice.BillVoucherRefNo,
+                invoice.PaymentStatus, userId, cancellationToken))
+            return await sales.GetInvoiceAsync(organizationId, id, cancellationToken);
+        return await sales.UnpostInvoiceAsync(organizationId, id, userId, cancellationToken: cancellationToken);
+    }
+
+    public async Task<ServiceInvoice?> UnpostServiceInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await serviceInvoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+        if (invoice is null)
+            return null;
+        if (await UnpostBillVoucherAsync(organizationId, invoice.BillVoucherId, invoice.BillVoucherStatus, invoice.BillVoucherRefNo,
+                invoice.PaymentStatus, userId, cancellationToken))
+            return await serviceInvoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+        return await serviceInvoices.UnpostInvoiceAsync(organizationId, id, userId, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// A finalized invoice: its bill voucher is unposted, which puts the invoice back to draft (stock reversed); refused
+    /// when it is fully paid. False when the invoice isn't finalized.
+    /// </summary>
+    private async Task<bool> UnpostBillVoucherAsync(
+        int organizationId, long? voucherId, string? voucherStatus, string? voucherRefNo, string paymentStatus, int userId,
+        CancellationToken cancellationToken)
+    {
+        if (voucherId is not long billVoucherId || voucherStatus != DocumentStatus.Posted)
+            return false;
+        if (paymentStatus == PaymentStatus.Paid)
+            throw new BusinessRuleException(
+                $"The invoice is finalized and fully paid: unpost its bill voucher {voucherRefNo} under Accounting → Vouchers to change it.");
+        await vouchers.UnpostVoucherAsync(organizationId, billVoucherId, userId, cancellationToken);
+        return true;
+    }
+
     public Task<bool> SetPartyLedgerHeadAsync(
         int organizationId, int partyId, int? accSubClassId, int userId, CancellationToken cancellationToken = default)
         => BusinessDbErrors.ExecuteAsync(() => mappings.SetPartyLedgerHeadAsync(organizationId, partyId, accSubClassId, userId, cancellationToken));
 
-    private static void RequireFinalizable(string status, string? billVoucherRefNo)
+    private static void RequireFinalizable(string status, string? billVoucherRefNo, string? billVoucherStatus)
     {
         if (status == DocumentStatus.Cancelled)
             throw new BusinessRuleException("A cancelled invoice can't be finalized.");
-        if (billVoucherRefNo is not null)
+        if (billVoucherRefNo is not null && billVoucherStatus == DocumentStatus.Posted)
             throw new BusinessRuleException($"The invoice is already finalized: its bill voucher is {billVoucherRefNo}.");
     }
 
@@ -192,6 +285,81 @@ public sealed class InvoiceVoucherService(
             SalesInvoiceId = invoice.Id,
             Lines = lines
         };
+    }
+
+    // ---- Service
+
+    private async Task<SourceVoucherRequest> BuildServiceVoucherAsync(
+        int organizationId, ServiceInvoice invoice, CancellationToken cancellationToken)
+    {
+        var problems = new List<string>();
+        // The parts by their categories' heads (a bill may have none), and the service charge by its own head.
+        var heads = invoice.Lines.Count > 0
+            ? await CategoryHeadsAsync(organizationId, invoice.Lines.Select(l => (l.ProductId, l.LineTotal)), problems, cancellationToken)
+            : [];
+        if (invoice.ServiceAmount > 0)
+        {
+            var serviceHead = (await inventorySetup.GetSettingAsync(organizationId, cancellationToken)).ServiceChargeAccSubClassId;
+            if (serviceHead is null)
+                problems.Add("Choose the service charge ledger head under Inventory → Settings.");
+            else
+                heads = WithHead(heads, serviceHead.Value, "Service charge", invoice.ServiceAmount);
+        }
+        var (total, paid, due) = Amounts(invoice.TotalAmount, invoice.PaidAmount, invoice.ExchangeRate, problems);
+
+        PartyLedgerHead? customer = null;
+        if (due > 0)
+        {
+            customer = invoice.CustomerId is int customerId ? await mappings.GetPartyHeadAsync(organizationId, customerId, cancellationToken) : null;
+            if (customer is null)
+                problems.Add("The unpaid part needs a customer on file.");
+            else if (customer.AccSubClassId is null)
+                problems.Add($"The customer {customer.Name} has no ledger head: map one under Sales → Customers.");
+        }
+        PaymentSourceLedgerHead? source = null;
+        if (paid > 0 && invoice.InvPaymentSourceDId is int lineId)
+        {
+            source = await mappings.GetPaymentSourceHeadAsync(lineId, cancellationToken);
+            if (source is null)
+                problems.Add("Choose the payment source and its type on the invoice.");
+        }
+        else if (paid > 0 && !await mappings.LedgerHeadExistsAsync(VoucherLookups.CashSalesHeadId, cancellationToken))
+            problems.Add($"The cash sales ledger head (id {VoucherLookups.CashSalesHeadId}) isn't in the chart of accounts.");
+        ThrowIfAny(problems);
+
+        var lines = new List<VoucherLineRequest>();
+        if (due > 0)
+            lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, customer!.AccSubClassId!.Value, customer.Id, due, 0,
+                $"Receivable from {customer.Name}"));
+        if (paid > 0 && source is not null)
+            lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, source.AccSubClassId, null, paid, 0,
+                $"Received in {source.SourceName} · {source.PaymentFor}"));
+        else if (paid > 0)
+            lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, VoucherLookups.CashSalesHeadId, null, paid, 0,
+                invoice.SaleType == SaleTypes.Credit ? "Paid now" : "Cash service invoice"));
+        foreach (var (head, names, amount) in Share(heads, total))
+            lines.Add(Line(invoice.CurrencyLookupDataId, invoice.ExchangeRate, head, null, 0, amount, names));
+
+        return new SourceVoucherRequest
+        {
+            VoucherTypeName = VoucherLookups.BillVoucher,
+            VoucherDate = invoice.InvoiceDate,
+            Narration = $"{invoice.SaleType} service invoice {invoice.InvoiceNo} to {invoice.CustomerName ?? "a walk-in customer"}",
+            ServiceInvoiceId = invoice.Id,
+            Lines = lines
+        };
+    }
+
+    /// <summary>The heads with one more amount: added to the head's entry if it is already there.</summary>
+    private static List<(int Head, string Names, decimal Weight)> WithHead(
+        List<(int Head, string Names, decimal Weight)> heads, int head, string name, decimal weight)
+    {
+        var index = heads.FindIndex(h => h.Head == head);
+        if (index < 0)
+            return [.. heads, (head, name, weight)];
+        var list = heads.ToList();
+        list[index] = (head, $"{list[index].Names}, {name}", list[index].Weight + weight);
+        return list;
     }
 
     // ---- Shared

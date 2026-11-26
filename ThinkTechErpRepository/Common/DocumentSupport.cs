@@ -252,6 +252,7 @@ internal static class StockItems
             JOIN public.stock_movement_serial s ON s.stock_movement_id = m.stock_movement_id
             WHERE m.organization_id = @Org AND m.source_document_type = @Type AND m.source_document_id = @Id
               AND m.reverses_stock_movement_id IS NULL
+              AND NOT EXISTS (SELECT 1 FROM public.stock_movement r WHERE r.reverses_stock_movement_id = m.stock_movement_id)
             """, new { Org = organizationId, Type = documentType, Id = documentId }, transaction,
             cancellationToken: cancellationToken))).AsList();
 }

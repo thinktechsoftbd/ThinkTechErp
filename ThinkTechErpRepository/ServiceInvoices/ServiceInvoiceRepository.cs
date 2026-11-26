@@ -15,6 +15,13 @@ public interface IServiceInvoiceRepository
     /// <summary>Creates (Id 0) or replaces a draft invoice with fully calculated lines; returns its id.</summary>
     Task<long> SaveInvoiceAsync(int organizationId, ServiceInvoice invoice, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
+    /// <summary>Posts a draft (it is then locked); false if there's no such draft.</summary>
+    Task<bool> PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Back to draft (a service invoice moves no stock). With <paramref name="billVoucherUnposting"/>, its bill voucher
+    /// is being unposted; otherwise a posted one refuses it.
+    /// </summary>
+    Task UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting, CancellationToken cancellationToken = default);
 }
 
 public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFactory) : IServiceInvoiceRepository
@@ -34,11 +41,13 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
                i.inv_payment_source_d_id AS InvPaymentSourceDId,
                psh.id AS PaymentSourceId, psh.source_name_en AS PaymentSourceName, psd.payment_for AS PaymentSourceType,
                i.total_amount - i.settled_amount AS DueAmount, i.status AS Status, i.payment_status AS PaymentStatus,
+               bv.voucher_id AS BillVoucherId, bv.voucher_ref_no AS BillVoucherRefNo, bv.status AS BillVoucherStatus,
                (SELECT count(*) FROM public.service_invoice_line l WHERE l.service_invoice_id = i.service_invoice_id)::int AS LineCount,
                i.posted_at AT TIME ZONE 'utc' AS PostedAt, i.posted_by AS PostedBy, i.service_note AS ServiceNote,
                i.remarks AS Remarks, i.created_at AT TIME ZONE 'utc' AS CreatedAt, i.created_by AS CreatedBy,
                i.updated_at AT TIME ZONE 'utc' AS UpdatedAt
         FROM public.service_invoice i
+        LEFT JOIN public.voucher bv ON bv.service_invoice_id = i.service_invoice_id AND NOT bv.is_deleted AND bv.status <> 'Cancelled'
         LEFT JOIN public.supplier c ON c.supplier_id = i.customer_id
         JOIN public.warehouse w ON w.warehouse_id = i.warehouse_id
         LEFT JOIN public.inv_payment_source_d psd ON psd.id = i.inv_payment_source_d_id
@@ -256,9 +265,51 @@ public sealed class ServiceInvoiceRepository(IDbConnectionFactory connectionFact
             return DeleteOutcome.NotFound;
         if (status != DocumentStatus.Draft)
             return DeleteOutcome.InUse;
-        // The lines go with it (ON DELETE CASCADE).
-        return await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
+        // The lines go with it (ON DELETE CASCADE); so does an unposted bill voucher from an earlier finalize.
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await InvoiceVouchers.DetachForDeleteAsync(connection, transaction, "service_invoice_id", id, cancellationToken);
+        var outcome = await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
             "DELETE FROM public.service_invoice WHERE organization_id = @Org AND service_invoice_id = @Id AND status = 'Draft'",
-            new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
+            new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken));
+        if (outcome == DeleteOutcome.Deleted)
+            await transaction.CommitAsync(cancellationToken);
+        return outcome;
+    }
+
+    public async Task UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition("""
+            SELECT status FROM public.service_invoice WHERE organization_id = @Org AND service_invoice_id = @Id
+            FOR UPDATE
+            """, new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken))
+            ?? throw new BusinessRuleException("The service invoice doesn't exist.");
+        if (status != DocumentStatus.Posted)
+            throw new BusinessRuleException(status == DocumentStatus.Draft
+                ? "This service invoice is already a draft."
+                : "A cancelled service invoice can't go back to draft.");
+        if (!billVoucherUnposting)
+            await InvoiceVouchers.RequireNoPostedBillVoucherAsync(connection, transaction, "service_invoice_id", id, cancellationToken);
+
+        await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE public.service_invoice
+            SET status = 'Draft', posted_at = NULL, posted_by = NULL, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            WHERE service_invoice_id = @Id
+            """, new { Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<bool> PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE public.service_invoice
+            SET status = 'Posted', posted_at = {SecurityDb.NowUtc}, posted_by = @UserId,
+                updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            WHERE organization_id = @Org AND service_invoice_id = @Id AND status = 'Draft'
+            """, new { Org = organizationId, Id = id, UserId = userId }, cancellationToken: cancellationToken)) > 0;
     }
 }

@@ -19,13 +19,21 @@ public interface IServiceInvoiceService
     Task<ServiceInvoice> CreateInvoiceAsync(int organizationId, ServiceInvoiceUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<ServiceInvoice?> UpdateInvoiceAsync(int organizationId, long id, ServiceInvoiceUpsertRequest request, int userId, CancellationToken cancellationToken = default);
     Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
+    /// <summary>Posts a draft (finalizing does it first): it is then locked. Null if there's no such invoice.</summary>
+    Task<ServiceInvoice?> PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Back to draft, so it can be changed or deleted. Refused while a posted bill voucher is there;
+    /// <paramref name="billVoucherUnposting"/> is set when that voucher is being unposted.
+    /// </summary>
+    Task<ServiceInvoice?> UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting = false, CancellationToken cancellationToken = default);
     /// <summary>Customers and suppliers (every party can be billed), by code, name or mobile; or exactly these ids.</summary>
     Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// Service invoices: the parts used on a job (lines, priced like a sale), the service charge and a note of the work.
-/// Saved as drafts: nothing moves in stock and no due is booked to the customer's ledger.
+/// Saved as drafts; finalizing posts one (it is then locked) and posts its Bill Voucher. Nothing moves in stock and
+/// no due is booked to the customer's ledger: the voucher carries it in the accounts.
 /// </summary>
 public sealed class ServiceInvoiceService(
     IServiceInvoiceRepository invoices,
@@ -63,6 +71,24 @@ public sealed class ServiceInvoiceService(
 
     public Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)
         => invoices.DeleteInvoiceAsync(organizationId, id, cancellationToken);
+
+    public async Task<ServiceInvoice?> PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await invoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+        if (invoice is null)
+            return null;
+        if (invoice.Status != DocumentStatus.Draft || !await invoices.PostInvoiceAsync(organizationId, id, userId, cancellationToken))
+            throw new BusinessRuleException($"Service invoice {invoice.InvoiceNo} is {invoice.Status.ToLowerInvariant()}; only a draft can be posted.");
+        return await invoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+    }
+
+    public async Task<ServiceInvoice?> UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting = false, CancellationToken cancellationToken = default)
+    {
+        if (await invoices.GetInvoiceAsync(organizationId, id, cancellationToken) is null)
+            return null;
+        await invoices.UnpostInvoiceAsync(organizationId, id, userId, billVoucherUnposting, cancellationToken);
+        return await invoices.GetInvoiceAsync(organizationId, id, cancellationToken);
+    }
 
     public Task<IReadOnlyList<CustomerOption>> GetCustomerOptionsAsync(
         int organizationId, string? search, IReadOnlyCollection<int>? ids, int limit, CancellationToken cancellationToken = default)

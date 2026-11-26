@@ -19,6 +19,11 @@ public interface IPurchaseDocumentRepository
     Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
     Task PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task CancelInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Back to draft: the stock it moved is reversed (as a cancel does) so it can be changed or deleted. With
+    /// <paramref name="billVoucherUnposting"/>, its bill voucher is being unposted; otherwise a posted one refuses it.
+    /// </summary>
+    Task UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OpenPurchaseInvoice>> GetOpenInvoicesAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default);
     Task<bool> SupplierInvoiceNoExistsAsync(int organizationId, int supplierId, string supplierInvoiceNo, long? excludeId, CancellationToken cancellationToken = default);
 
@@ -608,8 +613,28 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
         return id;
     }
 
-    public Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)
-        => DeleteDraftAsync("public.purchase_invoice", "purchase_invoice_id", organizationId, id, cancellationToken);
+    public async Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        var status = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
+            "SELECT status FROM public.purchase_invoice WHERE organization_id = @Org AND purchase_invoice_id = @Id",
+            new { Org = organizationId, Id = id }, cancellationToken: cancellationToken));
+        if (status is null)
+            return DeleteOutcome.NotFound;
+        if (status != DocumentStatus.Draft)
+            return DeleteOutcome.InUse;
+
+        // A draft that was finalized before: its unposted bill voucher goes with it.
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await InvoiceVouchers.DetachForDeleteAsync(connection, transaction, "purchase_invoice_id", id, cancellationToken);
+        var outcome = await RepositoryHelpers.DeleteAsync(connection, new CommandDefinition(
+            "DELETE FROM public.purchase_invoice WHERE organization_id = @Org AND purchase_invoice_id = @Id AND status = 'Draft'",
+            new { Org = organizationId, Id = id }, transaction, cancellationToken: cancellationToken));
+        if (outcome == DeleteOutcome.Deleted)
+            await transaction.CommitAsync(cancellationToken);
+        return outcome;
+    }
 
     private const string InvoicePostingLines = """
         SELECT l.purchase_invoice_line_id AS Id, l.product_id AS ProductId, p.product_type AS ProductType,
@@ -735,6 +760,41 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
             : "This invoice is already cancelled.");
         await InvoiceVouchers.RequireNoBillVoucherAsync(connection, transaction, "purchase_invoice_id", id, cancellationToken);
 
+        await ReverseInvoicePostingAsync(connection, transaction, organizationId, id, header, userId, cancellationToken);
+        await SetStatusAsync(connection, transaction, "public.purchase_invoice", "purchase_invoice_id", id,
+            DocumentStatus.Cancelled, userId, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var header = await LockAsync(connection, transaction, "public.purchase_invoice", "purchase_invoice_id", "invoice_no",
+            "invoice_date", "warehouse_id", organizationId, id, "invoice", cancellationToken);
+        RequireStatus(header, DocumentStatus.Posted, header.Status == DocumentStatus.Draft
+            ? "This invoice is already a draft."
+            : "A cancelled invoice can't go back to draft.");
+        if (!billVoucherUnposting)
+            await InvoiceVouchers.RequireNoPostedBillVoucherAsync(connection, transaction, "purchase_invoice_id", id, cancellationToken);
+
+        await ReverseInvoicePostingAsync(connection, transaction, organizationId, id, header, userId, cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition($"""
+            UPDATE public.purchase_invoice
+            SET status = 'Draft', posted_at = NULL, posted_by = NULL, updated_at = {SecurityDb.NowUtc}, updated_by = @UserId
+            WHERE purchase_invoice_id = @Id
+            """, new { Id = id, UserId = userId }, transaction, cancellationToken: cancellationToken));
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Undoes what posting the invoice did: the stock it received (or the receipts it billed), its stock movements and
+    /// its order quantities. Refused while payments or posted returns settle it.
+    /// </summary>
+    private static async Task ReverseInvoicePostingAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, int organizationId, long id, LockedHeader header, int userId,
+        CancellationToken cancellationToken)
+    {
         var blockers = await connection.QuerySingleAsync<(int Allocations, int Returns)>(new CommandDefinition("""
             SELECT (SELECT count(*) FROM public.purchase_invoice_allocation WHERE purchase_invoice_id = @Id)::int,
                    (SELECT count(*) FROM public.purchase_return WHERE purchase_invoice_id = @Id AND status = 'Posted')::int
@@ -763,9 +823,6 @@ public sealed partial class PurchaseDocumentRepository(IDbConnectionFactory conn
             lines.Where(l => l.PurchaseOrderLineId is not null).Select(l => (l.PurchaseOrderLineId!.Value, -l.BaseQuantity)),
             received: receivesStock, invoiced: true, cancellationToken);
         await RecomputeOrderStatusAsync(connection, transaction, orderId, cancellationToken);
-        await SetStatusAsync(connection, transaction, "public.purchase_invoice", "purchase_invoice_id", id,
-            DocumentStatus.Cancelled, userId, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<OpenPurchaseInvoice>> GetOpenInvoicesAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)

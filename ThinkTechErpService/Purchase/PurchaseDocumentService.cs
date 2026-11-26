@@ -19,6 +19,11 @@ public interface IPurchaseDocumentService
     Task<DeleteOutcome> DeleteInvoiceAsync(int organizationId, long id, CancellationToken cancellationToken = default);
     Task<PurchaseInvoice?> PostInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
     Task<PurchaseInvoice?> CancelInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Back to draft, so it can be changed or deleted: the stock it moved is reversed. Refused while a posted bill voucher,
+    /// payments or returns settle it; <paramref name="billVoucherUnposting"/> is set when its bill voucher is being unposted.
+    /// </summary>
+    Task<PurchaseInvoice?> UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting = false, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OpenPurchaseInvoice>> GetOpenInvoicesAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default);
 
     Task<PagedResult<PurchaseOrder>> GetOrdersAsync(int organizationId, PurchaseDocumentQuery query, CancellationToken cancellationToken = default);
@@ -425,6 +430,10 @@ public sealed class PurchaseDocumentService(
     public Task<PurchaseInvoice?> CancelInvoiceAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
         => ActAsync(() => documents.GetInvoiceAsync(organizationId, id, cancellationToken),
             () => documents.CancelInvoiceAsync(organizationId, id, userId, cancellationToken));
+
+    public Task<PurchaseInvoice?> UnpostInvoiceAsync(int organizationId, long id, int userId, bool billVoucherUnposting = false, CancellationToken cancellationToken = default)
+        => ActAsync(() => documents.GetInvoiceAsync(organizationId, id, cancellationToken),
+            () => documents.UnpostInvoiceAsync(organizationId, id, userId, billVoucherUnposting, cancellationToken));
 
     public Task<IReadOnlyList<OpenPurchaseInvoice>> GetOpenInvoicesAsync(int organizationId, int supplierId, CancellationToken cancellationToken = default)
         => documents.GetOpenInvoicesAsync(organizationId, supplierId, cancellationToken);

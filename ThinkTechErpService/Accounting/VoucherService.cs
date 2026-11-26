@@ -4,6 +4,9 @@ using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpRepository.Accounting;
 using ThinkTechErpRepository.Common;
 using ThinkTechErpService.Common;
+using ThinkTechErpService.Purchase;
+using ThinkTechErpService.Sales;
+using ThinkTechErpService.ServiceInvoices;
 
 namespace ThinkTechErpService.Accounting;
 
@@ -39,7 +42,8 @@ public interface IVoucherService
 }
 
 public sealed class VoucherService(
-    IVoucherRepository repository, ILedgerLookupRepository lookups, IOwnershipRepository ownership) : IVoucherService
+    IVoucherRepository repository, ILedgerLookupRepository lookups, IOwnershipRepository ownership,
+    IPurchaseDocumentService purchases, ISalesDocumentService sales, IServiceInvoiceService serviceInvoices) : IVoucherService
 {
     private static readonly IReadOnlySet<string> Statuses = new HashSet<string>(StringComparer.Ordinal)
         { DocumentStatus.Draft, DocumentStatus.Posted, DocumentStatus.Cancelled };
@@ -108,10 +112,34 @@ public sealed class VoucherService(
 
     public async Task<Voucher?> UnpostVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
     {
-        if (await repository.GetVoucherAsync(organizationId, id, cancellationToken) is null)
+        var voucher = await repository.GetVoucherAsync(organizationId, id, cancellationToken);
+        if (voucher is null)
             return null;
+        // A bill voucher made by finalizing an invoice: the invoice goes back to draft with it (its stock reversed) so it
+        // can be changed or deleted. If the invoice can't go back (payments or returns settle it), the voucher stays posted.
+        if (voucher.Status == DocumentStatus.Posted)
+            await UnpostSourceInvoiceAsync(organizationId, voucher, userId, cancellationToken);
         await repository.UnpostVoucherAsync(organizationId, id, userId, cancellationToken);
         return await repository.GetVoucherAsync(organizationId, id, cancellationToken);
+    }
+
+    private async Task UnpostSourceInvoiceAsync(int organizationId, Voucher voucher, int userId, CancellationToken cancellationToken)
+    {
+        if (voucher.PurchaseInvoiceId is long purchaseId)
+        {
+            if ((await purchases.GetInvoiceAsync(organizationId, purchaseId, cancellationToken))?.Status == DocumentStatus.Posted)
+                await purchases.UnpostInvoiceAsync(organizationId, purchaseId, userId, billVoucherUnposting: true, cancellationToken: cancellationToken);
+        }
+        else if (voucher.SalesInvoiceId is long salesId)
+        {
+            if ((await sales.GetInvoiceAsync(organizationId, salesId, cancellationToken))?.Status == DocumentStatus.Posted)
+                await sales.UnpostInvoiceAsync(organizationId, salesId, userId, billVoucherUnposting: true, cancellationToken: cancellationToken);
+        }
+        else if (voucher.ServiceInvoiceId is long serviceId)
+        {
+            if ((await serviceInvoices.GetInvoiceAsync(organizationId, serviceId, cancellationToken))?.Status == DocumentStatus.Posted)
+                await serviceInvoices.UnpostInvoiceAsync(organizationId, serviceId, userId, billVoucherUnposting: true, cancellationToken: cancellationToken);
+        }
     }
 
     public async Task<Voucher?> CancelVoucherAsync(int organizationId, long id, int userId, CancellationToken cancellationToken = default)
@@ -221,6 +249,7 @@ public sealed class VoucherService(
             Narration = Text.Clean(request.Narration),
             PurchaseInvoiceId = request.PurchaseInvoiceId,
             SalesInvoiceId = request.SalesInvoiceId,
+            ServiceInvoiceId = request.ServiceInvoiceId,
             Lines = lines.Select((line, index) => new VoucherLine
             {
                 LineNo = index + 1,

@@ -5,6 +5,7 @@ using ThinkTechErpAPI.Security;
 using ThinkTechErpDomain.Models.Sales;
 using ThinkTechErpDomain.Models.Security;
 using ThinkTechErpDomain.Models.ServiceInvoices;
+using ThinkTechErpService.Accounting;
 using ThinkTechErpService.ServiceInvoices;
 // The area's namespace (ThinkTechErpAPI.Areas.ServiceInvoice) would hide the model type of the same name.
 using ServiceInvoiceModel = ThinkTechErpDomain.Models.ServiceInvoices.ServiceInvoice;
@@ -45,11 +46,12 @@ public sealed class ServiceInvoiceListQuery
 
 /// <summary>
 /// Service invoices (Warranty -> Transactions): the parts used on a job, the service charge and a note of the work,
-/// cash or credit. Saved as drafts: no stock moves and no due goes to the customer's ledger.
+/// cash or credit. Saved as drafts; finalizing posts one and its Bill Voucher. No stock moves and no due goes to the
+/// customer's ledger.
 /// </summary>
 [Route("api/service-invoices")]
 [Authorize(Policy = ServiceInvoicePolicies.View)]
-public sealed class ServiceInvoicesController(IServiceInvoiceService invoices) : OrganizationControllerBase
+public sealed class ServiceInvoicesController(IServiceInvoiceService invoices, IInvoiceVoucherService finalizer) : OrganizationControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<ServiceInvoiceModel>>> GetInvoices([FromQuery] ServiceInvoiceListQuery query, CancellationToken cancellationToken)
@@ -77,6 +79,25 @@ public sealed class ServiceInvoicesController(IServiceInvoiceService invoices) :
     public async Task<IActionResult> DeleteInvoice(long id, CancellationToken cancellationToken)
         => DeleteResult(await invoices.DeleteInvoiceAsync(OrganizationId, id, cancellationToken),
             "Only a draft service invoice can be deleted.");
+
+    /// <summary>
+    /// Posts the invoice if it is a draft, then posts its Bill Voucher from the ledger mappings (the customer, the
+    /// payment source or the cash sales head; the parts' categories and the service charge head of Inventory
+    /// Settings). Refused, with what is missing, unless every mapping is there. A posted invoice can't be changed.
+    /// </summary>
+    [HttpPost("{id:long}/finalize")]
+    [Authorize(Policy = ServiceInvoicePolicies.Manage)]
+    public async Task<ActionResult<ServiceInvoiceModel>> FinalizeInvoice(long id, CancellationToken cancellationToken)
+        => OkOrNotFound(await finalizer.FinalizeServiceInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
+
+    /// <summary>
+    /// Back to draft so it can be changed or deleted (its stock reversed). A finalized invoice that isn't fully paid has
+    /// its bill voucher unposted, which puts it back to draft; a finalized, fully paid one is refused.
+    /// </summary>
+    [HttpPost("{id:long}/unpost")]
+    [Authorize(Policy = ServiceInvoicePolicies.Manage)]
+    public async Task<ActionResult<ServiceInvoiceModel>> UnpostInvoice(long id, CancellationToken cancellationToken)
+        => OkOrNotFound(await finalizer.UnpostServiceInvoiceAsync(OrganizationId, id, UserId, cancellationToken));
 }
 
 /// <summary>
